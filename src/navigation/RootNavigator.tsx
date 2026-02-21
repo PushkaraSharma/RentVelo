@@ -26,6 +26,7 @@ import PrivacyScreen from '../screens/settings/PrivacyScreen';
 import BackupScreen from '../screens/settings/BackupScreen';
 import AboutScreen from '../screens/settings/AboutScreen';
 import NotificationsScreen from '../screens/settings/NotificationsScreen';
+import TakeRentScreen from '../screens/rent/TakeRentScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -58,6 +59,7 @@ export default function RootNavigator() {
                         <Stack.Screen name="Backup" component={BackupScreen} />
                         <Stack.Screen name="About" component={AboutScreen} />
                         <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                        <Stack.Screen name="TakeRent" component={TakeRentScreen} />
                     </>
                 )}
             </Stack.Navigator>

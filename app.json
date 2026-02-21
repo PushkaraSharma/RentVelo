@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pushkara.RentVelo"
+      "bundleIdentifier": "com.indieroots.RentVelo"
     },
     "android": {
       "adaptiveIcon": {

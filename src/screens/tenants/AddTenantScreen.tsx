@@ -10,7 +10,7 @@ import PickerBottomSheet from '../../components/common/PickerBottomSheet';
 import RentLedgerModal from '../../components/modals/RentLedgerModal';
 import { ArrowLeft, UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2, Layout } from 'lucide-react-native';
 import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, Property, Unit, Tenant } from '../../db';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, RENT_CYCLE_OPTIONS, FURNISHING_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
 import * as ImagePicker from 'expo-image-picker';
@@ -616,36 +616,27 @@ export default function AddTenantScreen({ navigation, route }: any) {
             />
 
             {/* Date Pickers */}
-            {showMoveInPicker && (
-                <DateTimePicker
-                    value={moveInDate}
-                    mode="date"
-                    onChange={(e, date) => {
-                        setShowMoveInPicker(false);
-                        if (date) setMoveInDate(date);
-                    }}
-                />
-            )}
-            {showRentStartPicker && (
-                <DateTimePicker
-                    value={rentStartDate}
-                    mode="date"
-                    onChange={(e, date) => {
-                        setShowRentStartPicker(false);
-                        if (date) setRentStartDate(date);
-                    }}
-                />
-            )}
-            {showLeaseStartPicker && (
-                <DateTimePicker
-                    value={leaseStartDate}
-                    mode="date"
-                    onChange={(e, date) => {
-                        setShowLeaseStartPicker(false);
-                        if (date) setLeaseStartDate(date);
-                    }}
-                />
-            )}
+            <DateTimePickerModal
+                isVisible={showMoveInPicker}
+                mode="date"
+                date={moveInDate}
+                onConfirm={(date) => { setShowMoveInPicker(false); setMoveInDate(date); }}
+                onCancel={() => setShowMoveInPicker(false)}
+            />
+            <DateTimePickerModal
+                isVisible={showRentStartPicker}
+                mode="date"
+                date={rentStartDate}
+                onConfirm={(date) => { setShowRentStartPicker(false); setRentStartDate(date); }}
+                onCancel={() => setShowRentStartPicker(false)}
+            />
+            <DateTimePickerModal
+                isVisible={showLeaseStartPicker}
+                mode="date"
+                date={leaseStartDate}
+                onConfirm={(date) => { setShowLeaseStartPicker(false); setLeaseStartDate(date); }}
+                onCancel={() => setShowLeaseStartPicker(false)}
+            />
 
             {/* Success Modal */}
 

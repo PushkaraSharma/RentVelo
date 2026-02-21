@@ -97,12 +97,14 @@ export const payments = sqliteTable('payments', {
         .references(() => tenants.id, { onDelete: 'cascade' }),
     unit_id: integer('unit_id')
         .references(() => units.id, { onDelete: 'cascade' }),
+    bill_id: integer('bill_id'),
     amount: real('amount').notNull(),
     payment_date: integer('payment_date', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     payment_type: text('payment_type', { enum: ['rent', 'security_deposit', 'advance', 'maintenance', 'other'] }),
     payment_method: text('payment_method', { enum: ['cash', 'upi', 'bank_transfer', 'cheque', 'other'] }),
     status: text('status', { enum: ['pending', 'paid', 'overdue', 'cancelled'] }).default('pending'),
     notes: text('notes'),
+    photo_uri: text('photo_uri'),
     receipt_url: text('receipt_url'),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
@@ -165,3 +167,51 @@ export const rentReceiptConfig = sqliteTable('rent_receipt_config', {
 
 export type RentReceiptConfig = InferSelectModel<typeof rentReceiptConfig>;
 export type NewRentReceiptConfig = InferInsertModel<typeof rentReceiptConfig>;
+
+// ===== RENT COLLECTION TABLES =====
+
+export const rentBills = sqliteTable('rent_bills', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    property_id: integer('property_id')
+        .notNull()
+        .references(() => properties.id, { onDelete: 'cascade' }),
+    unit_id: integer('unit_id')
+        .notNull()
+        .references(() => units.id, { onDelete: 'cascade' }),
+    tenant_id: integer('tenant_id')
+        .notNull()
+        .references(() => tenants.id, { onDelete: 'cascade' }),
+    month: integer('month').notNull(), // 1-12
+    year: integer('year').notNull(),   // e.g. 2026
+    rent_amount: real('rent_amount').notNull().default(0),
+    electricity_amount: real('electricity_amount').default(0),
+    prev_reading: real('prev_reading'),
+    curr_reading: real('curr_reading'),
+    previous_balance: real('previous_balance').default(0),
+    total_expenses: real('total_expenses').default(0),
+    total_amount: real('total_amount').default(0),
+    paid_amount: real('paid_amount').default(0),
+    balance: real('balance').default(0),
+    status: text('status', { enum: ['pending', 'partial', 'paid', 'overpaid'] }).default('pending'),
+    bill_number: text('bill_number'),
+    notes: text('notes'),
+    created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+    updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+});
+
+export type RentBill = InferSelectModel<typeof rentBills>;
+export type NewRentBill = InferInsertModel<typeof rentBills>;
+
+export const billExpenses = sqliteTable('bill_expenses', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    bill_id: integer('bill_id')
+        .notNull()
+        .references(() => rentBills.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    amount: real('amount').notNull(),
+    is_recurring: integer('is_recurring', { mode: 'boolean' }).default(false),
+    created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+});
+
+export type BillExpense = InferSelectModel<typeof billExpenses>;
+export type NewBillExpense = InferInsertModel<typeof billExpenses>;

@@ -90,7 +90,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             icon: Wallet,
             color: '#10B981',
             bg: '#ECFDF5',
-            onPress: () => navigation.navigate('Payments', { propertyId })
+            onPress: () => navigation.navigate('TakeRent', { propertyId })
         },
         {
             id: 'rooms',

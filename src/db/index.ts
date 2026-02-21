@@ -56,3 +56,18 @@ export {
     getReceiptConfigByPropertyId,
     upsertReceiptConfig,
 } from './receiptConfigService';
+
+// Bill operations
+export {
+    generateBillsForProperty,
+    getBillsForPropertyMonth,
+    getBillById,
+    updateBill,
+    recalculateBill,
+    addExpenseToBill,
+    removeExpense,
+    getBillExpenses,
+    addPaymentToBill,
+    removePaymentFromBill,
+    getBillPayments,
+} from './billService';
