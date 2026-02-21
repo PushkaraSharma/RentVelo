@@ -5,6 +5,9 @@ import m0000 from './0000_nappy_purple_man.sql';
 import m0001 from './0001_bumpy_red_hulk.sql';
 import m0002 from './0002_harsh_nekra.sql';
 import m0003 from './0003_aromatic_hydra.sql';
+import m0004 from './0004_old_moonstone.sql';
+import m0005 from './0005_wonderful_hellfire_club.sql';
+import m0006 from './0006_woozy_multiple_man.sql';
 
   export default {
     journal,
@@ -12,7 +15,10 @@ import m0003 from './0003_aromatic_hydra.sql';
       m0000,
 m0001,
 m0002,
-m0003
+m0003,
+m0004,
+m0005,
+m0006
     }
   }
   

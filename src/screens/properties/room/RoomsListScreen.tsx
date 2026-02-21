@@ -9,7 +9,7 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { colors, theme } from '../../../theme';
 import {
     ArrowLeft,
     Plus,
@@ -18,7 +18,7 @@ import {
     ChevronRight,
     Edit3
 } from 'lucide-react-native';
-import { getUnitsByPropertyId, getPropertyById } from '../../db';
+import { getUnitsByPropertyId, getPropertyById } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function RoomsListScreen({ navigation, route }: any) {
@@ -51,11 +51,10 @@ export default function RoomsListScreen({ navigation, route }: any) {
         await loadData();
         setRefreshing(false);
     };
-
     const renderRoom = ({ item }: { item: any }) => (
         <Pressable
             style={styles.roomCard}
-            onPress={() => navigation.navigate('AddUnit', { propertyId, unitId: item.id })}
+            onPress={() => navigation.navigate('RoomDetails', { propertyId, unitId: item.id })}
         >
             <View style={styles.roomIcon}>
                 <DoorOpen size={24} color={theme.colors.accent} />
@@ -68,26 +67,18 @@ export default function RoomsListScreen({ navigation, route }: any) {
             </View>
 
             <View style={styles.roomActionSide}>
-                {item.is_occupied ? (
-                    <View style={[styles.statusBadge, styles.occupiedBadge]}>
-                        <Text style={styles.occupiedText}>Occupied</Text>
+                <View style={styles.tenantStatusContainer}>
+                    <View style={[styles.statusBadge, { backgroundColor: item.is_occupied ? colors.successLight : colors.dangerLight, }]}>
+                        <Text style={[styles.occupiedText, { color: item.is_occupied ? colors.success : colors.danger, }]} numberOfLines={1}>{item.is_occupied ? item.tenant_name : "No tenant"}</Text>
                     </View>
-                ) : (
-                    <Pressable
-                        style={styles.assignBtn}
-                        onPress={() => navigation.navigate('AddTenant', { propertyId, unitId: item.id })}
-                    >
-                        <UserPlus size={16} color="#FFF" />
-                        <Text style={styles.assignBtnText}>Assign</Text>
-                    </Pressable>
-                )}
+                </View>
                 <ChevronRight size={20} color={theme.colors.textTertiary} />
             </View>
         </Pressable>
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
                     <ArrowLeft size={24} color={theme.colors.textPrimary} />
@@ -96,35 +87,36 @@ export default function RoomsListScreen({ navigation, route }: any) {
                     <Text style={styles.headerTitle}>Rooms</Text>
                     <Text style={styles.headerSubtitle}>{property?.name}</Text>
                 </View>
+            </View>
+            <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+                <FlatList
+                    data={rooms}
+                    renderItem={renderRoom}
+                    keyExtractor={item => item.id.toString()}
+                    contentContainerStyle={styles.listContent}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.accent]} />
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <DoorOpen size={64} color={theme.colors.textTertiary} />
+                            <Text style={styles.emptyText}>No rooms added yet</Text>
+                            <Pressable
+                                style={styles.emptyAddBtn}
+                                onPress={() => navigation.navigate('AddUnit', { propertyId })}
+                            >
+                                <Text style={styles.emptyAddBtnText}>Add First Room</Text>
+                            </Pressable>
+                        </View>
+                    }
+                />
                 <Pressable
+                    style={styles.fab}
                     onPress={() => navigation.navigate('AddUnit', { propertyId })}
-                    style={styles.addButton}
                 >
-                    <Plus size={24} color={theme.colors.accent} />
+                    <Plus size={32} color="#FFFFFF" />
                 </Pressable>
             </View>
-
-            <FlatList
-                data={rooms}
-                renderItem={renderRoom}
-                keyExtractor={item => item.id.toString()}
-                contentContainerStyle={styles.listContent}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.accent]} />
-                }
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <DoorOpen size={64} color={theme.colors.textTertiary} />
-                        <Text style={styles.emptyText}>No rooms added yet</Text>
-                        <Pressable
-                            style={styles.emptyAddBtn}
-                            onPress={() => navigation.navigate('AddUnit', { propertyId })}
-                        >
-                            <Text style={styles.emptyAddBtnText}>Add First Room</Text>
-                        </Pressable>
-                    </View>
-                }
-            />
         </SafeAreaView>
     );
 }
@@ -132,12 +124,11 @@ export default function RoomsListScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.background,
+        backgroundColor: theme.colors.surface,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.m,
         paddingBottom: theme.spacing.m,
         backgroundColor: '#FFF',
         borderBottomWidth: 1,
@@ -158,9 +149,6 @@ const styles = StyleSheet.create({
     headerSubtitle: {
         fontSize: theme.typography.xs,
         color: theme.colors.textSecondary,
-    },
-    addButton: {
-        padding: theme.spacing.s,
     },
     listContent: {
         padding: theme.spacing.m,
@@ -208,6 +196,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: theme.spacing.s,
     },
+    tenantStatusContainer: {
+        alignItems: 'flex-end',
+        maxWidth: 120,
+    },
     assignBtn: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -227,13 +219,14 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 6,
     },
-    occupiedBadge: {
-        backgroundColor: '#ECFDF5',
-    },
     occupiedText: {
-        color: '#10B981',
         fontSize: 12,
         fontWeight: theme.typography.bold,
+    },
+    noTenantText: {
+        color: theme.colors.textSecondary,
+        fontSize: 12,
+        fontStyle: 'italic',
     },
     emptyContainer: {
         alignItems: 'center',
@@ -256,5 +249,17 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontWeight: theme.typography.bold,
         fontSize: theme.typography.m,
+    },
+    fab: {
+        position: 'absolute',
+        bottom: 24,
+        right: 24,
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: theme.colors.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
+        ...theme.shadows.medium,
     },
 });

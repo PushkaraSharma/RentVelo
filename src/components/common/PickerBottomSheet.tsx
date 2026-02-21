@@ -102,6 +102,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: theme.spacing.m,
+        paddingBottom: theme.spacing.s,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },

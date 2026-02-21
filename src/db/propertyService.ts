@@ -83,10 +83,24 @@ export const createUnit = async (unit: NewUnit): Promise<number> => {
     return result[0].id;
 };
 
-// Get Units by Property ID
-export const getUnitsByPropertyId = async (propertyId: number): Promise<Unit[]> => {
+// Get Units by Property ID with Tenant info
+export const getUnitsByPropertyId = async (propertyId: number): Promise<any[]> => {
     const db = getDb();
-    return await db.select().from(units).where(eq(units.property_id, propertyId)).orderBy(desc(units.created_at));
+    const propUnits = await db.select().from(units).where(eq(units.property_id, propertyId)).orderBy(desc(units.created_at));
+
+    return await Promise.all(propUnits.map(async (unit) => {
+        const activeTenant = await db.select()
+            .from(tenants)
+            .where(and(eq(tenants.unit_id, unit.id), eq(tenants.status, 'active')))
+            .limit(1);
+
+        return {
+            ...unit,
+            tenant_name: activeTenant[0]?.name || null,
+            tenant_id: activeTenant[0]?.id || null,
+            is_occupied: activeTenant.length > 0
+        };
+    }));
 };
 
 // Get All Units

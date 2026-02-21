@@ -57,9 +57,6 @@ export default function DashboardScreen({ navigation }: any) {
                         <Pressable style={styles.iconBtn}>
                             <Bell size={24} color={theme.colors.textPrimary} />
                         </Pressable>
-                        <Pressable style={styles.iconBtn} onPress={() => (navigation as any).navigate('Settings')}>
-                            <Settings size={24} color={theme.colors.textPrimary} />
-                        </Pressable>
                     </View>
                 </View>
 

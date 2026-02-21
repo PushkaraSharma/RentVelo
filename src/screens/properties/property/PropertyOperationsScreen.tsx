@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -10,8 +10,9 @@ import {
     Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
-import Button from '../../components/common/Button';
+import { theme } from '../../../theme';
+import { useFocusEffect } from '@react-navigation/native';
+import Button from '../../../components/common/Button';
 import {
     ArrowLeft,
     Wallet,
@@ -25,9 +26,10 @@ import {
     Plus,
     FileText,
     MapPin,
-    Trash2
+    Trash2,
+    Receipt
 } from 'lucide-react-native';
-import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, deleteProperty } from '../../db';
+import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, deleteProperty } from '../../../db';
 
 const { width } = Dimensions.get('window');
 
@@ -38,9 +40,11 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
     const [activeTenant, setActiveTenant] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadData();
-    }, [propertyId]);
+    useFocusEffect(
+        useCallback(() => {
+            loadData();
+        }, [propertyId])
+    );
 
     const loadData = async () => {
         try {
@@ -98,7 +102,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                 if (property?.is_multi_unit) {
                     navigation.navigate('RoomsList', { propertyId });
                 } else if (activeTenant) {
-                    console.log('Manage Tenant'); // Navigate to Tenant Detail
+                    navigation.navigate('AddTenant', { tenantId: activeTenant.id, propertyId });
                 } else {
                     navigation.navigate('AddTenant', { propertyId });
                 }
@@ -114,11 +118,19 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
         },
         {
             id: 'settings',
-            label: 'Update Info',
+            label: 'Update Property',
             icon: Settings,
             color: '#6B7280',
             bg: '#F3F4F6',
             onPress: () => navigation.navigate('AddProperty', { propertyId })
+        },
+        {
+            id: 'receipt',
+            label: 'Rent Receipt',
+            icon: Receipt,
+            color: '#8B5CF6',
+            bg: '#F3E8FF',
+            onPress: () => navigation.navigate('RentReceiptConfig', { propertyId })
         }
     ];
 

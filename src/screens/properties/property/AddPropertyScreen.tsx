@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import Toggle from '../../components/common/Toggle';
+import { theme } from '../../../theme';
+import Input from '../../../components/common/Input';
+import Button from '../../../components/common/Button';
+import Toggle from '../../../components/common/Toggle';
 import { ArrowLeft, Camera, Building, Layers, User, Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { createProperty } from '../../db';
-import SuccessModal from '../../components/common/SuccessModal';
-import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES } from '../../utils/Constants';
+import { createProperty, updateProperty, getPropertyById } from '../../../db';
+import SuccessModal from '../../../components/common/SuccessModal';
+import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES } from '../../../utils/Constants';
 
 
-export default function AddPropertyScreen({ navigation }: any) {
+export default function AddPropertyScreen({ navigation, route }: any) {
+    const propertyId = route?.params?.propertyId;
+    const isEditMode = !!propertyId;
     const [image, setImage] = useState<string | null>(null);
     const [propertyType, setPropertyType] = useState('house');
     const [isMultiUnit, setIsMultiUnit] = useState(false);
@@ -32,6 +34,34 @@ export default function AddPropertyScreen({ navigation }: any) {
     const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
     const [rentPaymentType, setRentPaymentType] = useState('previous_month');
     const [customAmenity, setCustomAmenity] = useState('');
+
+    React.useEffect(() => {
+        if (isEditMode) {
+            loadPropertyData();
+        }
+    }, [propertyId]);
+
+    const loadPropertyData = async () => {
+        try {
+            const data = await getPropertyById(propertyId);
+            if (data) {
+                setPropertyName(data.name);
+                setAddress(data.address);
+                setPropertyType(data.type);
+                setIsMultiUnit(data.is_multi_unit ?? false);
+                setImage(data.image_uri || null);
+                setSelectedAmenities(data.amenities ? JSON.parse(data.amenities) : []);
+                setOwnerName(data.owner_name || '');
+                setPhone(data.owner_phone || '');
+                // Rent payment type? Not in schema but in state... 
+                // schema mentions build_date, total_floors, total_units
+                // But AddPropertyScreen doesn't seem to have them in the createProperty call?
+                // Let's check schema.
+            }
+        } catch (error) {
+            console.error('Error loading property:', error);
+        }
+    };
 
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -74,22 +104,30 @@ export default function AddPropertyScreen({ navigation }: any) {
 
         setLoading(true);
         try {
-            const propertyId = await createProperty({
+            const propertyData: any = {
                 name: propertyName,
                 address: address,
-                type: propertyType as 'house' | 'pg' | 'flat' | 'building' | 'shop',
+                type: propertyType as any,
                 image_uri: image || undefined,
                 amenities: JSON.stringify(selectedAmenities),
                 is_multi_unit: isMultiUnit,
                 owner_name: ownerName || undefined,
                 owner_phone: phone || undefined,
-            });
+            };
 
-            setCreatedPropertyId(propertyId);
-            setShowSuccessModal(true);
+            if (isEditMode) {
+                await updateProperty(propertyId, propertyData);
+                Alert.alert('Success', 'Property updated successfully', [
+                    { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+            } else {
+                const newId = await createProperty(propertyData);
+                setCreatedPropertyId(newId);
+                setShowSuccessModal(true);
+            }
         } catch (error) {
-            console.error('Error creating property:', error);
-            Alert.alert('Error', 'Failed to create property. Please try again.');
+            console.error('Error saving property:', error);
+            Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`);
         } finally {
             setLoading(false);
         }
@@ -102,7 +140,7 @@ export default function AddPropertyScreen({ navigation }: any) {
                 <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
                     <ArrowLeft size={24} color={theme.colors.textPrimary} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Create New Property</Text>
+                <Text style={styles.headerTitle}>{isEditMode ? 'Update Property' : 'Create New Property'}</Text>
                 <View style={{ width: 24 }} />
             </View>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -140,7 +178,15 @@ export default function AddPropertyScreen({ navigation }: any) {
                                     styles.typeCard,
                                     propertyType === type.id && styles.activeTypeCard,
                                 ]}
-                                onPress={() => setPropertyType(type.id)}
+                                onPress={() => {
+                                    setPropertyType(type.id);
+                                    // Auto-toggle multi-room based on type
+                                    if (['building', 'pg'].includes(type.id)) {
+                                        setIsMultiUnit(true);
+                                    } else if (['house', 'shop', 'flat'].includes(type.id)) {
+                                        setIsMultiUnit(false);
+                                    }
+                                }}
                             >
                                 <type.icon
                                     size={20}
@@ -314,7 +360,7 @@ export default function AddPropertyScreen({ navigation }: any) {
                     </View>
 
                     <Button
-                        title="Create Property"
+                        title={isEditMode ? "Save Changes" : "Create Property"}
                         onPress={handleSubmit}
                         loading={loading}
                         style={styles.submitBtn}

@@ -10,14 +10,22 @@ import WelcomeScreen from '../screens/auth/WelcomeScreen';
 
 // Main Screens
 import TabNavigator from './TabNavigator';
-import AddPropertyScreen from '../screens/properties/AddPropertyScreen';
-import AddUnitScreen from '../screens/properties/AddUnitScreen';
+import AddPropertyScreen from '../screens/properties/property/AddPropertyScreen';
+import AddUnitScreen from '../screens/properties/room/AddUnitScreen';
 import AddTenantScreen from '../screens/tenants/AddTenantScreen';
 import RentCalculatorScreen from '../screens/calculator/RentCalculatorScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import PaymentsScreen from '../screens/payments/PaymentsScreen';
-import PropertyOperationsScreen from '../screens/properties/PropertyOperationsScreen';
-import RoomsListScreen from '../screens/properties/RoomsListScreen';
+import PropertyOperationsScreen from '../screens/properties/property/PropertyOperationsScreen';
+import RoomsListScreen from '../screens/properties/room/RoomsListScreen';
+import RoomDetailsScreen from '../screens/properties/room/RoomDetailsScreen';
+import RentReceiptConfigScreen from '../screens/properties/property/RentReceiptConfigScreen';
+import TermsEditorScreen from '../screens/settings/TermsEditorScreen';
+import ProfileScreen from '../screens/settings/ProfileScreen';
+import PrivacyScreen from '../screens/settings/PrivacyScreen';
+import BackupScreen from '../screens/settings/BackupScreen';
+import AboutScreen from '../screens/settings/AboutScreen';
+import NotificationsScreen from '../screens/settings/NotificationsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -38,10 +46,18 @@ export default function RootNavigator() {
                         <Stack.Screen name="AddUnit" component={AddUnitScreen} />
                         <Stack.Screen name="AddTenant" component={AddTenantScreen} />
                         <Stack.Screen name="RoomsList" component={RoomsListScreen} />
+                        <Stack.Screen name="RoomDetails" component={RoomDetailsScreen} />
                         <Stack.Screen name="PropertyOperations" component={PropertyOperationsScreen} />
                         <Stack.Screen name="RentCalculator" component={RentCalculatorScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
                         <Stack.Screen name="Payments" component={PaymentsScreen} />
+                        <Stack.Screen name="RentReceiptConfig" component={RentReceiptConfigScreen} />
+                        <Stack.Screen name="TermsEditor" component={TermsEditorScreen} />
+                        <Stack.Screen name="Profile" component={ProfileScreen} />
+                        <Stack.Screen name="Privacy" component={PrivacyScreen} />
+                        <Stack.Screen name="Backup" component={BackupScreen} />
+                        <Stack.Screen name="About" component={AboutScreen} />
+                        <Stack.Screen name="Notifications" component={NotificationsScreen} />
                     </>
                 )}
             </Stack.Navigator>

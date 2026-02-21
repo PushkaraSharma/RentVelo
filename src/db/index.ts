@@ -50,3 +50,9 @@ export {
 
 // Types from schema
 export * from './schema';
+
+// Receipt Config operations
+export {
+    getReceiptConfigByPropertyId,
+    upsertReceiptConfig,
+} from './receiptConfigService';

@@ -13,6 +13,9 @@ export const colors = {
   success: '#10B981', // Green
   warning: '#F59E0B', // Amber/Orange
   danger: '#EF4444', // Red
+  dangerLight: '#FEF2F2',
+  successLight: '#ECFDF5',
+  warningLight: '#FFFBEB',
 
   // Text
   textPrimary: '#111827', // Almost black

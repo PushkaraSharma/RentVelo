@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { theme } from '../../../theme';
 import { Plus, MapPin, Home, Building, Building2, ChevronRight, Store, Layers } from 'lucide-react-native';
-import { getPropertiesWithStats, Property } from '../../db';
+import { getPropertiesWithStats, Property } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 
 const getTypeIcon = (type: string, size: number = 15) => {

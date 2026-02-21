@@ -1,22 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import Toggle from '../../components/common/Toggle';
-import SuccessModal from '../../components/common/SuccessModal';
-import PickerBottomSheet from '../../components/common/PickerBottomSheet';
+import { theme } from '../../../theme';
+import Input from '../../../components/common/Input';
+import Button from '../../../components/common/Button';
+import Toggle from '../../../components/common/Toggle';
+import SuccessModal from '../../../components/common/SuccessModal';
+import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { ArrowLeft, Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
-import { createUnit } from '../../db';
+import { createUnit, updateUnit, getUnitById } from '../../../db';
 import * as ImagePicker from 'expo-image-picker';
-import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../utils/Constants';
+import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 
 export default function AddUnitScreen({ navigation, route }: any) {
     const propertyId = route?.params?.propertyId;
+    const unitId = route?.params?.unitId;
+    const isEditMode = !!unitId;
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [createdUnitId, setCreatedUnitId] = useState<number | null>(null);
+    const scrollViewRef = useRef<ScrollView>(null);
 
     // Basic Information
     const [roomName, setRoomName] = useState('');
@@ -29,11 +32,13 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [electricityEnabled, setElectricityEnabled] = useState(true);
     const [electricityType, setElectricityType] = useState('Metered');
     const [electricityValue, setElectricityValue] = useState(''); // Rate or Fixed Amount
+    const [initialElectricityReading, setInitialElectricityReading] = useState('');
 
     // Utilities - Water
     const [waterEnabled, setWaterEnabled] = useState(false);
     const [waterType, setWaterType] = useState('Fixed');
     const [waterValue, setWaterValue] = useState(''); // Rate or Fixed Amount
+    const [initialWaterReading, setInitialWaterReading] = useState('');
 
     // Facilities & Additional Info
     const [floor, setFloor] = useState('');
@@ -46,6 +51,62 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
     // Photos
     const [images, setImages] = useState<string[]>([]);
+
+    React.useEffect(() => {
+        if (isEditMode) {
+            loadUnitData();
+        }
+    }, [unitId]);
+
+    const loadUnitData = async () => {
+        try {
+            const data = await getUnitById(unitId);
+            if (data) {
+                setRoomName(data.name);
+                setRoomType(data.type || '');
+                setRemarks(data.remarks || '');
+                setRentAmount(data.rent_amount.toString());
+                setRentCycle(data.rent_cycle as any);
+                setFloor(data.floor || '');
+                setFurnishing(data.furnishing_type as any);
+                setRoomSize(data.size?.toString() || '');
+                setCustomAmenities(data.custom_amenities ? JSON.parse(data.custom_amenities) : []);
+                setImages(data.images ? JSON.parse(data.images) : []);
+
+                // Electricity
+                if (data.electricity_rate || data.electricity_fixed_amount || data.initial_electricity_reading) {
+                    setElectricityEnabled(true);
+                    if (data.electricity_rate) {
+                        setElectricityType('Metered');
+                        setElectricityValue(data.electricity_rate.toString());
+                        setInitialElectricityReading(data.initial_electricity_reading?.toString() || '');
+                    } else if (data.electricity_fixed_amount) {
+                        setElectricityType('Fixed');
+                        setElectricityValue(data.electricity_fixed_amount.toString());
+                    } else {
+                        setElectricityType('Free');
+                    }
+                }
+
+                // Water
+                if (data.water_rate || data.water_fixed_amount || data.initial_water_reading) {
+                    setWaterEnabled(true);
+                    if (data.water_rate) {
+                        setWaterType('Metered');
+                        setWaterValue(data.water_rate.toString());
+                        setInitialWaterReading(data.initial_water_reading?.toString() || '');
+                    } else if (data.water_fixed_amount) {
+                        setWaterType('Fixed');
+                        setWaterValue(data.water_fixed_amount.toString());
+                    } else {
+                        setWaterType('Free');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error loading room:', error);
+        }
+    };
 
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -106,7 +167,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
         setLoading(true);
         try {
-            const unitId = await createUnit({
+            const unitData: any = {
                 property_id: propertyId,
                 name: roomName,
                 type: roomType || null,
@@ -121,22 +182,32 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 is_metered: (electricityEnabled && electricityType === 'Metered') || (waterEnabled && waterType === 'Metered'),
                 electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
                 electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
+                initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
                 water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
                 water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
-            });
+                initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
+            };
 
-            setCreatedUnitId(unitId);
-            setShowSuccessModal(true);
+            if (isEditMode) {
+                await updateUnit(unitId, unitData);
+                Alert.alert('Success', 'Room details updated successfully', [
+                    { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+            } else {
+                const newId = await createUnit(unitData);
+                setCreatedUnitId(newId);
+                setShowSuccessModal(true);
+            }
         } catch (error) {
-            console.error('Error creating room:', error);
-            Alert.alert('Error', 'Failed to create room. Please try again.');
+            console.error('Error saving room:', error);
+            Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} room. Please try again.`);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -146,11 +217,15 @@ export default function AddUnitScreen({ navigation, route }: any) {
                     <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
                         <ArrowLeft size={24} color={theme.colors.textPrimary} />
                     </Pressable>
-                    <Text style={styles.headerTitle}>Add Room Details</Text>
+                    <Text style={styles.headerTitle}>{isEditMode ? 'Update Room' : 'Add Room Details'}</Text>
                     <View style={{ width: 24 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+                <ScrollView
+                    ref={scrollViewRef}
+                    contentContainerStyle={styles.content}
+                    showsVerticalScrollIndicator={false}
+                >
 
                     {/* Basic Information */}
                     <Text style={styles.sectionLabel}>BASIC INFORMATION</Text>
@@ -255,6 +330,15 @@ export default function AddUnitScreen({ navigation, route }: any) {
                                             onChangeText={setElectricityValue}
                                             keyboardType="numeric"
                                         />
+                                        {electricityType === 'Metered' && (
+                                            <Input
+                                                label="Initial Meter Reading"
+                                                placeholder="e.g. 1045.5"
+                                                value={initialElectricityReading}
+                                                onChangeText={setInitialElectricityReading}
+                                                keyboardType="numeric"
+                                            />
+                                        )}
                                     </View>
                                 )}
                             </>
@@ -302,6 +386,15 @@ export default function AddUnitScreen({ navigation, route }: any) {
                                             onChangeText={setWaterValue}
                                             keyboardType="numeric"
                                         />
+                                        {waterType === 'Metered' && (
+                                            <Input
+                                                label="Initial Meter Reading"
+                                                placeholder="e.g. 520.0"
+                                                value={initialWaterReading}
+                                                onChangeText={setInitialWaterReading}
+                                                keyboardType="numeric"
+                                            />
+                                        )}
                                     </View>
                                 )}
                             </>
@@ -388,7 +481,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
                     {/* Submit Button */}
                     <Button
-                        title="Create Room"
+                        title={isEditMode ? "Save Changes" : "Create Room"}
                         onPress={handleSubmit}
                         loading={loading}
                         style={styles.submitBtn}
@@ -443,7 +536,18 @@ export default function AddUnitScreen({ navigation, route }: any) {
                             setImages([]);
                             setCustomAmenities([]);
                             setElectricityValue('');
+                            setInitialElectricityReading('');
                             setWaterValue('');
+                            setInitialWaterReading('');
+                            setElectricityType('Metered');
+                            setWaterType('Fixed');
+                            setElectricityEnabled(true);
+                            setWaterEnabled(false);
+                            setRentCycle('first_of_month');
+                            setFurnishing('none');
+                            setRoomSize('');
+
+                            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
                         }
                     }
                 ]}
@@ -455,13 +559,13 @@ export default function AddUnitScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.background,
+        backgroundColor: theme.colors.surface,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.m,
+        paddingRight: theme.spacing.m,
         paddingBottom: theme.spacing.s,
     },
     backButton: {
@@ -474,6 +578,7 @@ const styles = StyleSheet.create({
     },
     content: {
         paddingHorizontal: theme.spacing.m,
+        backgroundColor: theme.colors.background,
     },
     sectionLabel: {
         fontSize: 12,

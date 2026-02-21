@@ -1,12 +1,12 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { theme } from '../theme';
-import { LayoutDashboard, Users, Building2 } from 'lucide-react-native';
+import { LayoutDashboard, Settings, Building2 } from 'lucide-react-native';
 
 // Screens
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
-import PlacesListScreen from '../screens/properties/PlacesListScreen';
-import TenantsListScreen from '../screens/tenants/TenantsListScreen';
+import PlacesListScreen from '../screens/properties/property/PlacesListScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Tab = createBottomTabNavigator();
@@ -47,10 +47,10 @@ export default function TabNavigator() {
             />
 
             <Tab.Screen
-                name="Tenants"
-                component={TenantsListScreen}
+                name="Settings"
+                component={SettingsScreen}
                 options={{
-                    tabBarIcon: ({ color, size }) => <Users size={size} color={color} />
+                    tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />
                 }}
             />
         </Tab.Navigator>

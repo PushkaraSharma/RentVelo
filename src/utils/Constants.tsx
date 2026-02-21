@@ -38,8 +38,14 @@ export const ROOM_TYPES = [
 ];
 
 export const LEASE_TYPES = [
-    { id: 'monthly', label: 'Ongoing (Month-to-month)' },
-    { id: 'yearly', label: 'Fixed Term' }
+    { id: 'monthly', label: 'Until tenant leaves' },
+    { id: 'fixed', label: 'Fixed' }
+];
+
+export const LEASE_PERIOD_UNITS = [
+    { id: 'days', label: 'Days' },
+    { id: 'months', label: 'Months' },
+    { id: 'years', label: 'Years' }
 ];
 
 export const FURNISHING_TYPES = [

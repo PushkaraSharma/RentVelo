@@ -47,12 +47,41 @@ export const getTenantById = async (id: number): Promise<Tenant | null> => {
     return result[0] || null;
 };
 
-// Update Tenant
+// Update Tenant (with global profile sync)
 export const updateTenant = async (id: number, tenant: Partial<NewTenant>): Promise<void> => {
     const db = getDb();
+
+    // 1. Get the current tenant record to find the phone number
+    const currentTenant = await getTenantById(id);
+    if (!currentTenant) return;
+
+    // 2. Define profile fields that should be synchronized globally
+    const profileFields = [
+        'name', 'phone', 'email', 'profession', 'guest_count',
+        'work_address', 'id_proof_type', 'id_proof_number',
+        'emergency_contact_name', 'emergency_contact_phone',
+        'photo_uri', 'aadhaar_front_uri', 'aadhaar_back_uri', 'pan_uri'
+    ];
+
+    // 3. Extract profile-specific updates
+    const profileUpdates: any = {};
+    Object.keys(tenant).forEach(key => {
+        if (profileFields.includes(key)) {
+            profileUpdates[key] = (tenant as any)[key];
+        }
+    });
+
+    // 4. Update the specific record (includes rent/stay specific fields)
     await db.update(tenants)
         .set({ ...tenant, updated_at: new Date() })
         .where(eq(tenants.id, id));
+
+    // 5. If profile fields changed, sync them across all records with the same phone number
+    if (Object.keys(profileUpdates).length > 0) {
+        await db.update(tenants)
+            .set({ ...profileUpdates, updated_at: new Date() })
+            .where(eq(tenants.phone, currentTenant.phone));
+    }
 };
 
 // Archive Tenant (Soft Delete)
