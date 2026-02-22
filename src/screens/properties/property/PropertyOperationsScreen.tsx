@@ -10,7 +10,7 @@ import {
     Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import { useFocusEffect } from '@react-navigation/native';
 import Button from '../../../components/common/Button';
 import {
@@ -34,6 +34,8 @@ import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, del
 const { width } = Dimensions.get('window');
 
 export default function PropertyOperationsScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const [property, setProperty] = useState<any>(null);
     const [units, setUnits] = useState<any[]>([]);
@@ -88,16 +90,16 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             id: 'rent',
             label: 'Take Rent',
             icon: Wallet,
-            color: '#10B981',
-            bg: '#ECFDF5',
+            color: theme.colors.success,
+            bg: isDark ? '#10B98120' : '#ECFDF5',
             onPress: () => navigation.navigate('TakeRent', { propertyId })
         },
         {
             id: 'rooms',
             label: property?.is_multi_unit ? 'Rooms' : 'Tenant',
             icon: property?.is_multi_unit ? DoorOpen : Users,
-            color: '#6366F1',
-            bg: '#EEF2FF',
+            color: theme.colors.accent,
+            bg: isDark ? '#6366F120' : '#EEF2FF',
             onPress: () => {
                 if (property?.is_multi_unit) {
                     navigation.navigate('RoomsList', { propertyId });
@@ -109,19 +111,11 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             }
         },
         {
-            id: 'notifs',
-            label: 'Notifications',
-            icon: Bell,
-            color: '#F59E0B',
-            bg: '#FFFBEB',
-            onPress: () => Alert.alert('Coming Soon', 'Automated rent reminders are being prepared!')
-        },
-        {
             id: 'settings',
             label: 'Update Property',
             icon: Settings,
-            color: '#6B7280',
-            bg: '#F3F4F6',
+            color: theme.colors.textSecondary,
+            bg: isDark ? '#6B728020' : '#F3F4F6',
             onPress: () => navigation.navigate('AddProperty', { propertyId })
         },
         {
@@ -129,7 +123,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             label: 'Rent Receipt',
             icon: Receipt,
             color: '#8B5CF6',
-            bg: '#F3E8FF',
+            bg: isDark ? '#8B5CF620' : '#F3E8FF',
             onPress: () => navigation.navigate('RentReceiptConfig', { propertyId })
         }
     ];
@@ -172,7 +166,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                 {/* Status Summary Banner */}
                 <View style={[
                     styles.statusBanner,
-                    { backgroundColor: occupiedCount === 0 ? '#FEF2F2' : (property?.is_multi_unit && occupiedCount < units.length) ? '#FFFBEB' : '#ECFDF5' }
+                    { backgroundColor: occupiedCount === 0 ? (isDark ? '#EF444420' : '#FEF2F2') : (property?.is_multi_unit && occupiedCount < units.length) ? (isDark ? '#F59E0B20' : '#FFFBEB') : (isDark ? '#10B98120' : '#ECFDF5') }
                 ]}>
                     <Text style={[
                         styles.statusText,
@@ -246,7 +240,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -334,7 +328,7 @@ const styles = StyleSheet.create({
     },
     opItem: {
         width: (width - (theme.spacing.m * 3)) / 2,
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         padding: theme.spacing.m,
         borderRadius: theme.borderRadius.l,
         alignItems: 'center',
@@ -364,7 +358,7 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.l,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.05)'
+        borderColor: theme.colors.border
     },
     statusText: {
         fontSize: 14,
@@ -372,7 +366,7 @@ const styles = StyleSheet.create({
     },
     mainCard: {
         flexDirection: 'row',
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         padding: theme.spacing.m,
         borderRadius: theme.borderRadius.l,
         alignItems: 'center',
@@ -403,7 +397,7 @@ const styles = StyleSheet.create({
         marginTop: 2
     },
     emptyActionCard: {
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         padding: theme.spacing.xl,
         borderRadius: theme.borderRadius.l,
         alignItems: 'center',

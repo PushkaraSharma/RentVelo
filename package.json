@@ -39,6 +39,8 @@
     "react-native-screens": "~4.16.0",
     "react-native-signature-canvas": "^5.0.2",
     "react-native-svg": "15.12.1",
+    "react-native-view-shot": "^4.0.3",
+    "react-native-webview": "^13.16.0",
     "react-redux": "^9.2.0"
   },
   "devDependencies": {

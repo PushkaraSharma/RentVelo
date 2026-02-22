@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import Toggle from '../../components/common/Toggle';
 import { MoreHorizontal, Share, Wifi, Wrench, Droplet, ChevronUp } from 'lucide-react-native';
 import Header from '../../components/common/Header';
@@ -25,6 +25,8 @@ const ADDONS = [
 ];
 
 export default function RentCalculatorScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const [currentReading, setCurrentReading] = useState('1120');
     const [selectedAddons, setSelectedAddons] = useState<string[]>(['wifi', 'maintenance', 'water']);
 
@@ -174,17 +176,17 @@ export default function RentCalculatorScreen({ navigation }: any) {
 
                 <Pressable style={styles.confirmBtn}>
                     <Text style={styles.confirmBtnText}>Confirm & Share Receipt</Text>
-                    <Share size={18} color="#000" />
+                    <Share size={18} color={isDark ? "#000" : "#FFF"} />
                 </Pressable>
             </View>
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FB', // Slightly lighter gray
+        backgroundColor: theme.colors.surface,
     },
     header: {
         flexDirection: 'row',
@@ -228,7 +230,7 @@ const styles = StyleSheet.create({
         alignItems: 'center'
     },
     roomBadge: {
-        backgroundColor: '#DBEAFE',
+        backgroundColor: theme.colors.accentLight,
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: var_borderRadius_s,
@@ -255,7 +257,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary
     },
     readingParamsBtn: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: theme.borderRadius.round,
@@ -274,13 +276,16 @@ const styles = StyleSheet.create({
     },
     readingCard: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: isDark ? theme.colors.background : theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.l,
-        justifyContent: 'center'
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
     readingCardActive: {
-        backgroundColor: '#F3F4F6' // Light gray for active
+        backgroundColor: isDark ? theme.colors.accent + '15' : theme.colors.accentLight,
+        borderColor: theme.colors.accent,
     },
     readingLabel: {
         fontSize: 10,
@@ -292,7 +297,7 @@ const styles = StyleSheet.create({
     readingValue: {
         fontSize: 28,
         fontWeight: theme.typography.bold,
-        color: '#9CA3AF',
+        color: theme.colors.textTertiary,
         marginBottom: theme.spacing.s
     },
     readingInput: {
@@ -303,16 +308,18 @@ const styles = StyleSheet.create({
     },
     readingDate: {
         fontSize: 10,
-        color: '#9CA3AF'
+        color: theme.colors.textTertiary
     },
     calcPill: {
         flexDirection: 'row',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         alignSelf: 'center',
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.s,
         paddingHorizontal: theme.spacing.l,
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small
     },
     calcItem: {
@@ -343,17 +350,19 @@ const styles = StyleSheet.create({
     addonCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.m,
         marginBottom: theme.spacing.m,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small
     },
     addonIconBg: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: theme.colors.background,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: theme.spacing.m
@@ -368,10 +377,12 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary
     },
     footer: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
         padding: theme.spacing.l,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
         ...theme.shadows.medium,
         position: 'absolute',
         bottom: 0,
@@ -411,7 +422,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary
     },
     confirmBtn: {
-        backgroundColor: '#000000', // Black as per screenshot
+        backgroundColor: isDark ? theme.colors.accent : theme.colors.textPrimary,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
@@ -419,7 +430,7 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.m
     },
     confirmBtnText: {
-        color: '#FFFFFF',
+        color: isDark ? theme.colors.textPrimary : theme.colors.surface,
         fontWeight: theme.typography.bold,
         fontSize: theme.typography.m,
         marginRight: theme.spacing.s

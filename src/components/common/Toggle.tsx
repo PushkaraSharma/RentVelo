@@ -1,6 +1,6 @@
 import React from 'react';
 import { Switch, StyleSheet } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 
 interface ToggleProps {
     value: boolean;
@@ -8,6 +8,7 @@ interface ToggleProps {
 }
 
 export default function Toggle({ value, onValueChange }: ToggleProps) {
+    const { theme } = useAppTheme();
     return (
         <Switch
             trackColor={{ false: theme.colors.border, true: theme.colors.accent }}

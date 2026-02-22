@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { ArrowUpRight, ArrowDownLeft, Filter, Calendar } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { getGlobalTransactions, GlobalTransaction } from '../../db/paymentService';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function PaymentsScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const [transactions, setTransactions] = useState<GlobalTransaction[]>([]);
     const [totalCollected, setTotalCollected] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -49,7 +51,7 @@ export default function PaymentsScreen({ navigation }: any) {
 
     const renderItem = ({ item }: { item: GlobalTransaction }) => (
         <View style={styles.card}>
-            <View style={[styles.iconBox, { backgroundColor: item.type === 'credit' ? '#DCFCE7' : '#FEE2E2' }]}>
+            <View style={[styles.iconBox, { backgroundColor: item.type === 'credit' ? (isDark ? '#10B98120' : '#DCFCE7') : (isDark ? '#EF444420' : '#FEE2E2') }]}>
                 {item.type === 'credit' ? (
                     <ArrowDownLeft size={20} color={theme.colors.success} />
                 ) : (
@@ -125,7 +127,7 @@ export default function PaymentsScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -147,7 +149,7 @@ const styles = StyleSheet.create({
         marginBottom: theme.spacing.l
     },
     summaryCard: {
-        backgroundColor: theme.colors.primary,
+        backgroundColor: isDark ? theme.colors.accent : theme.colors.primary,
         padding: theme.spacing.l,
         borderRadius: theme.borderRadius.l,
         ...theme.shadows.medium
@@ -160,7 +162,7 @@ const styles = StyleSheet.create({
         letterSpacing: 1
     },
     summaryAmount: {
-        color: '#FFFFFF',
+        color: isDark ? theme.colors.textPrimary : '#FFFFFF',
         fontSize: 32,
         fontWeight: theme.typography.bold
     },

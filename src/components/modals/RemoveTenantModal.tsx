@@ -9,7 +9,7 @@ import {
     KeyboardAvoidingView,
     Platform
 } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, Info, X } from 'lucide-react-native';
 import Button from '../common/Button';
 import Input from '../common/Input';
@@ -36,6 +36,8 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
     onRefundAmountChange,
     onSubmit
 }) => {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [showDatePicker, setShowDatePicker] = React.useState(false);
 
     return (
@@ -121,14 +123,14 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end'
     },
     modalContent: {
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,

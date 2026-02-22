@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { BellOff, Check, Banknote } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
 import { Notification, getNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '../../db';
 
 export default function NotificationsCenterScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const [notifications, setNotifications] = useState<Notification[]>([]);
 
     const loadNotifications = async () => {
@@ -104,7 +106,7 @@ export default function NotificationsCenterScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -160,11 +162,14 @@ const styles = StyleSheet.create({
         padding: theme.spacing.m,
         marginBottom: theme.spacing.s,
         gap: theme.spacing.m,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small,
     },
     unreadCard: {
         borderLeftWidth: 3,
         borderLeftColor: theme.colors.accent,
+        backgroundColor: isDark ? theme.colors.accent + '10' : theme.colors.accentLight + '30',
     },
     iconBox: {
         width: 44,
@@ -174,10 +179,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     iconDue: {
-        backgroundColor: theme.colors.warningLight,
+        backgroundColor: isDark ? '#F59E0B20' : theme.colors.warningLight,
     },
     iconPayment: {
-        backgroundColor: theme.colors.successLight,
+        backgroundColor: isDark ? '#10B98120' : theme.colors.successLight,
     },
     notifTitle: {
         fontSize: 14,

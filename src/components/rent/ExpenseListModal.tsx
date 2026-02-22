@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Trash2, Zap } from 'lucide-react-native';
 import { getBillExpenses, removeExpense } from '../../db';
@@ -14,6 +14,8 @@ interface ExpenseListModalProps {
 }
 
 export default function ExpenseListModal({ visible, onClose, bill, unit }: ExpenseListModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [expenses, setExpenses] = useState<any[]>([]);
 
     useEffect(() => {
@@ -88,7 +90,7 @@ export default function ExpenseListModal({ visible, onClose, bill, unit }: Expen
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     emptyState: {
         alignItems: 'center',
         paddingVertical: 30,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 
 interface ButtonProps {
     title: string;
@@ -23,6 +23,9 @@ export default function Button({
     textStyle,
     icon
 }: ButtonProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
+
     const getBackgroundColor = () => {
         if (disabled) return theme.colors.textTertiary;
         if (variant === 'primary') return theme.colors.accent;
@@ -68,7 +71,7 @@ export default function Button({
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         flexDirection: 'row',
         height: 48,

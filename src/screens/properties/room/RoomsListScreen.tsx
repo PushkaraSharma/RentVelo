@@ -9,7 +9,7 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import {
     Plus,
     DoorOpen,
@@ -22,6 +22,8 @@ import { getUnitsByPropertyId, getPropertyById } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function RoomsListScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const [property, setProperty] = useState<any>(null);
     const [rooms, setRooms] = useState<any[]>([]);
@@ -68,8 +70,8 @@ export default function RoomsListScreen({ navigation, route }: any) {
 
             <View style={styles.roomActionSide}>
                 <View style={styles.tenantStatusContainer}>
-                    <View style={[styles.statusBadge, { backgroundColor: item.is_occupied ? colors.successLight : colors.dangerLight, }]}>
-                        <Text style={[styles.occupiedText, { color: item.is_occupied ? colors.success : colors.danger, }]} numberOfLines={1}>{item.is_occupied ? item.tenant_name : "No tenant"}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: item.is_occupied ? (isDark ? '#10B98120' : theme.colors.successLight) : (isDark ? '#EF444420' : theme.colors.dangerLight), }]}>
+                        <Text style={[styles.occupiedText, { color: item.is_occupied ? theme.colors.success : theme.colors.danger, }]} numberOfLines={1}>{item.is_occupied ? item.tenant_name : "No tenant"}</Text>
                     </View>
                 </View>
                 <ChevronRight size={20} color={theme.colors.textTertiary} />
@@ -113,16 +115,16 @@ export default function RoomsListScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.colors.background,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingBottom: theme.spacing.m,
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
@@ -147,7 +149,7 @@ const styles = StyleSheet.create({
     },
     roomCard: {
         flexDirection: 'row',
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.m,
         marginBottom: theme.spacing.m,

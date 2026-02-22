@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet, TextInputProps } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 
 interface InputProps extends TextInputProps {
     label?: string;
@@ -9,6 +9,8 @@ interface InputProps extends TextInputProps {
 }
 
 export default function Input({ label, icon, error, style, ...props }: InputProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     return (
         <View style={styles.container}>
             {label && <Text style={styles.label}>{label}</Text>}
@@ -25,7 +27,7 @@ export default function Input({ label, icon, error, style, ...props }: InputProp
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         marginBottom: theme.spacing.m,
     },

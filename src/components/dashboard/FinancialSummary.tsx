@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { TrendingUp, TrendingDown } from 'lucide-react-native';
 import { CURRENCY } from '../../utils/Constants';
 
@@ -13,6 +13,8 @@ interface FinancialSummaryProps {
 }
 
 export default function FinancialSummary({ expected, collected, onPress }: FinancialSummaryProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const progress = expected ? Math.min((collected / expected) * 100, 100) : 0;
 
     return (
@@ -45,7 +47,7 @@ export default function FinancialSummary({ expected, collected, onPress }: Finan
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         flexDirection: 'row',
         marginBottom: theme.spacing.l,

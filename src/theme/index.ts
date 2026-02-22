@@ -1,4 +1,4 @@
-export const colors = {
+export const lightColors = {
   // Core
   background: '#F5F7FA', // Very light gray for app background
   surface: '#FFFFFF', // White for cards
@@ -25,6 +25,39 @@ export const colors = {
   // Borders
   border: '#E5E7EB',
 };
+
+export const darkColors: ThemeColors = {
+  // Core
+  background: '#121212', // Deep dark for app background
+  surface: '#1E1E1E', // Slightly lighter for cards
+  primary: '#FFFFFF', // White for primary actions
+  primaryForeground: '#111827', // Dark on primary
+
+  // Accents
+  accent: '#60A5FA', // Lighter blue shade for dark mode
+  accentLight: '#1E3A8A', // Dark blue for backgrounds/highlights
+
+  // Status
+  success: '#34D399', // Lighter Green
+  warning: '#FBBF24', // Lighter Amber
+  danger: '#F87171', // Lighter Red
+  dangerLight: '#7F1D1D', // Dark red background
+  successLight: '#064E3B', // Dark green background
+  warningLight: '#78350F', // Dark amber background
+
+  // Text
+  textPrimary: '#F9FAFB', // Almost white
+  textSecondary: '#9CA3AF', // Gray text
+  textTertiary: '#6B7280', // Darker gray
+
+  // Borders
+  border: '#374151',
+};
+
+export type ThemeColors = typeof lightColors;
+
+// Maintain backward compatibility during refactoring
+export const colors = lightColors;
 
 export const spacing = {
   xs: 4,

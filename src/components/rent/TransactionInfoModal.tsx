@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { ChevronRight } from 'lucide-react-native';
 import { updateBill, recalculateBill } from '../../db';
@@ -16,6 +16,8 @@ interface TransactionInfoModalProps {
 }
 
 export default function TransactionInfoModal({ visible, onClose, bill, unit, period }: TransactionInfoModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [rentAmount, setRentAmount] = useState('');
     const [balanceType, setBalanceType] = useState<'balance' | 'advance'>('balance');
     const [balanceAmount, setBalanceAmount] = useState('');
@@ -40,20 +42,42 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
                 setBalanceType('balance');
                 setBalanceAmount(prevBal.toString());
             }
-            // Initialize dates from bill's month/year
-            setStartDate(new Date(bill.year, bill.month - 1, 1));
-            setEndDate(new Date(bill.year, bill.month, 0));
+            // Initialize dates from bill's period_start/end or default it
+            setStartDate(bill.period_start ? new Date(bill.period_start) : new Date(bill.year, bill.month - 1, 1));
+            setEndDate(bill.period_end ? new Date(bill.period_end) : new Date(bill.year, bill.month, 0));
         }
     }, [visible, bill]);
+
+    // Auto calculate rent if dates change (only if unit rent is available)
+    useEffect(() => {
+        if (visible && unit?.rent_amount && startDate && endDate && bill) {
+            // Check if dates are customized vs full month
+            const defaultStart = new Date(bill.year, bill.month - 1, 1);
+            const defaultEnd = new Date(bill.year, bill.month, 0);
+
+            // If the user hasn't customized dates, use original rent, 
+            // otherwise calculate prorated rent based on days
+            if (startDate.getTime() !== defaultStart.getTime() || endDate.getTime() !== defaultEnd.getTime()) {
+                const msPerDay = 1000 * 60 * 60 * 24;
+                const totalDaysInMonth = defaultEnd.getDate();
+                const selectedDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / msPerDay) + 1);
+
+                const calculatedRent = Math.round((unit.rent_amount / totalDaysInMonth) * selectedDays);
+                setRentAmount(calculatedRent.toString());
+            }
+        }
+    }, [startDate, endDate]);
 
     const handleSave = async () => {
         const rent = parseFloat(rentAmount) || 0;
         const bal = parseFloat(balanceAmount) || 0;
         const previousBalance = balanceType === 'advance' ? -bal : bal;
-        console.log(previousBalance)
+
         await updateBill(bill.id, {
             rent_amount: rent,
             previous_balance: previousBalance,
+            period_start: startDate,
+            period_end: endDate
         });
         await recalculateBill(bill.id);
         onClose();
@@ -164,7 +188,7 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     section: {
         marginBottom: theme.spacing.l,
         backgroundColor: theme.colors.surface,

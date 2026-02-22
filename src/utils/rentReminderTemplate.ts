@@ -90,6 +90,12 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
         }
     }
 
+    // Payment info
+    // ...
+    // ... later in the template
+    const displayPeriodStart = bill.period_start ? new Date(bill.period_start).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.start;
+    const displayPeriodEnd = bill.period_end ? new Date(bill.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.end;
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -142,7 +148,7 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
     <div style="background:#E53E3E; color:#FFF; border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <div>
             <span style="font-size:11px; opacity:0.8;">Rent Period:</span>
-            <strong style="margin-left:6px;">${period.start} — ${period.end}, ${yearNum}</strong>
+            <strong style="margin-left:6px;">${displayPeriodStart} — ${displayPeriodEnd}, ${yearNum}</strong>
         </div>
         <div style="font-size:11px; opacity:0.8;">${period.days} Days</div>
     </div>

@@ -8,7 +8,7 @@ import {
     Platform,
     Dimensions
 } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, ChevronRight, X } from 'lucide-react-native';
 import Button from '../common/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -42,6 +42,8 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
     onUnitPress,
     onSubmit
 }) => {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [showDatePicker, setShowDatePicker] = React.useState(false);
 
     if (!visible) return null;
@@ -112,7 +114,7 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     modalOverlay: {
         position: 'absolute',
         top: 0,
@@ -127,7 +129,7 @@ const styles = StyleSheet.create({
         width: '100%'
     },
     modalContent: {
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,

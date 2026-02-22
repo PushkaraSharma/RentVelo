@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.indieroots.RentVelo"
+      "bundleIdentifier": "com.indieroots.rentVelo"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +23,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.indieroots.RentVelo"
+      "package": "com.indieroots.rentVelo"
     },
     "web": {
       "favicon": "./assets/app-icon.png"

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../redux/authSlice';
 import { RootState } from '../../redux/store';
@@ -26,6 +26,8 @@ import Header from '../../components/common/Header';
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
     const { user } = useSelector((state: RootState) => state.auth);
+    const { theme, isDark, setMode } = useAppTheme();
+    const styles = getStyles(theme, isDark);
 
     const handleLogout = () => {
         Alert.alert(
@@ -108,7 +110,7 @@ export default function SettingsScreen({ navigation }: any) {
                             icon={Moon}
                             label="Dark Mode"
                             color="#6366F1"
-                            right={<Toggle value={false} onValueChange={() => { }} />}
+                            right={<Toggle value={isDark} onValueChange={(v) => setMode(v ? 'dark' : 'light')} />}
                         />
                         <SettingItem
                             icon={Database}
@@ -167,7 +169,7 @@ export default function SettingsScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -204,6 +206,8 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         flexDirection: 'row',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small,
         marginBottom: theme.spacing.xl,
     },
@@ -259,6 +263,8 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderRadius: 20,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small,
     },
     item: {

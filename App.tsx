@@ -9,6 +9,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { db, migrations } from './src/db/database';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { theme } from './src/theme';
+import { ThemeProvider } from './src/theme/ThemeContext';
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
@@ -35,10 +36,12 @@ export default function App() {
 
   return (
     <Provider store={store}>
-      <SafeAreaProvider>
-        <RootNavigator />
-        <StatusBar style="auto" />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <RootNavigator />
+          <StatusBar style="auto" />
+        </SafeAreaProvider>
+      </ThemeProvider>
     </Provider>
   );
 }

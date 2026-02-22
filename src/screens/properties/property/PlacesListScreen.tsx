@@ -1,25 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import { Plus, MapPin, Home, Building, Building2, ChevronRight, Store, Layers } from 'lucide-react-native';
 import { getPropertiesWithStats, Property } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 
-const getTypeIcon = (type: string, size: number = 15) => {
-    switch (type) {
-        case 'house': return <Home size={size} color={theme.colors.accent} />;
-        case 'building': return <Building size={size} color={theme.colors.accent} />;
-        case 'pg': return <Building2 size={size} color={theme.colors.accent} />;
-        case 'shop': return <Store size={size} color={theme.colors.accent} />;
-        case 'flat': return <Layers size={size} color={theme.colors.accent} />;
-        default: return <Home size={size} color={theme.colors.accent} />;
-    }
-}
-
 export default function PlacesListScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const [properties, setProperties] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+
+    const getTypeIcon = (type: string, size: number = 15) => {
+        switch (type) {
+            case 'house': return <Home size={size} color={theme.colors.accent} />;
+            case 'building': return <Building size={size} color={theme.colors.accent} />;
+            case 'pg': return <Building2 size={size} color={theme.colors.accent} />;
+            case 'shop': return <Store size={size} color={theme.colors.accent} />;
+            case 'flat': return <Layers size={size} color={theme.colors.accent} />;
+            default: return <Home size={size} color={theme.colors.accent} />;
+        }
+    }
 
     const loadProperties = async () => {
         try {
@@ -47,24 +49,25 @@ export default function PlacesListScreen({ navigation }: any) {
         let statusColor = theme.colors.accent;
         let statusBg = theme.colors.accentLight;
 
+
         if (item.is_multi_unit) {
             if (item.occupiedCount === 0) {
                 statusColor = theme.colors.danger;
-                statusBg = '#FEF2F2';
+                statusBg = isDark ? '#EF444420' : '#FEF2F2';
             } else if (item.occupiedCount < item.totalRooms) {
                 statusColor = theme.colors.warning;
-                statusBg = '#FFFBEB';
+                statusBg = isDark ? '#F59E0B20' : '#FFFBEB';
             } else {
                 statusColor = theme.colors.success;
-                statusBg = '#ECFDF5';
+                statusBg = isDark ? '#10B98120' : '#ECFDF5';
             }
         } else {
             if (item.occupiedCount > 0) {
                 statusColor = theme.colors.success;
-                statusBg = '#ECFDF5';
+                statusBg = isDark ? '#10B98120' : '#ECFDF5';
             } else {
                 statusColor = theme.colors.danger;
-                statusBg = '#FEF2F2';
+                statusBg = isDark ? '#EF444420' : '#FEF2F2';
             }
         }
 
@@ -138,7 +141,7 @@ export default function PlacesListScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,

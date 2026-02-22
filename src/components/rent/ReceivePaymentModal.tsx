@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { Banknote, CreditCard, Building2, Landmark, Camera } from 'lucide-react-native';
+import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide-react-native';
 import { addPaymentToBill } from '../../db';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -23,6 +23,8 @@ const PAYMENT_METHODS = [
 ];
 
 export default function ReceivePaymentModal({ visible, onClose, bill, unit }: ReceivePaymentModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [amount, setAmount] = useState('');
     const [method, setMethod] = useState('cash');
     const [remarks, setRemarks] = useState('');
@@ -130,6 +132,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 <Pressable style={styles.photoChip} onPress={pickPhoto}>
                     <Camera size={16} color={theme.colors.accent} />
                     <Text style={styles.photoText}>{photoUri ? 'Photo Added' : 'Add Photo'}</Text>
+                    {photoUri && <Check size={16} color={theme.colors.accent} />}
                 </Pressable>
             </View>
 
@@ -154,7 +157,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     label: {
         fontSize: 14,
         fontWeight: theme.typography.bold,
@@ -198,7 +201,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
     },
     balanceInfo: {
-        backgroundColor: '#FEF2F2',
+        backgroundColor: theme.colors.dangerLight,
         borderRadius: 12,
         paddingVertical: 10,
         paddingHorizontal: theme.spacing.m,

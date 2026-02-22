@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, Pressable, Modal,
     KeyboardAvoidingView, Platform, ScrollView
 } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,6 +29,8 @@ export default function RentModalSheet({
     visible, onClose, title, subtitle, children,
     scrollable = true, actionLabel, onAction, actionDisabled,
 }: RentModalSheetProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const insets = useSafeAreaInsets();
 
     return (
@@ -73,7 +75,7 @@ export default function RentModalSheet({
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',

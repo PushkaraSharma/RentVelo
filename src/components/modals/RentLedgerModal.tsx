@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { X, Check, ChevronDown, ChevronUp, Share2 } from 'lucide-react-native';
 import Button from '../common/Button';
 import * as Print from 'expo-print';
@@ -25,6 +25,8 @@ export default function RentLedgerModal({
     unit,
     payments = [],
 }: RentLedgerModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     // Options state
     const [includeIdProof, setIncludeIdProof] = useState(true);
     const [includeTransactions, setIncludeTransactions] = useState(true);
@@ -194,7 +196,7 @@ export default function RentLedgerModal({
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     overlay: {
         position: 'absolute',
         top: 0,
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         borderWidth: 2,
         borderColor: theme.colors.accent,
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.background,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,

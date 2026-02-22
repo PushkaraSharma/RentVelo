@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
 import { login, completeOnboarding } from '../../redux/authSlice';
 
 export default function WelcomeScreen() {
     const dispatch = useDispatch();
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
 
     const handleGoogleLogin = () => {
         // Implementing Mock Auth Logic as per plan
@@ -42,7 +44,7 @@ export default function WelcomeScreen() {
 
                 <Pressable style={styles.googleButton} onPress={handleGoogleLogin}>
                     <View style={styles.gIcon}>
-                        <Text style={{ fontWeight: 'bold', color: theme.colors.surface }}>G</Text>
+                        <Text style={{ fontWeight: 'bold', color: '#FFF' }}>G</Text>
                     </View>
                     <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </Pressable>
@@ -59,7 +61,7 @@ export default function WelcomeScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -78,6 +80,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: theme.spacing.m,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small
     },
     subtitle: {

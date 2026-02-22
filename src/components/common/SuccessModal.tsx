@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { ArrowLeft, LucideIcon } from 'lucide-react-native';
 
 export interface ModalAction {
@@ -29,6 +29,8 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
     onClose,
     secondaryActionLabel = "Done, Go Back"
 }) => {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     return (
         <Modal
             visible={visible}
@@ -68,7 +70,7 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',

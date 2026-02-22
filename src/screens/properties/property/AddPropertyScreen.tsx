@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
@@ -14,6 +14,8 @@ import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES } from '../../../utils/Co
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const isEditMode = !!propertyId;
     const [image, setImage] = useState<string | null>(null);
@@ -399,7 +401,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -443,7 +445,7 @@ const styles = StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.background,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: theme.spacing.s,
@@ -607,7 +609,7 @@ const styles = StyleSheet.create({
         borderBottomColor: theme.colors.border,
     },
     rentTypeBtnActive: {
-        backgroundColor: theme.colors.accentLight,
+        backgroundColor: isDark ? theme.colors.accent + '20' : theme.colors.accentLight,
     },
     rentTypeText: {
         flex: 1,

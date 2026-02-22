@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { updateBill, recalculateBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
@@ -13,6 +13,8 @@ interface EditElectricityModalProps {
 }
 
 export default function EditElectricityModal({ visible, onClose, bill, unit }: EditElectricityModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [amount, setAmount] = useState('');
 
     useEffect(() => {
@@ -55,7 +57,7 @@ export default function EditElectricityModal({ visible, onClose, bill, unit }: E
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     inputGroup: {
         backgroundColor: theme.colors.surface,
         borderRadius: 16,

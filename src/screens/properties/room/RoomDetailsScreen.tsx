@@ -15,7 +15,7 @@ import {
     Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import {
     Edit3,
     User,
@@ -51,6 +51,8 @@ import MoveTenantModal from '../../../components/modals/MoveTenantModal';
 import RentLedgerModal from '../../../components/modals/RentLedgerModal';
 
 export default function RoomDetailsScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const { propertyId, unitId } = route.params;
     const [property, setProperty] = useState<any>(null);
     const [unit, setUnit] = useState<any>(null);
@@ -231,7 +233,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 {isActive && (
                     <View style={styles.activeActions}>
                         <Pressable
-                            style={[styles.actionChip, { backgroundColor: '#FEE2E2' }]}
+                            style={[styles.actionChip, { backgroundColor: isDark ? '#EF444420' : '#FEE2E2' }]}
                             onPress={(e) => {
                                 e.stopPropagation();
                                 setSelectedTenant(tenant);
@@ -243,7 +245,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                             <Text style={[styles.actionChipText, { color: '#EF4444' }]}>Remove</Text>
                         </Pressable>
                         <Pressable
-                            style={[styles.actionChip, { backgroundColor: '#E0F2FE' }]}
+                            style={[styles.actionChip, { backgroundColor: isDark ? '#0284C720' : '#E0F2FE' }]}
                             onPress={(e) => {
                                 e.stopPropagation();
                                 setSelectedTenant(tenant);
@@ -255,7 +257,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                             <Text style={[styles.actionChipText, { color: '#0284C7' }]}>Move</Text>
                         </Pressable>
                         <Pressable
-                            style={[styles.actionChip, { backgroundColor: '#F3E8FF' }]}
+                            style={[styles.actionChip, { backgroundColor: isDark ? '#7C3AED20' : '#F3E8FF' }]}
                             onPress={(e) => {
                                 e.stopPropagation();
                                 setShowLedgerModal(true);
@@ -447,17 +449,17 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
 
 
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.colors.background,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingRight: theme.spacing.m,
         paddingBottom: theme.spacing.m,
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
     },
@@ -482,7 +484,7 @@ const styles = StyleSheet.create({
     },
     tabContainer: {
         flexDirection: 'row',
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.background,
         paddingHorizontal: theme.spacing.m,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
@@ -528,7 +530,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.8
     },
     infoCard: {
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.m,
         marginBottom: theme.spacing.m,
@@ -563,7 +565,7 @@ const styles = StyleSheet.create({
     emptyTenantBox: {
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         padding: 40,
         borderWidth: 1,
@@ -581,7 +583,7 @@ const styles = StyleSheet.create({
     },
     tenantCard: {
         flexDirection: 'row',
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.m,
         marginBottom: theme.spacing.m,

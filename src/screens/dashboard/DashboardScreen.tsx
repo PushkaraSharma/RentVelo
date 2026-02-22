@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, SafeAreaView, ActivityIndicator } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { Bell } from 'lucide-react-native';
 import FinancialSummary from '../../components/dashboard/FinancialSummary';
 import PendingAlert from '../../components/dashboard/PendingAlert';
@@ -12,6 +12,8 @@ import { getDashboardData, DashboardData, getUnreadNotificationCount } from '../
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function DashboardScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const user = useSelector((state: RootState) => state.auth.user);
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -137,7 +139,7 @@ export default function DashboardScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -201,7 +203,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
-        borderColor: theme.colors.background,
+        borderColor: theme.colors.surface,
         paddingHorizontal: 4,
     },
     badgeText: {
@@ -224,6 +226,8 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderRadius: 20,
         padding: theme.spacing.l,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small
     },
     chartPlaceholder: {

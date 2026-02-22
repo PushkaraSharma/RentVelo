@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image, Linking } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { X, Phone, Mail, MapPin, User, Calendar, Shield, ExternalLink, MessageCircle } from 'lucide-react-native';
 
@@ -14,6 +14,8 @@ interface RoomInfoModalProps {
 }
 
 export default function RoomInfoModal({ visible, onClose, tenant, unit, navigation, propertyId }: RoomInfoModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     if (!tenant || !unit) return null;
 
     const formatDate = (d: any) => {
@@ -125,7 +127,7 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',

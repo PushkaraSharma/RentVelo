@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { RotateCcw, Check } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import Button from '../../components/common/Button';
@@ -19,6 +19,8 @@ export const saveTermsAndConditions = (terms: string): void => {
 };
 
 export default function TermsEditorScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const [terms, setTerms] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -96,7 +98,7 @@ export default function TermsEditorScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,

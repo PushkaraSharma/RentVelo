@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
@@ -19,6 +19,8 @@ const MONTHS = [
 type FilterType = 'all' | 'paid' | 'partial' | 'pending' | 'vacant';
 
 export default function TakeRentScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -225,7 +227,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,

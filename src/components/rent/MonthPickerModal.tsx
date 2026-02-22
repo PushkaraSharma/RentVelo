@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 const MONTHS = [
@@ -18,6 +18,8 @@ interface MonthPickerModalProps {
 }
 
 export default function MonthPickerModal({ visible, month, year, onSelect, onClose }: MonthPickerModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [displayYear, setDisplayYear] = React.useState(year);
 
     React.useEffect(() => {
@@ -79,7 +81,7 @@ export default function MonthPickerModal({ visible, month, year, onSelect, onClo
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     overlay: {
         position: 'absolute',
         top: 0,

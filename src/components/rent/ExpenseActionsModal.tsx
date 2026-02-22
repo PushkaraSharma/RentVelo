@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { Plus, Minus, Wallet } from 'lucide-react-native';
+import { Plus, Minus, ChevronDown, Wallet } from 'lucide-react-native';
 import { addExpenseToBill, recalculateBill } from '../../db';
 import Toggle from '../common/Toggle';
+import PickerBottomSheet from '../common/PickerBottomSheet';
 import RentModalSheet from './RentModalSheet';
 
 interface ExpenseActionsModalProps {
@@ -14,11 +15,23 @@ interface ExpenseActionsModalProps {
     unit: any;
 }
 
+const EXPENSE_CATEGORIES = [
+    'Wifi', 'Internet', 'Food/meals', 'Invertor/Generator', 'Cable/Dish',
+    'Cameras', 'Laundry', 'Water Bill', 'Plumbing charges', 'Water Heater',
+    'AC', 'Light', 'Bulb etc', 'Repair/Fixes', 'Furnishing', 'House cleaning',
+    'Car/Bike Parking', 'Yearly Maintainance', 'Property Tax', 'Late Fees',
+    'Penalty/Fine', 'Other', 'Gas cylinder', 'Monthly Maintainance', 'Electricity Bill', 'Gas Bill'
+];
+
 export default function ExpenseActionsModal({ visible, onClose, bill, unit }: ExpenseActionsModalProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const [actionType, setActionType] = useState<'add' | 'remove'>('add');
     const [label, setLabel] = useState('');
     const [amount, setAmount] = useState('');
+    const [remarks, setRemarks] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
+    const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
     const handleSubmit = async () => {
         const amt = parseFloat(amount);
@@ -26,14 +39,23 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
 
         const finalAmount = actionType === 'remove' ? -amt : amt;
 
+        let finalLabel = '';
+        if (actionType === 'add') {
+            const category = label || 'Custom Expense';
+            finalLabel = remarks ? `${category} - ${remarks}` : category;
+        } else {
+            finalLabel = remarks || 'Discount';
+        }
+
         await addExpenseToBill(bill.id, {
-            label: label || (actionType === 'add' ? 'Custom Expense' : 'Discount'),
+            label: finalLabel,
             amount: finalAmount,
             is_recurring: isRecurring,
         });
 
         await recalculateBill(bill.id);
         setLabel('');
+        setRemarks('');
         setAmount('');
         setIsRecurring(false);
         onClose();
@@ -84,14 +106,30 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
                 </View>
             </View>
 
+            {/* Category Selector for Add Expense */}
+            {actionType === 'add' && (
+                <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Category / Purpose</Text>
+                    <Pressable
+                        style={styles.dropdownInput}
+                        onPress={() => setShowCategoryPicker(true)}
+                    >
+                        <Text style={[styles.dropdownText, !label && { color: theme.colors.textTertiary }]}>
+                            {label || 'Select Category'}
+                        </Text>
+                        <ChevronDown size={20} color={theme.colors.textSecondary} />
+                    </Pressable>
+                </View>
+            )}
+
             {/* Label */}
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Label</Text>
+                <Text style={styles.inputLabel}>Remarks</Text>
                 <TextInput
                     style={styles.input}
-                    value={label}
-                    onChangeText={setLabel}
-                    placeholder={actionType === 'add' ? 'Wi-Fi/Internet, Maintenance...' : 'Remove expense reason...'}
+                    value={remarks}
+                    onChangeText={setRemarks}
+                    placeholder={'Enter remarks'}
                     placeholderTextColor={theme.colors.textTertiary}
                 />
             </View>
@@ -106,11 +144,20 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
                     <Toggle value={isRecurring} onValueChange={setIsRecurring} />
                 </View>
             )}
+
+            <PickerBottomSheet
+                visible={showCategoryPicker}
+                onClose={() => setShowCategoryPicker(false)}
+                title="Select Category"
+                options={EXPENSE_CATEGORIES}
+                selectedValue={label}
+                onSelect={(cat) => setLabel(cat)}
+            />
         </RentModalSheet>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     toggleRow: {
         flexDirection: 'row',
         gap: 10,
@@ -202,5 +249,20 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: theme.colors.textTertiary,
         marginTop: 2,
+    },
+    dropdownInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.colors.surface,
+        borderRadius: 14,
+        paddingHorizontal: theme.spacing.m,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    dropdownText: {
+        fontSize: 14,
+        color: theme.colors.textPrimary,
     },
 });

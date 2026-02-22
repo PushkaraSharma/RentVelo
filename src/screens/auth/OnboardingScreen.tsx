@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, Pressable, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
 import { completeOnboarding } from '../../redux/authSlice';
 
@@ -26,6 +26,8 @@ const slides = [
 
 export default function OnboardingScreen() {
     const dispatch = useDispatch();
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const [currentSlideIndex, setCurrentSlideIndex] = React.useState(0);
 
     const handleNext = () => {
@@ -83,7 +85,7 @@ export default function OnboardingScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -130,6 +132,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
         marginBottom: theme.spacing.s,
         textAlign: 'center',
+        marginTop: 20
     },
     description: {
         fontSize: theme.typography.m,
@@ -141,7 +144,7 @@ const styles = StyleSheet.create({
         padding: theme.spacing.l,
     },
     button: {
-        backgroundColor: theme.colors.primary,
+        backgroundColor: isDark ? theme.colors.accent : theme.colors.primary,
         paddingVertical: theme.spacing.m,
         borderRadius: theme.borderRadius.l,
         alignItems: 'center',

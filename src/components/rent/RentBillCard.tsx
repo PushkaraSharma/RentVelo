@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
 import {
@@ -12,8 +12,11 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { generateRentReceiptHTML } from '../../utils/rentReceiptTemplate';
 import { generateRentReminderHTML } from '../../utils/rentReminderTemplate';
+import { WebView } from 'react-native-webview';
+import ViewShot from 'react-native-view-shot';
 
 // Import modals
+import PickerBottomSheet from '../common/PickerBottomSheet';
 import RoomInfoModal from './RoomInfoModal';
 import ReceivePaymentModal from './ReceivePaymentModal';
 import PaidAmountModal from './PaidAmountModal';
@@ -39,6 +42,8 @@ interface RentBillCardProps {
 
 export default function RentBillCard({ item, period, onRefresh, navigation, propertyId }: RentBillCardProps) {
     const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired } = item;
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
 
     // Modal states
     const [showRoomInfo, setShowRoomInfo] = useState(false);
@@ -59,7 +64,13 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const SWIPE_THRESHOLD = Dimensions.get('window').width * 0.35;
     const TRACK_WIDTH = Dimensions.get('window').width - 72; // card padding approx
 
-    const generateAndShareReceipt = async () => {
+    const [shareFormatPickerVisible, setShareFormatPickerVisible] = useState(false);
+    const [pendingAction, setPendingAction] = useState<'receipt' | 'reminder' | null>(null);
+
+    const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder' } | null>(null);
+    const viewShotRef = useRef<any>(null);
+
+    const generateAndShareReceipt = async (format: 'PDF' | 'Image') => {
         setGeneratingReceipt(true);
         try {
             const [payments, expenses, receiptConfig, property] = await Promise.all([
@@ -80,26 +91,30 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 period,
             });
 
-            const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
+            if (format === 'PDF') {
+                const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
 
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri, {
-                    mimeType: 'application/pdf',
-                    dialogTitle: `Rent Receipt - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
-                    UTI: 'com.adobe.pdf',
-                });
+                if (await Sharing.isAvailableAsync()) {
+                    await Sharing.shareAsync(uri, {
+                        mimeType: 'application/pdf',
+                        dialogTitle: `Rent Receipt - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
+                        UTI: 'com.adobe.pdf',
+                    });
+                } else {
+                    Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+                }
+                setGeneratingReceipt(false);
             } else {
-                Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+                setShareHtml({ html, action: 'receipt' });
             }
         } catch (error) {
             console.error('Receipt generation error:', error);
             Alert.alert('Error', 'Failed to generate receipt. Please try again.');
-        } finally {
             setGeneratingReceipt(false);
         }
     };
 
-    const generateAndShareReminder = async () => {
+    const generateAndShareReminder = async (format: 'PDF' | 'Image') => {
         setSendingReminder(true);
         try {
             const [expenses, receiptConfig, property] = await Promise.all([
@@ -118,21 +133,65 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 period,
             });
 
-            const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
+            if (format === 'PDF') {
+                const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri, {
-                    mimeType: 'application/pdf',
-                    dialogTitle: `Payment Reminder - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
-                    UTI: 'com.adobe.pdf',
-                });
+                if (await Sharing.isAvailableAsync()) {
+                    await Sharing.shareAsync(uri, {
+                        mimeType: 'application/pdf',
+                        dialogTitle: `Payment Reminder - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
+                        UTI: 'com.adobe.pdf',
+                    });
+                } else {
+                    Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+                }
+                setSendingReminder(false);
             } else {
-                Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+                setShareHtml({ html, action: 'reminder' });
             }
         } catch (error) {
             console.error('Reminder generation error:', error);
             Alert.alert('Error', 'Failed to generate reminder. Please try again.');
-        } finally {
+            setSendingReminder(false);
+        }
+    };
+
+    const handleShareActionSelect = (format: string) => {
+        if (pendingAction === 'receipt') {
+            generateAndShareReceipt(format as 'PDF' | 'Image');
+        } else if (pendingAction === 'reminder') {
+            generateAndShareReminder(format as 'PDF' | 'Image');
+        }
+        setPendingAction(null);
+    };
+
+    const handleCaptureImage = async () => {
+        try {
+            if (viewShotRef.current) {
+                // Wait briefly for full webview paint
+                setTimeout(async () => {
+                    try {
+                        const uri = await viewShotRef.current.capture();
+                        if (await Sharing.isAvailableAsync()) {
+                            await Sharing.shareAsync(uri, {
+                                mimeType: 'image/png',
+                                dialogTitle: `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`,
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Image capture error:', e);
+                        Alert.alert('Error', 'Failed to capture image.');
+                    } finally {
+                        setShareHtml(null);
+                        setGeneratingReceipt(false);
+                        setSendingReminder(false);
+                    }
+                }, 800);
+            }
+        } catch (err) {
+            console.error('handleCaptureImage err', err);
+            setShareHtml(null);
+            setGeneratingReceipt(false);
             setSendingReminder(false);
         }
     };
@@ -351,7 +410,11 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 <View style={styles.rentRow}>
                     <View>
                         <Text style={styles.rentLabel}>Rent</Text>
-                        <Text style={styles.rentPeriod}>{period.start} - {period.end}</Text>
+                        <Text style={styles.rentPeriod}>
+                            {bill.period_start ? new Date(bill.period_start).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.start}
+                            {' - '}
+                            {bill.period_end ? new Date(bill.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.end}
+                        </Text>
                     </View>
                     <Text style={styles.rentAmount}>{formatAmount(bill.rent_amount)}</Text>
                 </View>
@@ -418,10 +481,11 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                             }).start(() => {
                                 swipeAnim.setValue(0);
                                 if (hasPaid) {
-                                    generateAndShareReceipt();
+                                    setPendingAction('receipt');
                                 } else {
-                                    generateAndShareReminder();
+                                    setPendingAction('reminder');
                                 }
+                                setShareFormatPickerVisible(true);
                             });
                         } else {
                             Animated.spring(swipeAnim, {
@@ -470,7 +534,27 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 </Text>
             )}
 
+            {/* Hidden WebView for capturing as Image */}
+            {shareHtml && (
+                <View style={styles.hiddenViewShotContainer} pointerEvents="none">
+                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
+                        <WebView
+                            source={{ html: shareHtml.html }}
+                            style={{ width: 595, height: 842 }}
+                            onLoadEnd={handleCaptureImage}
+                        />
+                    </ViewShot>
+                </View>
+            )}
+
             {/* ===== MODALS ===== */}
+            <PickerBottomSheet
+                visible={shareFormatPickerVisible}
+                onClose={() => setShareFormatPickerVisible(false)}
+                title={pendingAction === 'receipt' ? "Share Receipt As" : "Share Reminder As"}
+                options={['Image', 'PDF']}
+                onSelect={handleShareActionSelect}
+            />
             <RoomInfoModal
                 visible={showRoomInfo}
                 onClose={() => setShowRoomInfo(false)}
@@ -524,7 +608,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     card: {
         backgroundColor: theme.colors.surface,
         borderRadius: 20,
@@ -806,20 +890,26 @@ const styles = StyleSheet.create({
         fontWeight: theme.typography.semiBold,
     },
     swipeThumb: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        position: 'absolute',
+        left: 0,
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'absolute',
-        left: 3,
-        ...theme.shadows.small,
+        ...theme.shadows.medium,
     },
     billInfo: {
         fontSize: 11,
         color: theme.colors.textTertiary,
         textAlign: 'center',
-        marginTop: 2,
+        marginTop: 6,
+    },
+    hiddenViewShotContainer: {
+        position: 'absolute',
+        top: -10000,
+        left: -10000,
+        opacity: 0,
     },
     // Locked Card Styles
     lockedCard: {

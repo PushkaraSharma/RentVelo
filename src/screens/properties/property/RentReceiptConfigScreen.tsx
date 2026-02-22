@@ -12,7 +12,7 @@ import {
     Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
@@ -33,8 +33,7 @@ import Header from '../../../components/common/Header';
 import { getReceiptConfigByPropertyId, upsertReceiptConfig } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import SignatureScreen from 'react-native-signature-canvas';
-import * as FileSystem from 'expo-file-system/legacy';
+import SignatureModal from '../../../components/common/SignatureModal';
 
 const WALLET_OPTIONS = [
     { label: 'Google Pay', value: 'google_pay' },
@@ -45,6 +44,8 @@ const WALLET_OPTIONS = [
 ];
 
 export default function RentReceiptConfigScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const [loading, setLoading] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -117,21 +118,9 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
         }
     };
 
-    const handleSignatureSave = async (signature: string) => {
-        try {
-            // signature is a base64 data URI
-            const filename = `signature_${propertyId}_${Date.now()}.png`;
-            const filepath = `${FileSystem.documentDirectory}${filename}`;
-            const base64Data = signature.replace('data:image/png;base64,', '');
-            await FileSystem.writeAsStringAsync(filepath, base64Data, {
-                encoding: FileSystem.EncodingType.Base64
-            });
-            setSignatureUri(filepath);
-            setShowSignatureModal(false);
-        } catch (error) {
-            console.error('Error saving signature:', error);
-            Alert.alert('Error', 'Failed to save signature');
-        }
+    const handleSignatureSave = (filepath: string) => {
+        setSignatureUri(filepath);
+        setShowSignatureModal(false);
     };
 
     const handleSubmit = async () => {
@@ -162,7 +151,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
         }
     };
 
-    const signatureStyle = `.m-signature-pad--footer { display: none; margin: 0px; } .m-signature-pad { box-shadow: none; border: none; } body,html { width: 100%; height: 100%; }`;
+
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -382,53 +371,20 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
             />
 
             {/* Signature Modal */}
-            <Modal
+            <SignatureModal
                 visible={showSignatureModal}
-                animationType="slide"
-                onRequestClose={() => setShowSignatureModal(false)}
-            >
-                <SafeAreaView style={styles.signatureContainer}>
-                    <View style={styles.signatureHeader}>
-                        <Pressable onPress={() => setShowSignatureModal(false)}>
-                            <X size={24} color={theme.colors.textPrimary} />
-                        </Pressable>
-                        <Text style={styles.signatureTitle}>Draw Your Signature</Text>
-                        <Pressable onPress={() => signatureRef.current?.clearSignature()}>
-                            <Trash2 size={24} color={theme.colors.danger} />
-                        </Pressable>
-                    </View>
-                    <View style={styles.signatureCanvasWrapper}>
-                        <SignatureScreen
-                            ref={signatureRef}
-                            onOK={handleSignatureSave}
-                            webStyle={signatureStyle}
-                            backgroundColor="#FFF"
-                            penColor="#000"
-                        />
-                    </View>
-                    <View style={styles.signatureFooter}>
-                        <Button
-                            title="Clear"
-                            onPress={() => signatureRef.current?.clearSignature()}
-                            variant="outline"
-                            style={{ flex: 1, marginRight: 10 }}
-                        />
-                        <Button
-                            title="Save Signature"
-                            onPress={() => signatureRef.current?.readSignature()}
-                            style={{ flex: 1 }}
-                        />
-                    </View>
-                </SafeAreaView>
-            </Modal>
+                onClose={() => setShowSignatureModal(false)}
+                onSave={handleSignatureSave}
+                propertyId={propertyId}
+            />
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.colors.background,
     },
     header: {
         flexDirection: 'row',
@@ -495,7 +451,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
     },
     uploadBox: {
-        width: '60%',
+        width: '100%',
         alignSelf: 'center',
         borderWidth: 2,
         borderColor: theme.colors.accent,
@@ -503,7 +459,7 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.l,
         padding: theme.spacing.xl,
         alignItems: 'center',
-        backgroundColor: theme.colors.accentLight + '30',
+        backgroundColor: theme.colors.surface,
     },
     uploadTitle: {
         fontSize: theme.typography.m,
@@ -556,7 +512,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: theme.colors.accentLight,
+        backgroundColor: isDark ? theme.colors.accent + '20' : theme.colors.accentLight,
         paddingHorizontal: theme.spacing.m,
         paddingVertical: 8,
         borderRadius: 20,
@@ -570,7 +526,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: '#FEF2F2',
+        backgroundColor: theme.isDark ? '#EF444420' : '#FEF2F2',
         paddingHorizontal: theme.spacing.m,
         paddingVertical: 8,
         borderRadius: 20,
@@ -583,38 +539,5 @@ const styles = StyleSheet.create({
     submitBtn: {
         backgroundColor: theme.colors.accent,
         marginTop: theme.spacing.l,
-    },
-    // Signature Modal
-    signatureContainer: {
-        flex: 1,
-        backgroundColor: theme.colors.background,
-    },
-    signatureHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: theme.spacing.m,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    signatureTitle: {
-        fontSize: theme.typography.l,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
-    signatureCanvasWrapper: {
-        flex: 1,
-        margin: theme.spacing.m,
-        borderRadius: theme.borderRadius.l,
-        overflow: 'hidden',
-        borderWidth: 2,
-        borderColor: theme.colors.border,
-        backgroundColor: '#FFF',
-    },
-    signatureFooter: {
-        flexDirection: 'row',
-        padding: theme.spacing.m,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
     },
 });

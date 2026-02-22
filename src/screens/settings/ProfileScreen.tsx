@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { User, Mail, Phone, MapPin, Camera, Check } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useSelector, useDispatch } from 'react-redux';
@@ -14,6 +14,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { storage } from '../../utils/storage';
 
 export default function ProfileScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const insets = useSafeAreaInsets();
     const dispatch = useDispatch();
     const { user } = useSelector((state: RootState) => state.auth);
@@ -140,7 +142,7 @@ export default function ProfileScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -183,6 +185,7 @@ const styles = StyleSheet.create({
     avatarImage: {
         width: '100%',
         height: '100%',
+        borderRadius: 50,
     },
     cameraIcon: {
         position: 'absolute',
@@ -195,7 +198,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 3,
-        borderColor: '#FFF',
+        borderColor: theme.colors.surface,
     },
     avatarText: {
         marginTop: 12,

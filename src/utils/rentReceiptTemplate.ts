@@ -97,6 +97,9 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const statusColor = bill.status === 'paid' || bill.status === 'overpaid' ? '#22C55E' : bill.status === 'partial' ? '#F59E0B' : '#E53E3E';
     const statusLabel = bill.status === 'paid' ? 'PAID' : bill.status === 'overpaid' ? 'OVERPAID' : bill.status === 'partial' ? 'PARTIALLY PAID' : 'PENDING';
 
+    const displayPeriodStart = bill.period_start ? new Date(bill.period_start).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.start;
+    const displayPeriodEnd = bill.period_end ? new Date(bill.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.end;
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -163,7 +166,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     <div style="background:#7C3AED; color:#FFF; border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div>
             <span style="font-size:11px; opacity:0.8;">Rent Period:</span>
-            <strong style="margin-left:6px;">${period.start} — ${period.end}, ${yearNum}</strong>
+            <strong style="margin-left:6px;">${displayPeriodStart} — ${displayPeriodEnd}, ${yearNum}</strong>
         </div>
         <div style="font-size:11px; opacity:0.8;">${period.days} Days</div>
     </div>

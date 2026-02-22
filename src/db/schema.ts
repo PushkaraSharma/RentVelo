@@ -196,6 +196,8 @@ export const rentBills = sqliteTable('rent_bills', {
     status: text('status', { enum: ['pending', 'partial', 'paid', 'overpaid'] }).default('pending'),
     bill_number: text('bill_number'),
     notes: text('notes'),
+    period_start: integer('period_start', { mode: 'timestamp' }),
+    period_end: integer('period_end', { mode: 'timestamp' }),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });

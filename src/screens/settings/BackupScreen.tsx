@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { Database, Cloud, HardDrive, RotateCcw, CloudUpload, CheckCircle2 } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import Button from '../../components/common/Button';
@@ -14,6 +14,8 @@ import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive } from 
 import { storage } from '../../utils/storage';
 
 export default function BackupScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const insets = useSafeAreaInsets();
     const dispatch = useDispatch();
     const { isGoogleLinked, googleEmail } = useSelector((state: RootState) => state.auth);
@@ -193,7 +195,7 @@ export default function BackupScreen({ navigation }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -261,6 +263,8 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderRadius: 20,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small,
     },
     item: {

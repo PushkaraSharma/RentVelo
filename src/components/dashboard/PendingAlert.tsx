@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { ChevronRight } from 'lucide-react-native';
 import { CURRENCY } from '../../utils/Constants';
 
@@ -11,6 +11,8 @@ interface PendingAlertProps {
 }
 
 export default function PendingAlert({ amount, tenantCount, onSendReminders }: PendingAlertProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     return (
         <View style={styles.card}>
             <View style={styles.topRow}>
@@ -37,7 +39,7 @@ export default function PendingAlert({ amount, tenantCount, onSendReminders }: P
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     card: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
@@ -64,12 +66,12 @@ const styles = StyleSheet.create({
         letterSpacing: 1
     },
     priorityBadge: {
-        backgroundColor: '#FEF3C7',
+        backgroundColor: theme.colors.warningLight,
         paddingHorizontal: theme.spacing.s,
         paddingVertical: 2,
         borderRadius: theme.borderRadius.round,
         borderWidth: 1,
-        borderColor: '#FCD34D'
+        borderColor: theme.colors.warning + '30'
     },
     priorityText: {
         fontSize: 10,

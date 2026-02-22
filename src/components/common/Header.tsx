@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 
 interface HeaderProps {
     title?: string;
@@ -15,6 +15,8 @@ interface HeaderProps {
 
 export default function Header({ title, subTitle, centerAction, onBack, rightAction, showBack = true }: HeaderProps) {
     const navigation = useNavigation();
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
 
     const handleBack = () => {
         if (onBack) {
@@ -62,7 +64,7 @@ export default function Header({ title, subTitle, centerAction, onBack, rightAct
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, KeyboardAvoidingView, Platform, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import Toggle from '../../components/common/Toggle';
@@ -17,6 +17,8 @@ import * as Contacts from 'expo-contacts';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function AddTenantScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const unitId = route?.params?.unitId;
     const propertyId = route?.params?.propertyId;
     const tenantId = route?.params?.tenantId;
@@ -681,7 +683,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -752,7 +754,7 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.m
     },
     segmentBtnActive: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         ...theme.shadows.small
     },
     segmentText: {
@@ -799,42 +801,41 @@ const styles = StyleSheet.create({
         height: 22,
         borderRadius: 6,
         borderWidth: 2,
-        borderColor: theme.colors.accent,
-        marginRight: theme.spacing.m,
-        backgroundColor: '#FFF',
+        borderColor: theme.colors.border,
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        marginRight: 12,
     },
     checkboxActive: {
-        backgroundColor: theme.colors.accent
+        backgroundColor: theme.colors.accent,
+        borderColor: theme.colors.accent,
     },
     checkboxLabel: {
         fontSize: theme.typography.s,
-        color: theme.colors.textSecondary,
-        flex: 1
+        color: theme.colors.textPrimary,
+        fontWeight: theme.typography.medium
     },
     leaseOptionContainer: {
         backgroundColor: theme.colors.surface,
         borderRadius: theme.borderRadius.l,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        overflow: 'hidden',
-        marginTop: theme.spacing.s
+        overflow: 'hidden'
     },
     leaseOption: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: theme.spacing.m,
+        gap: theme.spacing.m
     },
     borderBottom: {
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border
     },
     optionTitle: {
-        flex: 1,
         fontSize: theme.typography.m,
         color: theme.colors.textPrimary,
-        marginLeft: theme.spacing.m,
+        fontWeight: theme.typography.medium
     },
     radio: {
         width: 20,
@@ -858,17 +859,17 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: theme.typography.bold,
         color: theme.colors.textSecondary,
-        marginBottom: theme.spacing.s,
+        marginBottom: 8,
         letterSpacing: 0.5,
         textTransform: 'uppercase'
     },
     uploadBox: {
-        height: 120,
-        borderRadius: theme.borderRadius.l,
+        height: 100,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.m,
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderStyle: 'dashed',
-        backgroundColor: theme.colors.surface,
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden',
@@ -882,14 +883,14 @@ const styles = StyleSheet.create({
     uploadText: {
         fontSize: 10,
         color: theme.colors.accent,
-        marginTop: 6,
+        marginTop: 4,
         fontWeight: theme.typography.bold
     },
     removeDoc: {
         position: 'absolute',
         top: 6,
         right: 6,
-        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+        backgroundColor: 'rgba(0,0,0,0.5)',
         width: 20,
         height: 20,
         borderRadius: 10,
@@ -898,7 +899,7 @@ const styles = StyleSheet.create({
     },
     submitBtn: {
         backgroundColor: theme.colors.accent,
-        marginTop: theme.spacing.xl,
+        marginTop: theme.spacing.l,
         marginBottom: 40
     },
     furnishingContainer: {
@@ -908,7 +909,7 @@ const styles = StyleSheet.create({
     },
     furnishingBtn: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderRadius: theme.borderRadius.m,
         borderWidth: 1,
         borderColor: theme.colors.border,
@@ -917,7 +918,7 @@ const styles = StyleSheet.create({
     },
     furnishingBtnActive: {
         borderColor: theme.colors.accent,
-        backgroundColor: theme.colors.accentLight
+        backgroundColor: isDark ? theme.colors.accent + '30' : theme.colors.accentLight
     },
     furnishingText: {
         fontSize: theme.typography.s,
@@ -929,7 +930,7 @@ const styles = StyleSheet.create({
         fontWeight: theme.typography.bold
     },
     leaseOptionActive: {
-        backgroundColor: theme.colors.accentLight,
+        backgroundColor: theme.colors.accentLight + '20',
     },
     leaseTextActive: {
         color: theme.colors.accent,
@@ -956,6 +957,8 @@ const styles = StyleSheet.create({
         height: '100%'
     },
     photoPlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center'
     },
     photoPlaceholderText: {
@@ -965,52 +968,58 @@ const styles = StyleSheet.create({
     },
     photoEditIcon: {
         position: 'absolute',
-        bottom: 5,
-        right: 5,
+        bottom: 0,
+        right: 0,
         backgroundColor: theme.colors.accent,
-        padding: 4,
-        borderRadius: 12
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: theme.colors.surface,
     },
     fixedLeaseContainer: {
-        marginTop: theme.spacing.m,
-        backgroundColor: theme.colors.surface,
+        marginTop: theme.spacing.l,
         padding: theme.spacing.m,
+        backgroundColor: isDark ? theme.colors.background : theme.colors.surface,
         borderRadius: theme.borderRadius.m,
         borderWidth: 1,
-        borderColor: theme.colors.border
+        borderColor: theme.colors.border,
     },
     periodRow: {
         flexDirection: 'row',
-        alignItems: 'center',
         gap: theme.spacing.m,
-        marginTop: theme.spacing.s
+        marginBottom: theme.spacing.m
     },
     periodInput: {
-        width: 80,
-        height: 45,
+        flex: 1,
+        height: 50,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.m,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        borderRadius: theme.borderRadius.m,
         paddingHorizontal: theme.spacing.m,
-        fontSize: 16,
-        color: theme.colors.textPrimary,
-        backgroundColor: '#FFF'
+        fontSize: theme.typography.m,
+        color: theme.colors.textPrimary
     },
     unitSelector: {
-        flex: 1,
+        flex: 2,
         flexDirection: 'row',
-        backgroundColor: theme.colors.background,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.m,
         padding: 4,
-        borderRadius: theme.borderRadius.m
+        borderWidth: 1,
+        borderColor: theme.colors.border
     },
     unitBtn: {
         flex: 1,
-        paddingVertical: 8,
+        justifyContent: 'center',
         alignItems: 'center',
         borderRadius: theme.borderRadius.s
     },
     unitBtnActive: {
-        backgroundColor: '#FFF',
+        backgroundColor: theme.colors.surface,
         ...theme.shadows.small
     },
     unitBtnText: {

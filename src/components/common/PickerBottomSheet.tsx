@@ -9,7 +9,7 @@ import {
     Dimensions,
     Platform
 } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { X, Check } from 'lucide-react-native';
 
 interface PickerBottomSheetProps {
@@ -29,6 +29,8 @@ const PickerBottomSheet: React.FC<PickerBottomSheetProps> = ({
     selectedValue,
     onSelect
 }) => {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     return (
         <Modal
             visible={visible}
@@ -84,7 +86,7 @@ const PickerBottomSheet: React.FC<PickerBottomSheetProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',

@@ -1,11 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { Globe, Github, Twitter, Heart } from 'lucide-react-native';
 import Header from '../../components/common/Header';
+import { version } from '../../../package.json';
 
 export default function AboutScreen({ navigation }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <Header title="About App" />
@@ -13,10 +16,10 @@ export default function AboutScreen({ navigation }: any) {
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.logoSection}>
                     <View style={styles.logoPlaceholder}>
-                        <Text style={styles.logoLabel}>RV</Text>
+                        <Image source={require('../../assets/logo.png')} style={styles.logo} />
                     </View>
                     <Text style={styles.appName}>RentVelo</Text>
-                    <Text style={styles.appVersion}>Version 1.1.0 (PRO)</Text>
+                    <Text style={styles.appVersion}>Version {version}</Text>
                 </View>
 
                 <View style={styles.card}>
@@ -52,14 +55,14 @@ export default function AboutScreen({ navigation }: any) {
                         <Heart size={14} color="#EF4444" fill="#EF4444" />
                         <Text style={styles.footerText}> for Property Owners</Text>
                     </View>
-                    <Text style={styles.copyright}>© 2026 RentVelo Hub. All Rights Reserved.</Text>
+                    <Text style={styles.copyright}>© 2026 RentVelo. All Rights Reserved.</Text>
                 </View>
             </ScrollView>
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -93,16 +96,13 @@ const styles = StyleSheet.create({
         width: 100,
         height: 100,
         borderRadius: 24,
-        backgroundColor: theme.colors.accent,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.medium,
         marginBottom: theme.spacing.m,
-    },
-    logoLabel: {
-        fontSize: 40,
-        fontWeight: '900',
-        color: '#FFF',
     },
     appName: {
         fontSize: 28,
@@ -119,6 +119,8 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         padding: theme.spacing.l,
         marginBottom: theme.spacing.xl,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.small,
     },
     cardTitle: {
@@ -173,5 +175,11 @@ const styles = StyleSheet.create({
     copyright: {
         fontSize: 12,
         color: theme.colors.textTertiary,
+    },
+    logo: {
+        resizeMode: 'contain',
+        width: 100,
+        height: 100,
+        borderRadius: 24,
     },
 });

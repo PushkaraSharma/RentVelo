@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../../theme';
+import { useAppTheme } from '../../../theme/ThemeContext';
 import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
@@ -14,6 +14,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 
 export default function AddUnitScreen({ navigation, route }: any) {
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const unitId = route?.params?.unitId;
     const isEditMode = !!unitId;
@@ -551,10 +553,10 @@ export default function AddUnitScreen({ navigation, route }: any) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.colors.background,
     },
     header: {
         flexDirection: 'row',
@@ -682,7 +684,7 @@ const styles = StyleSheet.create({
     },
     segmentContainer: {
         flexDirection: 'row',
-        backgroundColor: theme.colors.background,
+        backgroundColor: isDark ? theme.colors.background : theme.colors.accentLight + '40',
         borderRadius: theme.borderRadius.m,
         padding: 4,
         marginTop: theme.spacing.m
@@ -694,7 +696,7 @@ const styles = StyleSheet.create({
         borderRadius: theme.borderRadius.s
     },
     segmentActive: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.colors.surface,
         ...theme.shadows.small
     },
     segmentText: {
@@ -722,7 +724,7 @@ const styles = StyleSheet.create({
     },
     furnishingBtnActive: {
         borderColor: theme.colors.accent,
-        backgroundColor: theme.colors.accentLight
+        backgroundColor: isDark ? theme.colors.accent + '30' : theme.colors.accentLight
     },
     furnishingText: {
         fontSize: theme.typography.s,
@@ -786,6 +788,22 @@ const styles = StyleSheet.create({
         gap: theme.spacing.m,
         paddingBottom: theme.spacing.m
     },
+    addPhotoBox: {
+        width: 120,
+        height: 120,
+        borderRadius: theme.borderRadius.l,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderStyle: 'dashed',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+    },
+    addPhotoText: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: theme.spacing.s
+    },
     photoWrapper: {
         position: 'relative'
     },
@@ -798,28 +816,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 6,
         right: 6,
-        backgroundColor: 'rgba(239, 68, 68, 0.8)',
         width: 24,
         height: 24,
         borderRadius: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center'
-    },
-    addPhotoBox: {
-        width: 120,
-        height: 120,
-        borderRadius: theme.borderRadius.l,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderStyle: 'dashed',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: theme.colors.surface
-    },
-    addPhotoText: {
-        fontSize: 10,
-        color: theme.colors.textSecondary,
-        marginTop: 4,
-        fontWeight: theme.typography.bold
     }
 });

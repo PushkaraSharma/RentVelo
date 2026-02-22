@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
@@ -21,6 +21,8 @@ const BAR_WIDTH = 20;
 const BAR_GAP = 6;
 
 export default function CollectionTrends({ trends }: CollectionTrendsProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     const maxVal = Math.max(...trends.map(t => Math.max(t.expected, t.collected)), 1);
     const totalCollected = trends.reduce((s, t) => s + t.collected, 0);
     const totalExpected = trends.reduce((s, t) => s + t.expected, 0);
@@ -112,7 +114,7 @@ export default function CollectionTrends({ trends }: CollectionTrendsProps) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         backgroundColor: theme.colors.surface,
         borderRadius: 20,

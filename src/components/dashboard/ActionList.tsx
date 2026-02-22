@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
-import { theme } from '../../theme';
+import { useAppTheme } from '../../theme/ThemeContext';
 
 // Mock types
 type ActionItem = {
@@ -16,6 +16,8 @@ interface ActionListProps {
 }
 
 export default function ActionList({ items, onCollect }: ActionListProps) {
+    const { theme } = useAppTheme();
+    const styles = getStyles(theme);
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -49,7 +51,7 @@ export default function ActionList({ items, onCollect }: ActionListProps) {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         marginBottom: theme.spacing.xl,
     },
@@ -81,7 +83,7 @@ const styles = StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: '#E0E7FF',
+        backgroundColor: theme.colors.accentLight,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: theme.spacing.m
@@ -109,7 +111,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary
     },
     tag: {
-        backgroundColor: '#FEE2E2',
+        backgroundColor: theme.colors.dangerLight,
         paddingHorizontal: 6,
         paddingVertical: 1,
         borderRadius: 4
