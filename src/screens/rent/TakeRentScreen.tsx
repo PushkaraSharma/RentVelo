@@ -4,7 +4,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
 import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById } from '../../db';
 import MonthPickerModal from '../../components/rent/MonthPickerModal';
@@ -119,24 +120,22 @@ export default function TakeRentScreen({ navigation, route }: any) {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header with Month Selector */}
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <View style={styles.monthSelector}>
-                    <Pressable onPress={() => goMonth(-1)} style={styles.monthArrow}>
-                        <ChevronLeft size={20} color={theme.colors.accent} />
-                    </Pressable>
-                    <Pressable onPress={() => setShowMonthPicker(true)} style={styles.monthLabel}>
-                        <Text style={styles.monthText}>{MONTHS[month - 1]}</Text>
-                        <Text style={styles.yearLabel}>{year}</Text>
-                    </Pressable>
-                    <Pressable onPress={() => goMonth(1)} style={styles.monthArrow}>
-                        <ChevronRight size={20} color={theme.colors.accent} />
-                    </Pressable>
-                </View>
-                <View style={{ width: 44 }} />
-            </View>
+            <Header
+                centerAction={
+                    <View style={styles.monthSelector}>
+                        <Pressable onPress={() => goMonth(-1)} style={styles.monthArrow}>
+                            <ChevronLeft size={20} color={theme.colors.accent} />
+                        </Pressable>
+                        <Pressable onPress={() => setShowMonthPicker(true)} style={styles.monthLabel}>
+                            <Text style={styles.monthText}>{MONTHS[month - 1]}</Text>
+                            <Text style={styles.yearLabel}>{year}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => goMonth(1)} style={styles.monthArrow}>
+                            <ChevronRight size={20} color={theme.colors.accent} />
+                        </Pressable>
+                    </View>
+                }
+            />
 
             {/* Bills List (search + filters scroll with it) */}
             {loading ? (

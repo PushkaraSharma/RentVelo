@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
 import { useDispatch } from 'react-redux';
-import { login } from '../../redux/authSlice';
-import { Building2 } from 'lucide-react-native';
+import { login, completeOnboarding } from '../../redux/authSlice';
 
 export default function WelcomeScreen() {
     const dispatch = useDispatch();
@@ -14,6 +13,13 @@ export default function WelcomeScreen() {
         dispatch(login({
             name: 'User',
             email: 'user@example.com'
+        }));
+    };
+
+    const handleSkip = () => {
+        dispatch(login({
+            name: 'Guest User',
+            email: 'guest@example.com'
         }));
     };
 
@@ -35,11 +41,14 @@ export default function WelcomeScreen() {
                 <View style={styles.spacer} />
 
                 <Pressable style={styles.googleButton} onPress={handleGoogleLogin}>
-                    {/* Google Icon placeholder - nicely colored 'G' usually */}
                     <View style={styles.gIcon}>
                         <Text style={{ fontWeight: 'bold', color: theme.colors.surface }}>G</Text>
                     </View>
                     <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </Pressable>
+
+                <Pressable onPress={handleSkip} style={styles.skipButton}>
+                    <Text style={styles.skipButtonText}>Continue as Guest</Text>
                 </Pressable>
 
                 <Text style={styles.securityNote}>
@@ -122,6 +131,17 @@ const styles = StyleSheet.create({
         fontSize: theme.typography.m,
         fontWeight: theme.typography.semiBold,
         color: theme.colors.textPrimary,
+    },
+    skipButton: {
+        paddingVertical: theme.spacing.m,
+        paddingHorizontal: theme.spacing.xl,
+        marginBottom: theme.spacing.l,
+    },
+    skipButtonText: {
+        fontSize: theme.typography.m,
+        fontWeight: theme.typography.medium,
+        color: theme.colors.textSecondary,
+        textDecorationLine: 'underline',
     },
     securityNote: {
         fontSize: theme.typography.xs,

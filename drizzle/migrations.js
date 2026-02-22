@@ -9,6 +9,7 @@ import m0004 from './0004_old_moonstone.sql';
 import m0005 from './0005_wonderful_hellfire_club.sql';
 import m0006 from './0006_woozy_multiple_man.sql';
 import m0007 from './0007_little_doctor_doom.sql';
+import m0008 from './0008_nice_shape.sql';
 
   export default {
     journal,
@@ -20,7 +21,8 @@ m0003,
 m0004,
 m0005,
 m0006,
-m0007
+m0007,
+m0008
     }
   }
   

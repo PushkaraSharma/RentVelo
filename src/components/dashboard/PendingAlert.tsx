@@ -29,9 +29,9 @@ export default function PendingAlert({ amount, tenantCount, onSendReminders }: P
                 <Pressable style={styles.button} onPress={onSendReminders}>
                     <Text style={styles.buttonText}>Send Reminders</Text>
                 </Pressable>
-                <View style={styles.navButton}>
+                <Pressable style={styles.navButton} onPress={onSendReminders}>
                     <ChevronRight size={20} color={theme.colors.textPrimary} />
-                </View>
+                </Pressable>
             </View>
         </View>
     );

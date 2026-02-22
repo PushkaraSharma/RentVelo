@@ -216,3 +216,18 @@ export const billExpenses = sqliteTable('bill_expenses', {
 
 export type BillExpense = InferSelectModel<typeof billExpenses>;
 export type NewBillExpense = InferInsertModel<typeof billExpenses>;
+
+export const notifications = sqliteTable('notifications', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    type: text('type', { enum: ['rent_due', 'payment_received', 'system'] }).notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    property_id: integer('property_id').references(() => properties.id, { onDelete: 'cascade' }),
+    tenant_id: integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+    unit_id: integer('unit_id').references(() => units.id, { onDelete: 'cascade' }),
+    is_read: integer('is_read', { mode: 'boolean' }).default(false),
+    created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+});
+
+export type Notification = InferSelectModel<typeof notifications>;
+export type NewNotification = InferInsertModel<typeof notifications>;

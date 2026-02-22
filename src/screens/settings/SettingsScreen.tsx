@@ -21,6 +21,7 @@ import {
     Share2
 } from 'lucide-react-native';
 import Toggle from '../../components/common/Toggle';
+import Header from '../../components/common/Header';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -63,10 +64,10 @@ export default function SettingsScreen({ navigation }: any) {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Settings</Text>
+            </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Settings</Text>
-                </View>
 
                 {/* Profile Card */}
                 <View style={styles.profileCard}>
@@ -85,12 +86,6 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Account & Security</Text>
                     <View style={styles.sectionContent}>
-                        <SettingItem
-                            icon={User}
-                            label="Personal Information"
-                            color={theme.colors.accent}
-                            onPress={() => navigation.navigate('Profile')}
-                        />
                         <SettingItem
                             icon={Shield}
                             label="Security & Privacy"

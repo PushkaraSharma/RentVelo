@@ -14,7 +14,6 @@ import { theme } from '../../../theme';
 import { useFocusEffect } from '@react-navigation/native';
 import Button from '../../../components/common/Button';
 import {
-    ArrowLeft,
     Wallet,
     DoorOpen,
     Bell,
@@ -29,6 +28,7 @@ import {
     Trash2,
     Receipt
 } from 'lucide-react-native';
+import Header from '../../../components/common/Header';
 import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, deleteProperty } from '../../../db';
 
 const { width } = Dimensions.get('window');
@@ -141,15 +141,14 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>Manage Property</Text>
-                <Pressable onPress={handleDelete} style={styles.deleteBtn}>
-                    <Trash2 size={24} color={theme.colors.danger} />
-                </Pressable>
-            </View>
+            <Header
+                title="Manage Property"
+                rightAction={
+                    <Pressable onPress={handleDelete} style={styles.deleteBtn}>
+                        <Trash2 size={24} color={theme.colors.danger} />
+                    </Pressable>
+                }
+            />
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 {/* Hero Section */}

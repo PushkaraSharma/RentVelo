@@ -1,39 +1,78 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, User, Mail, Phone, MapPin, Camera, Check } from 'lucide-react-native';
+import { User, Mail, Phone, MapPin, Camera, Check } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../redux/store';
+import { login } from '../../redux/authSlice';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import { storage } from '../../utils/storage';
 
 export default function ProfileScreen({ navigation }: any) {
+    const insets = useSafeAreaInsets();
+    const dispatch = useDispatch();
     const { user } = useSelector((state: RootState) => state.auth);
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
     const [phone, setPhone] = useState('');
     const [businessName, setBusinessName] = useState('');
+    const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || null);
     const [loading, setLoading] = useState(false);
 
-    const handleSave = () => {
+    useEffect(() => {
+        loadProfileData();
+    }, []);
+
+    const loadProfileData = () => {
+        const data = storage.getString('@user_profile');
+        if (data) {
+            const parsed = JSON.parse(data);
+            setPhone(parsed.phone || '');
+            setBusinessName(parsed.businessName || '');
+        }
+    };
+
+    const pickImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+        });
+
+        if (!result.canceled) {
+            setPhotoUrl(result.assets[0].uri);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!name || !email) {
+            Alert.alert('Error', 'Name and Email are required.');
+            return;
+        }
+
         setLoading(true);
-        // Simulate save
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            const updatedUser = { name, email, photoUrl: photoUrl || undefined };
+            dispatch(login(updatedUser)); // Update Redux
+            storage.set('@user_profile', JSON.stringify({ phone, businessName })); // Save extra fields
             Alert.alert('Success', 'Profile updated successfully');
-        }, 1000);
+            navigation.goBack();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update profile.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>Edit Profile</Text>
-                <View style={{ width: 44 }} />
-            </View>
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <Header title="Edit Profile" />
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -41,13 +80,16 @@ export default function ProfileScreen({ navigation }: any) {
             >
                 <ScrollView contentContainerStyle={styles.content}>
                     <View style={styles.avatarSection}>
-                        <View style={styles.avatarPlaceholder}>
-                            <User size={50} color={theme.colors.accent} />
-                            <Pressable style={styles.cameraIcon}>
+                        <Pressable style={styles.avatarPlaceholder} onPress={pickImage}>
+                            {photoUrl ? (
+                                <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
+                            ) : (
+                                <User size={50} color={theme.colors.accent} />
+                            )}
+                            <View style={styles.cameraIcon}>
                                 <Camera size={16} color="#FFF" />
-                            </Pressable>
-                        </View>
-                        <Text style={styles.avatarText}>Change Profile Photo</Text>
+                            </View>
+                        </Pressable>
                     </View>
 
                     <View style={styles.form}>
@@ -85,7 +127,7 @@ export default function ProfileScreen({ navigation }: any) {
                     </View>
                 </ScrollView>
 
-                <View style={styles.footer}>
+                <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
                     <Button
                         title="Save Changes"
                         onPress={handleSave}
@@ -107,7 +149,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.m,
+        paddingHorizontal: theme.spacing.s,
         paddingBottom: theme.spacing.m,
     },
     backBtn: {
@@ -137,6 +179,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         position: 'relative',
         ...theme.shadows.small,
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
     },
     cameraIcon: {
         position: 'absolute',

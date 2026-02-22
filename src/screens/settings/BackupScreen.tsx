@@ -1,30 +1,128 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, Database, Cloud, HardDrive, RotateCcw, CloudUpload } from 'lucide-react-native';
+import { Database, Cloud, HardDrive, RotateCcw, CloudUpload, CheckCircle2 } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import Button from '../../components/common/Button';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '../../redux/store';
+import { linkGoogleAccount, unlinkGoogleAccount } from '../../redux/authSlice';
+import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn } from '../../services/googleAuthService';
+import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive } from '../../services/backupService';
+import { storage } from '../../utils/storage';
 
 export default function BackupScreen({ navigation }: any) {
-    const [backingUp, setBackingUp] = useState(false);
+    const insets = useSafeAreaInsets();
+    const dispatch = useDispatch();
+    const { isGoogleLinked, googleEmail } = useSelector((state: RootState) => state.auth);
 
-    const handleBackup = () => {
+    const [backingUp, setBackingUp] = useState(false);
+    const [restoring, setRestoring] = useState(false);
+    const [lastSync, setLastSync] = useState<string>('Never');
+
+    useEffect(() => {
+        initGoogleAuth();
+        loadLastSync();
+    }, []);
+
+    const loadLastSync = () => {
+        const time = storage.getString('@last_backup_time');
+        if (time) setLastSync(new Date(time).toLocaleString());
+    };
+
+    const updateLastSync = () => {
+        const now = new Date().toISOString();
+        storage.set('@last_backup_time', now);
+        setLastSync(new Date(now).toLocaleString());
+    };
+
+    const handleLocalBackup = async () => {
         setBackingUp(true);
-        setTimeout(() => {
-            setBackingUp(false);
-            Alert.alert('Success', 'Backup created successfully in your local storage.');
-        }, 2000);
+        const result = await performLocalBackup();
+        setBackingUp(false);
+        if (result) {
+            updateLastSync();
+            Alert.alert('Success', `Local backup saved to:\n${result}`);
+        } else {
+            Alert.alert('Error', 'Failed to create local backup.');
+        }
+    };
+
+    const handleGoogleToggle = async () => {
+        if (isGoogleLinked) {
+            Alert.alert(
+                'Disconnect Google Drive',
+                'Are you sure you want to disconnect? Auto-backups will stop.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Disconnect', style: 'destructive', onPress: async () => {
+                            await signOutGoogle();
+                            dispatch(unlinkGoogleAccount());
+                        }
+                    }
+                ]
+            );
+        } else {
+            try {
+                const user = await signInWithGoogle();
+                if (user) {
+                    dispatch(linkGoogleAccount(user.email));
+                    Alert.alert('Success', 'Google account linked successfully!');
+                }
+            } catch (error) {
+                Alert.alert('Sign-In Error', 'Could not link Google account.');
+            }
+        }
+    };
+
+    const handleGoogleBackup = async () => {
+        if (!isGoogleLinked) {
+            Alert.alert('Not Linked', 'Please connect your Google account first.');
+            return;
+        }
+        setBackingUp(true);
+        const success = await backupToGoogleDrive();
+        setBackingUp(false);
+        if (success) {
+            updateLastSync();
+            Alert.alert('Success', 'Backup uploaded to Google Drive.');
+        } else {
+            Alert.alert('Error', 'Failed to upload backup to Drive.');
+        }
+    };
+
+    const handleRestore = async () => {
+        if (!isGoogleLinked) {
+            Alert.alert('Not Linked', 'Please connect your Google account to restore from Drive.');
+            return;
+        }
+        Alert.alert(
+            'Restore Data',
+            'This will overwrite all current data. Are you sure you want to proceed?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Restore', style: 'destructive', onPress: async () => {
+                        setRestoring(true);
+                        const success = await restoreFromGoogleDrive();
+                        setRestoring(false);
+                        if (success) {
+                            Alert.alert('Success', 'Data restored successfully. Please restart the app for changes to take effect.');
+                        } else {
+                            Alert.alert('Restore Failed', 'Could not restore data from Google Drive.');
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>Data Backup & Sync</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <Header title="Data Backup & Sync" />
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.infoSection}>
@@ -41,7 +139,7 @@ export default function BackupScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Backup Options</Text>
                     <View style={styles.card}>
-                        <Pressable style={styles.item} onPress={handleBackup}>
+                        <Pressable style={styles.item} onPress={handleLocalBackup} disabled={backingUp || restoring}>
                             <View style={styles.itemLeft}>
                                 <HardDrive size={20} color={theme.colors.accent} />
                                 <View>
@@ -51,15 +149,21 @@ export default function BackupScreen({ navigation }: any) {
                             </View>
                         </Pressable>
                         <View style={styles.divider} />
-                        <Pressable style={styles.item}>
+                        <Pressable style={styles.item} onPress={handleGoogleToggle} disabled={backingUp || restoring}>
                             <View style={styles.itemLeft}>
-                                <Cloud size={20} color="#6366F1" />
+                                <Cloud size={20} color={isGoogleLinked ? theme.colors.success : "#6366F1"} />
                                 <View>
                                     <Text style={styles.itemLabel}>Google Drive Sync</Text>
-                                    <Text style={styles.itemSubLabel}>Connect to Google for auto-backups</Text>
+                                    <Text style={styles.itemSubLabel}>
+                                        {isGoogleLinked ? `Linked as ${googleEmail}` : 'Connect to Google for auto-backups'}
+                                    </Text>
                                 </View>
                             </View>
-                            <View style={styles.badge}><Text style={styles.badgeText}>PRO</Text></View>
+                            {isGoogleLinked ? (
+                                <CheckCircle2 size={20} color={theme.colors.success} />
+                            ) : (
+                                <View style={styles.badge}><Text style={styles.badgeText}>LINK</Text></View>
+                            )}
                         </Pressable>
                     </View>
                 </View>
@@ -67,32 +171,24 @@ export default function BackupScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Restore</Text>
                     <View style={styles.card}>
-                        <Pressable style={styles.item}>
+                        <Pressable style={styles.item} onPress={handleRestore} disabled={backingUp || restoring}>
                             <View style={styles.itemLeft}>
                                 <RotateCcw size={20} color={theme.colors.textPrimary} />
                                 <View>
                                     <Text style={styles.itemLabel}>Restore Data</Text>
-                                    <Text style={styles.itemSubLabel}>Import data from a backup file</Text>
+                                    <Text style={styles.itemSubLabel}>Import data from Google Drive</Text>
                                 </View>
                             </View>
+                            {restoring && <ActivityIndicator size="small" color={theme.colors.accent} />}
                         </Pressable>
                     </View>
                 </View>
 
                 <View style={styles.lastBackup}>
                     <Database size={14} color={theme.colors.textTertiary} />
-                    <Text style={styles.lastBackupText}>Last Backup: Never</Text>
+                    <Text style={styles.lastBackupText}>Last Backup: {lastSync}</Text>
                 </View>
             </ScrollView>
-
-            <View style={styles.footer}>
-                <Button
-                    title="Run Instant Backup"
-                    onPress={handleBackup}
-                    loading={backingUp}
-                    icon={<CloudUpload size={20} color="#FFF" />}
-                />
-            </View>
         </SafeAreaView>
     );
 }
@@ -217,7 +313,8 @@ const styles = StyleSheet.create({
         fontWeight: theme.typography.medium,
     },
     footer: {
-        padding: theme.spacing.l,
+        paddingHorizontal: theme.spacing.l,
+        paddingVertical: theme.spacing.m,
         backgroundColor: theme.colors.surface,
         borderTopWidth: 1,
         borderTopColor: theme.colors.border,

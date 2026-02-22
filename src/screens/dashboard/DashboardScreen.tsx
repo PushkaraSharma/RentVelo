@@ -1,25 +1,35 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, SafeAreaView } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, SafeAreaView, ActivityIndicator } from 'react-native';
 import { theme } from '../../theme';
-import { Settings, Bell } from 'lucide-react-native';
+import { Bell } from 'lucide-react-native';
 import FinancialSummary from '../../components/dashboard/FinancialSummary';
 import PendingAlert from '../../components/dashboard/PendingAlert';
-import ActionList from '../../components/dashboard/ActionList';
+import CollectionTrends from '../../components/dashboard/CollectionTrends';
+import PropertyPickerModal from '../../components/dashboard/PropertyPickerModal';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../redux/store';
-import { getFinancialSummary } from '../../db';
+import { getDashboardData, DashboardData, getUnreadNotificationCount } from '../../db';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function DashboardScreen({ navigation }: any) {
     const user = useSelector((state: RootState) => state.auth.user);
-    const [financialData, setFinancialData] = useState({ expected: 0, collected: 0 });
+    const [data, setData] = useState<DashboardData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [showPropertyPicker, setShowPropertyPicker] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const loadDashboardData = async () => {
         try {
-            const summary = await getFinancialSummary();
-            setFinancialData(summary);
+            const [result, unreadCnt] = await Promise.all([
+                getDashboardData(),
+                getUnreadNotificationCount()
+            ]);
+            setData(result);
+            setUnreadCount(unreadCnt);
         } catch (error) {
             console.error('Error loading dashboard data:', error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -29,15 +39,8 @@ export default function DashboardScreen({ navigation }: any) {
         }, [])
     );
 
-    // Mock Data for now (will be replaced with real data later)
-    const pendingData = {
-        amount: financialData.expected - financialData.collected,
-        tenantCount: 0 // Will be calculated from database
-    };
-
-    const actionItems: Array<{ id: string; name: string; room: string; daysOverdue: number }> = [
-        // Will be populated from database
-    ];
+    const occupancyPercent = data && data.totalRooms > 0
+        ? Math.round((data.occupiedCount / data.totalRooms) * 100) : 0;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -54,61 +57,82 @@ export default function DashboardScreen({ navigation }: any) {
                         </View>
                     </View>
                     <View style={styles.headerActions}>
-                        <Pressable style={styles.iconBtn}>
+                        <Pressable style={styles.iconBtn} onPress={() => navigation.navigate('NotificationsCenter')}>
                             <Bell size={24} color={theme.colors.textPrimary} />
+                            {unreadCount > 0 && (
+                                <View style={styles.badge}>
+                                    <Text style={styles.badgeText}>
+                                        {unreadCount > 9 ? '9+' : unreadCount}
+                                    </Text>
+                                </View>
+                            )}
                         </Pressable>
                     </View>
                 </View>
 
-                <FinancialSummary
-                    expected={financialData.expected}
-                    collected={financialData.collected}
-                    onPress={() => (navigation as any).navigate('Payments')}
-                />
+                {loading || !data ? (
+                    <ActivityIndicator size="large" color={theme.colors.accent} style={{ marginTop: 60 }} />
+                ) : (
+                    <>
+                        <FinancialSummary
+                            expected={data.expected}
+                            collected={data.collected}
+                            onPress={() => (navigation as any).navigate('Payments')}
+                        />
 
-                {/* Pending Alert */}
-                <PendingAlert
-                    amount={pendingData.amount}
-                    tenantCount={pendingData.tenantCount}
-                    onSendReminders={() => console.log('Send Reminders')}
-                />
+                        {/* Pending Alert */}
+                        <PendingAlert
+                            amount={data.pending}
+                            tenantCount={data.pendingTenantCount}
+                            onSendReminders={() => setShowPropertyPicker(true)}
+                        />
 
-                {/* Action Required */}
-                <ActionList
-                    items={actionItems}
-                    onCollect={(id) => console.log('Collect', id)}
-                />
+                        {/* Collection Trends */}
+                        <CollectionTrends trends={data.trends} />
 
-                {/* Occupancy Insight (Simplified for now) */}
-                <View style={styles.occupancyCard}>
-                    <Text style={styles.sectionTitle}>Occupancy Insight</Text>
-                    <View style={styles.occupancyRow}>
-                        {/* Circle Chart Placeholder */}
-                        <View style={styles.chartPlaceholder}>
-                            <Text style={styles.chartText}>80%</Text>
-                            <Text style={styles.chartSubtext}>FULL</Text>
-                        </View>
+                        {/* Occupancy Insight */}
+                        <View style={styles.occupancyCard}>
+                            <Text style={styles.sectionTitle}>Occupancy Insight</Text>
+                            <View style={styles.occupancyRow}>
+                                <View style={[
+                                    styles.chartPlaceholder,
+                                    { borderColor: occupancyPercent > 70 ? theme.colors.accent : theme.colors.warning }
+                                ]}>
+                                    <Text style={styles.chartText}>{occupancyPercent}%</Text>
+                                    <Text style={styles.chartSubtext}>FULL</Text>
+                                </View>
 
-                        <View style={styles.legend}>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.dot, { backgroundColor: theme.colors.accent }]} />
-                                <View>
-                                    <Text style={styles.legendLabel}>OCCUPIED</Text>
-                                    <Text style={styles.legendValue}>40 Rooms</Text>
+                                <View style={styles.legend}>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.dot, { backgroundColor: theme.colors.accent }]} />
+                                        <View>
+                                            <Text style={styles.legendLabel}>OCCUPIED</Text>
+                                            <Text style={styles.legendValue}>{data.occupiedCount} Rooms</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.legendItem}>
+                                        <View style={[styles.dot, { backgroundColor: theme.colors.border }]} />
+                                        <View>
+                                            <Text style={styles.legendLabel}>VACANT</Text>
+                                            <Text style={styles.legendValue}>{data.vacantCount} Rooms</Text>
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
-                            <View style={styles.legendItem}>
-                                <View style={[styles.dot, { backgroundColor: theme.colors.border }]} />
-                                <View>
-                                    <Text style={styles.legendLabel}>VACANT</Text>
-                                    <Text style={styles.legendValue}>10 Rooms</Text>
-                                </View>
-                            </View>
                         </View>
-                    </View>
-                </View>
-
+                    </>
+                )}
             </ScrollView>
+
+            {/* Property Picker Modal */}
+            <PropertyPickerModal
+                visible={showPropertyPicker}
+                onClose={() => setShowPropertyPicker(false)}
+                properties={data?.pendingProperties ?? []}
+                onSelect={(propertyId) => {
+                    navigation.navigate('TakeRent', { propertyId });
+                }}
+            />
         </SafeAreaView>
     );
 }
@@ -163,13 +187,33 @@ const styles = StyleSheet.create({
         flexDirection: 'row'
     },
     iconBtn: {
-        marginLeft: theme.spacing.l
+        marginLeft: theme.spacing.l,
+        position: 'relative'
+    },
+    badge: {
+        position: 'absolute',
+        top: -4,
+        right: -8,
+        backgroundColor: theme.colors.danger,
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: theme.colors.background,
+        paddingHorizontal: 4,
+    },
+    badgeText: {
+        color: '#FFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
     occupancyCard: {
         marginBottom: theme.spacing.xl
     },
     sectionTitle: {
-        fontSize: theme.typography.l,
+        fontSize: 16,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
         marginBottom: theme.spacing.m
@@ -178,7 +222,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: theme.colors.surface,
-        borderRadius: theme.borderRadius.l,
+        borderRadius: 20,
         padding: theme.spacing.l,
         ...theme.shadows.small
     },
@@ -187,7 +231,6 @@ const styles = StyleSheet.create({
         height: 100,
         borderRadius: 50,
         borderWidth: 8,
-        borderColor: theme.colors.accent,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: theme.spacing.xl

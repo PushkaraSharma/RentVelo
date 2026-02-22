@@ -8,7 +8,8 @@ import Toggle from '../../components/common/Toggle';
 import SuccessModal from '../../components/common/SuccessModal';
 import PickerBottomSheet from '../../components/common/PickerBottomSheet';
 import RentLedgerModal from '../../components/modals/RentLedgerModal';
-import { ArrowLeft, UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2, Layout } from 'lucide-react-native';
+import { UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2, Layout } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, Property, Unit, Tenant } from '../../db';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, RENT_CYCLE_OPTIONS, FURNISHING_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
@@ -260,13 +261,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                 style={{ flex: 1 }}
             >
                 {/* Header */}
-                <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                    </Pressable>
-                    <Text style={styles.headerTitle}>{isEditMode ? 'Update Tenant' : 'Register New Tenant'}</Text>
-                    <View style={{ width: 24 }} />
-                </View>
+                <Header title={isEditMode ? 'Update Tenant' : 'Register New Tenant'} />
 
                 <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                     {/* Photo Selection */}

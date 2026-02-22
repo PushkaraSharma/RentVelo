@@ -17,7 +17,6 @@ import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import {
-    ArrowLeft,
     Camera,
     Building,
     CreditCard,
@@ -30,6 +29,7 @@ import {
     Upload,
     Smartphone
 } from 'lucide-react-native';
+import Header from '../../../components/common/Header';
 import { getReceiptConfigByPropertyId, upsertReceiptConfig } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
@@ -171,15 +171,9 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                 style={{ flex: 1 }}
             >
                 {/* Header */}
-                <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                    </Pressable>
-                    <Text style={styles.headerTitle}>
-                        {isEditMode ? 'Update Receipt Details' : 'Setup Rent Receipt'}
-                    </Text>
-                    <View style={{ width: 24 }} />
-                </View>
+                <Header
+                    title={isEditMode ? 'Update Receipt Details' : 'Setup Rent Receipt'}
+                />
 
                 <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 

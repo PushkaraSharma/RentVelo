@@ -1,20 +1,64 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, Bell, Calendar, MessageSquare, AlertTriangle } from 'lucide-react-native';
+import { Bell, Calendar, MessageSquare, AlertTriangle } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import Toggle from '../../components/common/Toggle';
+import { storage } from '../../utils/storage';
+import { scheduleMonthlyRentReminder, cancelAllScheduledNotifications } from '../../services/pushNotificationService';
+
+const PREFS_KEY = '@notification_prefs';
 
 export default function NotificationsScreen({ navigation }: any) {
+    const [prefs, setPrefs] = useState({
+        rentReminders: true,
+        tenantMessages: true,
+        paymentFailures: true,
+        marketing: false,
+    });
+
+    useEffect(() => {
+        const loadPrefs = () => {
+            try {
+                const stored = storage.getString(PREFS_KEY);
+                if (stored) {
+                    setPrefs(JSON.parse(stored));
+                }
+            } catch (e) {
+                console.error('Failed to load notification prefs:', e);
+            }
+        };
+        loadPrefs();
+    }, []);
+
+    const updatePref = async (key: keyof typeof prefs, value: boolean) => {
+        try {
+            const newPrefs = { ...prefs, [key]: value };
+            setPrefs(newPrefs);
+            storage.set(PREFS_KEY, JSON.stringify(newPrefs));
+
+            if (key === 'rentReminders') {
+                if (value) {
+                    const id = await scheduleMonthlyRentReminder(1); // Schedule on the 1st
+                    if (!id) {
+                        Alert.alert("Permission Required", "Please enable notifications in your device settings to receive rent reminders.");
+                        // Revert toggle visually if denied
+                        setPrefs({ ...newPrefs, rentReminders: false });
+                        storage.set(PREFS_KEY, JSON.stringify({ ...newPrefs, rentReminders: false }));
+                    }
+                } else {
+                    await cancelAllScheduledNotifications();
+                }
+            }
+        } catch (e) {
+            console.error('Failed to save notification pref:', e);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>Notifications</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <Header title="Notifications" />
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.section}>
@@ -28,7 +72,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Get notified when rent is due</Text>
                                 </View>
                             </View>
-                            <Toggle value={true} onValueChange={() => { }} />
+                            <Toggle value={prefs.rentReminders} onValueChange={(v) => updatePref('rentReminders', v)} />
                         </View>
                         <View style={styles.divider} />
                         <View style={styles.item}>
@@ -39,7 +83,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Alerts for new tenant messages</Text>
                                 </View>
                             </View>
-                            <Toggle value={true} onValueChange={() => { }} />
+                            <Toggle value={prefs.tenantMessages} onValueChange={(v) => updatePref('tenantMessages', v)} />
                         </View>
                     </View>
                 </View>
@@ -55,7 +99,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Immediate alerts for missed payments</Text>
                                 </View>
                             </View>
-                            <Toggle value={true} onValueChange={() => { }} />
+                            <Toggle value={prefs.paymentFailures} onValueChange={(v) => updatePref('paymentFailures', v)} />
                         </View>
                         <View style={styles.divider} />
                         <View style={styles.item}>
@@ -66,7 +110,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Stay updated with new features</Text>
                                 </View>
                             </View>
-                            <Toggle value={false} onValueChange={() => { }} />
+                            <Toggle value={prefs.marketing} onValueChange={(v) => updatePref('marketing', v)} />
                         </View>
                     </View>
                 </View>

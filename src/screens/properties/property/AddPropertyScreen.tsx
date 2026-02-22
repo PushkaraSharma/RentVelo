@@ -6,6 +6,7 @@ import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
 import { ArrowLeft, Camera, Building, Layers, User, Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
+import Header from '../../../components/common/Header';
 import * as ImagePicker from 'expo-image-picker';
 import { createProperty, updateProperty, getPropertyById } from '../../../db';
 import SuccessModal from '../../../components/common/SuccessModal';
@@ -136,13 +137,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>{isEditMode ? 'Update Property' : 'Create New Property'}</Text>
-                <View style={{ width: 24 }} />
-            </View>
+            <Header title={isEditMode ? 'Update Property' : 'Create New Property'} />
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <ScrollView contentContainerStyle={styles.content}>
                     {/* Image Upload */}

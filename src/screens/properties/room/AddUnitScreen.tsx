@@ -7,7 +7,8 @@ import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
 import SuccessModal from '../../../components/common/SuccessModal';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
-import { ArrowLeft, Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
+import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
+import Header from '../../../components/common/Header';
 import { createUnit, updateUnit, getUnitById } from '../../../db';
 import * as ImagePicker from 'expo-image-picker';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
@@ -213,13 +214,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 style={{ flex: 1 }}
             >
                 {/* Header */}
-                <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                    </Pressable>
-                    <Text style={styles.headerTitle}>{isEditMode ? 'Update Room' : 'Add Room Details'}</Text>
-                    <View style={{ width: 24 }} />
-                </View>
+                <Header title={isEditMode ? 'Update Room' : 'Add Room Details'} />
 
                 <ScrollView
                     ref={scrollViewRef}

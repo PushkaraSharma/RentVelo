@@ -2,18 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, Globe, Github, Twitter, Heart } from 'lucide-react-native';
+import { Globe, Github, Twitter, Heart } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 
 export default function AboutScreen({ navigation }: any) {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>About App</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <Header title="About App" />
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.logoSection}>

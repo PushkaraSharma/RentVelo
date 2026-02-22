@@ -17,7 +17,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../../theme';
 import {
-    ArrowLeft,
     Edit3,
     User,
     Calendar,
@@ -33,6 +32,7 @@ import {
     X,
     FileText
 } from 'lucide-react-native';
+import Header from '../../../components/common/Header';
 import {
     getUnitById,
     getPropertyById,
@@ -274,15 +274,10 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <View style={styles.headerCenter}>
-                    <Text style={styles.headerTitle}>{unit?.name || 'Room Details'}</Text>
-                    <Text style={styles.headerSubtitle}>{property?.name}</Text>
-                </View>
-            </View>
+            <Header
+                title={unit?.name || 'Room Details'}
+                subTitle={property?.name}
+            />
 
             {/* Tabs */}
             <View style={styles.tabContainer}>

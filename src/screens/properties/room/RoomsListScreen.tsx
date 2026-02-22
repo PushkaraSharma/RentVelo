@@ -11,13 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, theme } from '../../../theme';
 import {
-    ArrowLeft,
     Plus,
     DoorOpen,
     UserPlus,
     ChevronRight,
     Edit3
 } from 'lucide-react-native';
+import Header from '../../../components/common/Header';
 import { getUnitsByPropertyId, getPropertyById } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -79,15 +79,7 @@ export default function RoomsListScreen({ navigation, route }: any) {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>Rooms</Text>
-                    <Text style={styles.headerSubtitle}>{property?.name}</Text>
-                </View>
-            </View>
+            <Header title="Rooms" subTitle={property?.name} />
             <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
                 <FlatList
                     data={rooms}

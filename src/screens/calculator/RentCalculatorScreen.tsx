@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Image, TextInput } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
 import Toggle from '../../components/common/Toggle';
-import { ArrowLeft, MoreHorizontal, Share, Wifi, Wrench, Droplet, ChevronUp } from 'lucide-react-native';
+import { MoreHorizontal, Share, Wifi, Wrench, Droplet, ChevronUp } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 
 // Mock Data
 const var_borderRadius_s = 4; // Local helper
@@ -60,15 +61,14 @@ export default function RentCalculatorScreen({ navigation }: any) {
     return (
         <SafeAreaView style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>RENT CALCULATOR</Text>
-                <Pressable style={styles.iconBtn}>
-                    <MoreHorizontal size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-            </View>
+            <Header
+                title="RENT CALCULATOR"
+                rightAction={
+                    <Pressable style={styles.iconBtn}>
+                        <MoreHorizontal size={24} color={theme.colors.textPrimary} />
+                    </Pressable>
+                }
+            />
 
             <ScrollView contentContainerStyle={styles.content}>
 

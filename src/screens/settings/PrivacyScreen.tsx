@@ -1,20 +1,70 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, Shield, Lock, Eye, EyeOff, FileText } from 'lucide-react-native';
+import { Shield, Lock, Eye, EyeOff, FileText } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import Toggle from '../../components/common/Toggle';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { storage } from '../../utils/storage';
 
 export default function PrivacyScreen({ navigation }: any) {
+    const [appLockEnabled, setAppLockEnabled] = useState(false);
+    const [privacyModeEnabled, setPrivacyModeEnabled] = useState(false);
+
+    useEffect(() => {
+        loadSettings();
+    }, []);
+
+    const loadSettings = () => {
+        try {
+            const lock = storage.getString('@app_lock_enabled');
+            const privacy = storage.getString('@privacy_mode_enabled');
+            if (lock === 'true') setAppLockEnabled(true);
+            if (privacy === 'true') setPrivacyModeEnabled(true);
+        } catch (e) {
+            console.error('Failed to load settings', e);
+        }
+    };
+
+    const toggleAppLock = async (value: boolean) => {
+        try {
+            if (value) {
+                const hasHardware = await LocalAuthentication.hasHardwareAsync();
+                const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+                if (!hasHardware || !isEnrolled) {
+                    Alert.alert('Unsupported', 'Biometric authentication is not supported or not set up on this device.');
+                    return;
+                }
+
+                const result = await LocalAuthentication.authenticateAsync({
+                    promptMessage: 'Authenticate to enable App Lock',
+                    cancelLabel: 'Cancel',
+                    disableDeviceFallback: false,
+                });
+
+                if (result.success) {
+                    setAppLockEnabled(true);
+                    storage.set('@app_lock_enabled', 'true');
+                }
+            } else {
+                setAppLockEnabled(false);
+                storage.set('@app_lock_enabled', 'false');
+            }
+        } catch (e) {
+            console.error('Failed to toggle App Lock', e);
+        }
+    };
+
+    const togglePrivacyMode = (value: boolean) => {
+        setPrivacyModeEnabled(value);
+        storage.set('@privacy_mode_enabled', String(value));
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>Security & Privacy</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <Header title="Security & Privacy" />
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.section}>
@@ -28,7 +78,7 @@ export default function PrivacyScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Secure your app with FaceID/Fingerprint</Text>
                                 </View>
                             </View>
-                            <Toggle value={false} onValueChange={() => { }} />
+                            <Toggle value={appLockEnabled} onValueChange={toggleAppLock} />
                         </View>
                         <View style={styles.divider} />
                         <View style={styles.item}>
@@ -39,7 +89,7 @@ export default function PrivacyScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Hide amounts on Dashboard</Text>
                                 </View>
                             </View>
-                            <Toggle value={true} onValueChange={() => { }} />
+                            <Toggle value={privacyModeEnabled} onValueChange={togglePrivacyMode} />
                         </View>
                     </View>
                 </View>

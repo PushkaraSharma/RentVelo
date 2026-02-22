@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowLeft, RotateCcw, Check } from 'lucide-react-native';
+import { RotateCcw, Check } from 'lucide-react-native';
+import Header from '../../components/common/Header';
 import Button from '../../components/common/Button';
 import { DEFAULT_TERMS_AND_CONDITIONS } from '../../utils/defaultTerms';
-import { createMMKV } from 'react-native-mmkv';
+import { storage } from '../../utils/storage';
 
-const storage = createMMKV({ id: 'rentvelo-terms' });
 const TERMS_KEY = 'custom_terms_and_conditions';
 
 export const getTermsAndConditions = (): string => {
@@ -58,15 +58,14 @@ export default function TermsEditorScreen({ navigation }: any) {
                 style={{ flex: 1 }}
             >
                 {/* Header */}
-                <View style={styles.header}>
-                    <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                    </Pressable>
-                    <Text style={styles.headerTitle}>Terms & Conditions</Text>
-                    <Pressable onPress={handleReset} style={styles.resetBtn}>
-                        <RotateCcw size={20} color={theme.colors.accent} />
-                    </Pressable>
-                </View>
+                <Header
+                    title="Terms & Conditions"
+                    rightAction={
+                        <Pressable onPress={handleReset} style={styles.resetBtn}>
+                            <RotateCcw size={20} color={theme.colors.accent} />
+                        </Pressable>
+                    }
+                />
 
                 <View style={styles.noteBar}>
                     <Text style={styles.noteText}>

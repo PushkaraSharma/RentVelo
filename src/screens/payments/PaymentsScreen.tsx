@@ -1,20 +1,53 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
-import { ArrowUpRight, ArrowDownLeft, Filter, ArrowLeft } from 'lucide-react-native';
-
-const TRANSACTIONS = [
-    { id: '1', title: 'Rent - Room 101', date: 'Today, 10:23 AM', amount: 12500, type: 'credit', status: 'Success' },
-    { id: '2', title: 'Rent - Villa A', date: 'Yesterday', amount: 45000, type: 'credit', status: 'Success' },
-    { id: '3', title: 'Maintenance - Lift', date: 'Jul 12', amount: 2500, type: 'debit', status: 'Success' },
-    { id: '4', title: 'Rent - Flat 4B', date: 'Jul 10', amount: 18000, type: 'credit', status: 'Pending' },
-];
+import { ArrowUpRight, ArrowDownLeft, Filter, Calendar } from 'lucide-react-native';
+import Header from '../../components/common/Header';
+import { getGlobalTransactions, GlobalTransaction } from '../../db/paymentService';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function PaymentsScreen({ navigation }: any) {
-    const [filter, setFilter] = useState('All');
+    const [transactions, setTransactions] = useState<GlobalTransaction[]>([]);
+    const [totalCollected, setTotalCollected] = useState(0);
+    const [loading, setLoading] = useState(true);
 
-    const renderItem = ({ item }: { item: any }) => (
+    const loadData = async () => {
+        try {
+            const data = await getGlobalTransactions();
+            setTransactions(data.transactions);
+            setTotalCollected(data.totalCollected);
+        } catch (error) {
+            console.error('Failed to load global transactions:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useFocusEffect(
+        React.useCallback(() => {
+            loadData();
+        }, [])
+    );
+
+    const formatDate = (date: Date) => {
+        const today = new Date();
+        const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear();
+
+        if (isToday) {
+            return `Today, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        } else if (isYesterday) {
+            return `Yesterday, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        } else {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+    };
+
+    const renderItem = ({ item }: { item: GlobalTransaction }) => (
         <View style={styles.card}>
             <View style={[styles.iconBox, { backgroundColor: item.type === 'credit' ? '#DCFCE7' : '#FEE2E2' }]}>
                 {item.type === 'credit' ? (
@@ -25,7 +58,7 @@ export default function PaymentsScreen({ navigation }: any) {
             </View>
             <View style={styles.cardBody}>
                 <Text style={styles.title}>{item.title}</Text>
-                <Text style={styles.date}>{item.date}</Text>
+                <Text style={styles.date}>{formatDate(item.date)}</Text>
             </View>
             <View style={styles.cardRight}>
                 <Text style={[styles.amount, { color: item.type === 'credit' ? theme.colors.success : theme.colors.textPrimary }]}>
@@ -38,37 +71,56 @@ export default function PaymentsScreen({ navigation }: any) {
         </View>
     );
 
+    const currentMonthName = new Date().toLocaleString('default', { month: 'short' }).toUpperCase();
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <ArrowLeft size={24} color={theme.colors.textPrimary} />
-                </Pressable>
-                <Text style={styles.headerTitle}>Payments</Text>
-                <Pressable style={styles.filterBtn}>
-                    <Filter size={20} color={theme.colors.textPrimary} />
-                </Pressable>
-            </View>
-
-            {/* Summary Card */}
-            <View style={styles.summaryContainer}>
-                <View style={styles.summaryCard}>
-                    <Text style={styles.summaryLabel}>TOTAL COLLECTED (JUL)</Text>
-                    <Text style={styles.summaryAmount}>₹ 75,500</Text>
-                </View>
-            </View>
-
-            <View style={styles.listHeader}>
-                <Text style={styles.sectionTitle}>Recent Transactions</Text>
-            </View>
-
-            <FlatList
-                data={TRANSACTIONS}
-                renderItem={renderItem}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
+            <Header
+                title="Payments"
+                rightAction={
+                    <Pressable style={styles.filterBtn}>
+                        <Filter size={20} color={theme.colors.textPrimary} />
+                    </Pressable>
+                }
             />
+
+            {loading ? (
+                <View style={styles.centered}>
+                    <ActivityIndicator size="large" color={theme.colors.accent} />
+                </View>
+            ) : (
+                <>
+                    {/* Summary Card */}
+                    <View style={styles.summaryContainer}>
+                        <View style={styles.summaryCard}>
+                            <Text style={styles.summaryLabel}>TOTAL COLLECTED ({currentMonthName})</Text>
+                            <Text style={styles.summaryAmount}>₹ {totalCollected.toLocaleString()}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.listHeader}>
+                        <Text style={styles.sectionTitle}>Recent Transactions</Text>
+                    </View>
+
+                    {transactions.length === 0 ? (
+                        <View style={styles.emptyContainer}>
+                            <View style={styles.emptyIconBox}>
+                                <Calendar size={32} color={theme.colors.textTertiary} />
+                            </View>
+                            <Text style={styles.emptyTitle}>No Transactions Yet</Text>
+                            <Text style={styles.emptyText}>When you log rent or other payments, they will appear here.</Text>
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={transactions}
+                            renderItem={renderItem}
+                            keyExtractor={item => item.id}
+                            contentContainerStyle={styles.listContent}
+                            showsVerticalScrollIndicator={false}
+                        />
+                    )}
+                </>
+            )}
         </SafeAreaView>
     );
 }
@@ -78,17 +130,10 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    centered: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: theme.spacing.m,
-        paddingRight: theme.spacing.m,
-    },
-    headerTitle: {
-        fontSize: theme.typography.l,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
     },
     filterBtn: {
         padding: 8,
@@ -176,5 +221,33 @@ const styles = StyleSheet.create({
     },
     backButton: {
         padding: theme.spacing.s,
+    },
+    emptyContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.xl,
+        marginTop: 40,
+    },
+    emptyIconBox: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: theme.colors.surface,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: theme.spacing.m,
+    },
+    emptyTitle: {
+        fontSize: theme.typography.l,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+        marginBottom: theme.spacing.s,
+    },
+    emptyText: {
+        fontSize: theme.typography.m,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });

@@ -43,10 +43,12 @@ export {
     updatePayment,
     deletePayment,
     getFinancialSummary,
+    getDashboardData,
     addMeterReading,
     getLatestMeterReading,
     getMeterReadingsByUnitId,
 } from './paymentService';
+export type { DashboardData } from './paymentService';
 
 // Types from schema
 export * from './schema';
@@ -71,3 +73,14 @@ export {
     removePaymentFromBill,
     getBillPayments,
 } from './billService';
+
+// Notification operations
+export {
+    createNotification,
+    getNotifications,
+    getUnreadNotificationCount,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    generateRentReminders
+} from './notificationService';
+export type { Notification } from './notificationService';

@@ -57,6 +57,13 @@
       "when": 1771676403538,
       "tag": "0007_little_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1771749975522,
+      "tag": "0008_nice_shape",
+      "breakpoints": true
     }
   ]
 }
