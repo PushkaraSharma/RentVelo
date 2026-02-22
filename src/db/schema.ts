@@ -11,6 +11,7 @@ export const properties = sqliteTable('properties', {
     is_multi_unit: integer('is_multi_unit', { mode: 'boolean' }).default(false),
     owner_name: text('owner_name'),
     owner_phone: text('owner_phone'),
+    rent_payment_type: text('rent_payment_type', { enum: ['previous_month', 'current_month'] }).default('previous_month'),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });

@@ -1,12 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
 import { theme } from '../../theme';
 import { CURRENCY } from '../../utils/Constants';
-import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send } from 'lucide-react-native';
+import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
 import {
     updateBill, recalculateBill,
-    getBillExpenses, getBillPayments
+    getBillExpenses, getBillPayments,
+    getReceiptConfigByPropertyId, getPropertyById
 } from '../../db';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { generateRentReceiptHTML } from '../../utils/rentReceiptTemplate';
+import { generateRentReminderHTML } from '../../utils/rentReminderTemplate';
 
 // Import modals
 import RoomInfoModal from './RoomInfoModal';
@@ -23,6 +28,8 @@ interface RentBillCardProps {
         tenant: any;
         bill: any;
         isVacant: boolean;
+        isNotMovedIn?: boolean;
+        isLeaseExpired?: boolean;
     };
     period: { start: string; end: string; days: number };
     onRefresh: () => void;
@@ -31,7 +38,7 @@ interface RentBillCardProps {
 }
 
 export default function RentBillCard({ item, period, onRefresh, navigation, propertyId }: RentBillCardProps) {
-    const { unit, tenant, bill, isVacant } = item;
+    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired } = item;
 
     // Modal states
     const [showRoomInfo, setShowRoomInfo] = useState(false);
@@ -44,11 +51,140 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
 
     // Local state for metered reading
     const [meterReading, setMeterReading] = useState(bill?.curr_reading?.toString() || '');
+    const [generatingReceipt, setGeneratingReceipt] = useState(false);
+    const [sendingReminder, setSendingReminder] = useState(false);
 
     // Swipe-to-save animation
     const swipeAnim = useRef(new Animated.Value(0)).current;
     const SWIPE_THRESHOLD = Dimensions.get('window').width * 0.35;
     const TRACK_WIDTH = Dimensions.get('window').width - 72; // card padding approx
+
+    const generateAndShareReceipt = async () => {
+        setGeneratingReceipt(true);
+        try {
+            const [payments, expenses, receiptConfig, property] = await Promise.all([
+                getBillPayments(bill.id),
+                getBillExpenses(bill.id),
+                getReceiptConfigByPropertyId(propertyId),
+                getPropertyById(propertyId),
+            ]);
+
+            const html = generateRentReceiptHTML({
+                property,
+                unit,
+                tenant,
+                bill,
+                payments,
+                expenses,
+                receiptConfig,
+                period,
+            });
+
+            const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: `Rent Receipt - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
+                    UTI: 'com.adobe.pdf',
+                });
+            } else {
+                Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+            }
+        } catch (error) {
+            console.error('Receipt generation error:', error);
+            Alert.alert('Error', 'Failed to generate receipt. Please try again.');
+        } finally {
+            setGeneratingReceipt(false);
+        }
+    };
+
+    const generateAndShareReminder = async () => {
+        setSendingReminder(true);
+        try {
+            const [expenses, receiptConfig, property] = await Promise.all([
+                getBillExpenses(bill.id),
+                getReceiptConfigByPropertyId(propertyId),
+                getPropertyById(propertyId),
+            ]);
+
+            const html = generateRentReminderHTML({
+                property,
+                unit,
+                tenant,
+                bill,
+                expenses,
+                receiptConfig,
+                period,
+            });
+
+            const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: `Payment Reminder - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
+                    UTI: 'com.adobe.pdf',
+                });
+            } else {
+                Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+            }
+        } catch (error) {
+            console.error('Reminder generation error:', error);
+            Alert.alert('Error', 'Failed to generate reminder. Please try again.');
+        } finally {
+            setSendingReminder(false);
+        }
+    };
+
+    // ===== NOT MOVED IN CARD =====
+    if (isNotMovedIn && tenant) {
+        const moveDate = tenant.rent_start_date
+            ? new Date(tenant.rent_start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+            : tenant.move_in_date
+                ? new Date(tenant.move_in_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '—';
+        return (
+            <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: theme.colors.accent }]}>
+                <View style={styles.vacantContent}>
+                    <View style={[styles.vacantIcon, { backgroundColor: theme.colors.accentLight }]}>
+                        <User size={24} color={theme.colors.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.roomName}>{unit.name}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary }}>{tenant.name}</Text>
+                        <Text style={{ fontSize: 12, color: theme.colors.accent, marginTop: 2 }}>Moves in on {moveDate}</Text>
+                        {tenant.lease_type && (
+                            <Text style={{ fontSize: 11, color: theme.colors.textTertiary, marginTop: 2 }}>
+                                Lease: {tenant.lease_type === 'monthly' ? 'Monthly' : 'Fixed'}
+                            </Text>
+                        )}
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
+    // ===== LEASE EXPIRED CARD =====
+    if (isLeaseExpired && tenant) {
+        const endDate = tenant.lease_end_date
+            ? new Date(tenant.lease_end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+            : '—';
+        return (
+            <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: theme.colors.warning }]}>
+                <View style={styles.vacantContent}>
+                    <View style={[styles.vacantIcon, { backgroundColor: '#FEF3C7' }]}>
+                        <User size={24} color={theme.colors.warning} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.roomName}>{unit.name}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.textPrimary }}>{tenant.name}</Text>
+                        <Text style={{ fontSize: 12, color: theme.colors.warning, marginTop: 2 }}>Lease expired on {endDate}</Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
 
     // ===== VACANT CARD =====
     if (isVacant) {
@@ -83,6 +219,15 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const hasElectricity = unit.is_metered || (unit.electricity_fixed_amount && unit.electricity_fixed_amount > 0);
     const isMetered = unit.is_metered;
 
+    // B16: Lock historical bills (older than last month) to prevent invalidating balances
+    const isLocked = (() => {
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        const diff = (currentYear * 12 + currentMonth) - (bill.year * 12 + bill.month);
+        return diff > 1;
+    })();
+
     // Handle meter reading change
     const handleMeterReadingSave = async () => {
         const newReading = parseFloat(meterReading);
@@ -107,7 +252,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         if (isMetered && meterReading) {
             await handleMeterReadingSave();
         }
-        await recalculateBill(bill.id);
+        // B12: handleMeterReadingSave already calls recalculateBill, no need to call again
         onRefresh();
     };
 
@@ -124,20 +269,37 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     };
 
     return (
-        <View style={[styles.card, isPaid && styles.paidCard]}>
+        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard]}>
+            {isLocked && (
+                <View style={styles.lockedBanner}>
+                    <Lock size={12} color={theme.colors.textSecondary} />
+                    <Text style={styles.lockedText}>Historical Record - Locked</Text>
+                </View>
+            )}
             {/* === ROW 1: Room Name + Tenant + Paid Amount Header === */}
             <Pressable style={styles.topRow} onPress={() => setShowRoomInfo(true)}>
                 <View style={{ flex: 1 }}>
-                    <Text style={styles.roomName}>{unit.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.roomName}>{unit.name}</Text>
+                        {tenant?.lease_type && (
+                            <View style={[styles.leaseBadge, tenant.lease_type === 'fixed' ? styles.leaseBadgeFixed : styles.leaseBadgeMonthly]}>
+                                <Text style={styles.leaseBadgeText}>
+                                    {tenant.lease_type === 'fixed' ? 'Fixed' : 'Monthly'}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
                     <Text style={styles.tenantName}>{tenant?.name || '—'}</Text>
                 </View>
                 <Pressable
-                    style={[styles.paidAmtBadge, isPaid && styles.paidAmtBadgePaid, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial]}
+                    style={[styles.paidAmtBadge, isPaid && styles.paidAmtBadgePaid, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial, isLocked && { opacity: 0.8 }]}
                     onPress={() => {
                         if ((bill.paid_amount ?? 0) > 0) {
                             setShowPaidAmount(true);
-                        } else {
+                        } else if (!isLocked) {
                             setShowReceivePayment(true);
+                        } else {
+                            Alert.alert('Locked', 'Historical records cannot be edited.');
                         }
                     }}
                 >
@@ -157,28 +319,35 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                             <Text style={styles.meterLabel}>Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}</Text>
                             <Text style={styles.meterArrow}>→</Text>
                             <TextInput
-                                style={styles.meterInput}
+                                style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
                                 value={meterReading}
                                 onChangeText={setMeterReading}
                                 onBlur={handleMeterReadingSave}
                                 keyboardType="numeric"
                                 placeholder="New"
                                 placeholderTextColor={theme.colors.textTertiary}
+                                editable={!isLocked}
                             />
                             <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
                         </View>
                     ) : (
-                        <Pressable style={styles.fixedElecRow} onPress={() => setShowEditElectricity(true)}>
+                        <Pressable
+                            style={styles.fixedElecRow}
+                            onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditElectricity(true)}
+                        >
                             <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
                             <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
-                            <ChevronRight size={16} color={theme.colors.textTertiary} />
+                            {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
                         </Pressable>
                     )}
                 </View>
             )}
 
             {/* === RENT + PREVIOUS BALANCE (tappable) === */}
-            <Pressable style={styles.rentSection} onPress={() => setShowTransactionInfo(true)}>
+            <Pressable
+                style={styles.rentSection}
+                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowTransactionInfo(true)}
+            >
                 <View style={styles.rentRow}>
                     <View>
                         <Text style={styles.rentLabel}>Rent</Text>
@@ -187,14 +356,21 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                     <Text style={styles.rentAmount}>{formatAmount(bill.rent_amount)}</Text>
                 </View>
                 <View style={styles.rentRow}>
-                    <Text style={[styles.rentLabel, { color: theme.colors.warning }]}>Previous Balance</Text>
-                    <Text style={styles.prevBalAmount}>{formatAmount(bill.previous_balance ?? 0)}</Text>
+                    <Text style={[styles.rentLabel, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
+                        {(bill.previous_balance ?? 0) < 0 ? 'Previous Advance' : 'Previous Due'}
+                    </Text>
+                    <Text style={[styles.prevBalAmount, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
+                        {(bill.previous_balance ?? 0) < 0 ? '−' : '+'}{formatAmount(Math.abs(bill.previous_balance ?? 0))}
+                    </Text>
                 </View>
             </Pressable>
 
             {/* === ADD/REMOVE + EXPENSES + TOTAL (compact row) === */}
             <View style={styles.actionsRow}>
-                <Pressable style={styles.addRemoveBtn} onPress={() => setShowExpenseActions(true)}>
+                <Pressable
+                    style={[styles.addRemoveBtn, isLocked && { opacity: 0.5 }]}
+                    onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowExpenseActions(true)}
+                >
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>
                 </Pressable>
@@ -242,9 +418,9 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                             }).start(() => {
                                 swipeAnim.setValue(0);
                                 if (hasPaid) {
-                                    Alert.alert('Receipt', 'Receipt generation coming soon!');
+                                    generateAndShareReceipt();
                                 } else {
-                                    Alert.alert('Reminder', 'Reminder sent!');
+                                    generateAndShareReminder();
                                 }
                             });
                         } else {
@@ -260,18 +436,29 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
 
                 return (
                     <View style={[styles.swipeTrack, { backgroundColor: bgColor + '12' }]}>
-                        <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
-                        <Text style={[styles.swipeLabel, { color: bgColor }]}>{label}</Text>
-                        <Animated.View
-                            style={[styles.swipeThumb, { backgroundColor: bgColor, transform: [{ translateX: swipeAnim }] }]}
-                            {...panResponder.panHandlers}
-                        >
-                            {hasPaid ? (
-                                <FileText size={18} color="#FFF" />
-                            ) : (
-                                <Send size={18} color="#FFF" />
-                            )}
-                        </Animated.View>
+                        {(generatingReceipt || sendingReminder) ? (
+                            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+                                <ActivityIndicator size="small" color={bgColor} />
+                                <Text style={[styles.swipeLabel, { color: bgColor }]}>
+                                    {generatingReceipt ? 'Generating Receipt...' : 'Sending Reminder...'}
+                                </Text>
+                            </View>
+                        ) : (
+                            <>
+                                <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
+                                <Text style={[styles.swipeLabel, { color: bgColor, position: 'absolute' }]}>{label}</Text>
+                                <Animated.View
+                                    style={[styles.swipeThumb, { backgroundColor: bgColor, transform: [{ translateX: swipeAnim }] }]}
+                                    {...panResponder.panHandlers}
+                                >
+                                    {hasPaid ? (
+                                        <FileText size={18} color="#FFF" />
+                                    ) : (
+                                        <Send size={18} color="#FFF" />
+                                    )}
+                                </Animated.View>
+                            </>
+                        )}
                     </View>
                 );
             })()}
@@ -617,7 +804,6 @@ const styles = StyleSheet.create({
     swipeLabel: {
         fontSize: 14,
         fontWeight: theme.typography.semiBold,
-        position: 'absolute',
     },
     swipeThumb: {
         width: 44,
@@ -634,5 +820,45 @@ const styles = StyleSheet.create({
         color: theme.colors.textTertiary,
         textAlign: 'center',
         marginTop: 2,
+    },
+    // Locked Card Styles
+    lockedCard: {
+        backgroundColor: '#F9FAFB',
+        borderColor: '#E5E7EB',
+    },
+    lockedBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+        marginBottom: theme.spacing.m,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    lockedText: {
+        fontSize: 11,
+        fontWeight: theme.typography.semiBold,
+        color: theme.colors.textSecondary,
+    },
+    leaseBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    leaseBadgeMonthly: {
+        backgroundColor: '#E0F2FE', // Blue tint
+    },
+    leaseBadgeFixed: {
+        backgroundColor: '#F3E8FF', // Purple tint
+    },
+    leaseBadgeText: {
+        fontSize: 10,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+        textTransform: 'uppercase',
     },
 });

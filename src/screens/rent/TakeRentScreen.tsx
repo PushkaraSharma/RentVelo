@@ -98,10 +98,21 @@ export default function TakeRentScreen({ navigation, route }: any) {
     ];
 
     const getRentPeriod = () => {
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 0);
-        const start = `${startDate.getDate()} ${MONTHS[month - 1].substring(0, 3)}`;
-        const end = `${endDate.getDate()} ${MONTHS[month - 1].substring(0, 3)}`;
+        let pMonth = month;
+        let pYear = year;
+
+        if (property?.rent_payment_type === 'previous_month') {
+            pMonth = month - 1;
+            if (pMonth < 1) {
+                pMonth = 12;
+                pYear = year - 1;
+            }
+        }
+
+        const startDate = new Date(pYear, pMonth - 1, 1);
+        const endDate = new Date(pYear, pMonth, 0);
+        const start = `${startDate.getDate()} ${MONTHS[pMonth - 1].substring(0, 3)}`;
+        const end = `${endDate.getDate()} ${MONTHS[pMonth - 1].substring(0, 3)} ${pYear}`;
         return { start, end, days: endDate.getDate() };
     };
 

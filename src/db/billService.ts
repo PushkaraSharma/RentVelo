@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import {
-    rentBills, billExpenses, payments, units, tenants,
+    rentBills, billExpenses, payments, units, tenants, properties,
     RentBill, NewRentBill, BillExpense, NewBillExpense, Payment, NewPayment
 } from './schema';
 import { eq, and, desc, sum } from 'drizzle-orm';
@@ -22,6 +22,11 @@ export const generateBillsForProperty = async (
 ): Promise<void> => {
     const db = getDb();
 
+    // Get property to check rent_payment_type
+    const propertyResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
+    const property = propertyResult[0];
+    const isPostPaid = property?.rent_payment_type === 'previous_month';
+
     // Get all units for this property
     const propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
 
@@ -36,6 +41,28 @@ export const generateBillsForProperty = async (
 
         const tenant = activeTenants[0];
 
+        // Determine the "Usage Month" for gating
+        let usageMonth = month;
+        let usageYear = year;
+        if (isPostPaid) {
+            usageMonth = month - 1;
+            if (usageMonth < 1) { usageMonth = 12; usageYear--; }
+        }
+        const usageMonthStart = new Date(usageYear, usageMonth - 1, 1);
+
+        // B2: Skip if month is before tenant's rent_start_date
+        if (tenant.rent_start_date) {
+            const rsd = new Date(tenant.rent_start_date);
+            const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
+            if (usageMonthStart < rsdMonthStart) continue;
+        }
+
+        // B5: Skip if lease has expired (fixed lease type)
+        if (tenant.lease_type === 'fixed' && tenant.lease_end_date) {
+            const led = new Date(tenant.lease_end_date);
+            if (usageMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) continue;
+        }
+
         // Check if a bill already exists for this unit+month+year
         const existingBill = await db.select()
             .from(rentBills)
@@ -48,7 +75,7 @@ export const generateBillsForProperty = async (
             )
             .limit(1);
 
-        if (existingBill.length > 0) continue; // Already exists
+        if (existingBill.length > 0) continue; // Already exists, don't overwrite manual changes
 
         // Calculate previous balance from last month's bill
         let previousBalance = 0;
@@ -68,6 +95,9 @@ export const generateBillsForProperty = async (
 
         if (prevBill.length > 0) {
             previousBalance = prevBill[0].balance ?? 0;
+        } else if (tenant.advance_rent && tenant.advance_rent > 0) {
+            // B4: First bill uses advance_rent as credit (negative = advance)
+            previousBalance = -(tenant.advance_rent);
         }
 
         // Get electricity amount (for fixed cost units)
@@ -76,10 +106,11 @@ export const generateBillsForProperty = async (
             electricityAmount = unit.electricity_fixed_amount;
         }
 
-        // Generate bill number
-        const billCount = await db.select().from(rentBills)
-            .where(eq(rentBills.property_id, propertyId));
-        const billNumber = `B-${(billCount.length + 1).toString().padStart(4, '0')}`;
+        // B10: Generate unique bill number using MAX id
+        const maxBill = await db.select({ id: rentBills.id }).from(rentBills)
+            .where(eq(rentBills.property_id, propertyId)).orderBy(desc(rentBills.id)).limit(1);
+        const nextNum = (maxBill[0]?.id ?? 0) + 1;
+        const billNumber = `B-${nextNum.toString().padStart(4, '0')}`;
 
         // Calculate total
         const rentAmount = unit.rent_amount;
@@ -170,6 +201,36 @@ export const getBillsForPropertyMonth = async (
 
         const tenant = activeTenants.length > 0 ? activeTenants[0] : null;
 
+        // Determine special states
+        let isNotMovedIn = false;
+        let isLeaseExpired = false;
+
+        if (tenant) {
+            // Check if tenant hasn't moved in yet for this month
+            if (tenant.rent_start_date) {
+                const rsd = new Date(tenant.rent_start_date);
+                const billMonthStart = new Date(year, month - 1, 1);
+                if (billMonthStart < new Date(rsd.getFullYear(), rsd.getMonth(), 1)) {
+                    isNotMovedIn = true;
+                }
+            } else if (tenant.move_in_date) {
+                const mid = new Date(tenant.move_in_date);
+                const billMonthStart = new Date(year, month - 1, 1);
+                if (billMonthStart < new Date(mid.getFullYear(), mid.getMonth(), 1)) {
+                    isNotMovedIn = true;
+                }
+            }
+
+            // Check if lease has expired
+            if (tenant.lease_type === 'fixed' && tenant.lease_end_date) {
+                const led = new Date(tenant.lease_end_date);
+                const billMonthStart = new Date(year, month - 1, 1);
+                if (billMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) {
+                    isLeaseExpired = true;
+                }
+            }
+        }
+
         // Find bill for this month
         const bills = await db.select()
             .from(rentBills)
@@ -189,6 +250,8 @@ export const getBillsForPropertyMonth = async (
             tenant,
             bill,
             isVacant: !tenant,
+            isNotMovedIn,
+            isLeaseExpired,
         });
     }
 
@@ -253,6 +316,23 @@ export const recalculateBill = async (billId: number): Promise<RentBill> => {
             updated_at: new Date(),
         })
         .where(eq(rentBills.id, billId));
+
+    // B3: Cascade to next month — update its previous_balance if it changed
+    const nextMonth = bill.month === 12 ? 1 : bill.month + 1;
+    const nextYear = bill.month === 12 ? bill.year + 1 : bill.year;
+    const nextBill = await db.select().from(rentBills).where(
+        and(
+            eq(rentBills.unit_id, bill.unit_id),
+            eq(rentBills.month, nextMonth),
+            eq(rentBills.year, nextYear)
+        )
+    ).limit(1);
+    if (nextBill.length > 0 && nextBill[0].previous_balance !== balance) {
+        await db.update(rentBills)
+            .set({ previous_balance: balance, updated_at: new Date() })
+            .where(eq(rentBills.id, nextBill[0].id));
+        await recalculateBill(nextBill[0].id);
+    }
 
     return (await getBillById(billId))!;
 };

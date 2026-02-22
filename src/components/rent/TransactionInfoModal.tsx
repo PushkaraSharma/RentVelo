@@ -50,7 +50,7 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
         const rent = parseFloat(rentAmount) || 0;
         const bal = parseFloat(balanceAmount) || 0;
         const previousBalance = balanceType === 'advance' ? -bal : bal;
-
+        console.log(previousBalance)
         await updateBill(bill.id, {
             rent_amount: rent,
             previous_balance: previousBalance,

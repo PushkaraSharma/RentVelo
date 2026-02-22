@@ -53,10 +53,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 setSelectedAmenities(data.amenities ? JSON.parse(data.amenities) : []);
                 setOwnerName(data.owner_name || '');
                 setPhone(data.owner_phone || '');
-                // Rent payment type? Not in schema but in state... 
-                // schema mentions build_date, total_floors, total_units
-                // But AddPropertyScreen doesn't seem to have them in the createProperty call?
-                // Let's check schema.
+                if (data.rent_payment_type) {
+                    setRentPaymentType(data.rent_payment_type);
+                }
             }
         } catch (error) {
             console.error('Error loading property:', error);
@@ -113,6 +112,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 is_multi_unit: isMultiUnit,
                 owner_name: ownerName || undefined,
                 owner_phone: phone || undefined,
+                rent_payment_type: rentPaymentType,
             };
 
             if (isEditMode) {
