@@ -10,9 +10,31 @@ import { db, migrations } from './src/db/database';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { theme } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeContext';
+import * as Updates from 'expo-updates';
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
+  const [isUpdating, setIsUpdating] = React.useState(false);
+
+  React.useEffect(() => {
+    async function onFetchUpdateAsync() {
+      try {
+        const update = await Updates.checkForUpdateAsync();
+
+        if (update.isAvailable) {
+          setIsUpdating(true);
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (e) {
+        console.error(`Error fetching latest Expo update: ${e}`);
+      }
+    }
+
+    if (!__DEV__) {
+      onFetchUpdateAsync();
+    }
+  }, []);
 
   if (!success && !error) {
     return (
@@ -23,6 +45,17 @@ export default function App() {
     );
   }
 
+  if (isUpdating) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 20, color: theme.colors.textPrimary, fontSize: 18, fontWeight: 'bold' }}>Updating App...</Text>
+        <Text style={{ marginTop: 10, color: theme.colors.textSecondary, textAlign: 'center', paddingHorizontal: 20 }}>
+          Please wait while we download the latest features and improvements.
+        </Text>
+      </View>
+    );
+  }
   if (error) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background, padding: 20 }}>
