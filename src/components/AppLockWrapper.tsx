@@ -20,7 +20,7 @@ export default function AppLockWrapper({ children }: AppLockWrapperProps) {
 
     const checkAppLock = async () => {
         try {
-            const lockEnabled = storage.getString('appLock');
+            const lockEnabled = storage.getString('@app_lock_enabled');
             if (lockEnabled === 'true') {
                 setIsLocked(true);
                 authenticate();
@@ -35,6 +35,7 @@ export default function AppLockWrapper({ children }: AppLockWrapperProps) {
     };
 
     const authenticate = async () => {
+        console.log("here")
         try {
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
             const isEnrolled = await LocalAuthentication.isEnrolledAsync();

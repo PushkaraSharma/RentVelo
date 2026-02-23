@@ -26,7 +26,7 @@ export default function WelcomeScreen() {
                     email: user.email,
                     photoUrl: user.photo || undefined
                 }));
-                dispatch(linkGoogleAccount(user.email));
+                dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
             }
         } catch (error) {
             console.error('Failed to sign in with Google:', error);

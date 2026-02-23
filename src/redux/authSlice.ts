@@ -71,9 +71,19 @@ const authSlice = createSlice({
             state.isOnboarded = true;
             storage.set(ONBOARDING_KEY, true);
         },
-        linkGoogleAccount: (state, action: PayloadAction<string>) => {
+        linkGoogleAccount: (state, action: PayloadAction<{ email: string, name?: string | null, photoUrl?: string | null }>) => {
             state.isGoogleLinked = true;
-            state.googleEmail = action.payload;
+            state.googleEmail = action.payload.email;
+
+            // If the user currently just "Guest User", upgrade their profile with Google info
+            if (state.user?.name === 'Guest User' || !state.user) {
+                state.user = {
+                    name: action.payload.name || 'User',
+                    email: action.payload.email,
+                    photoUrl: action.payload.photoUrl || undefined
+                };
+            }
+
             saveAuthState(state);
         },
         unlinkGoogleAccount: (state) => {

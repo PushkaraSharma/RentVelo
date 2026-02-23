@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Database, Cloud, HardDrive, RotateCcw, CloudUpload, CheckCircle2 } from 'lucide-react-native';
@@ -13,6 +13,7 @@ import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn } from '../
 import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive } from '../../services/backupService';
 import { storage } from '../../utils/storage';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import Toggle from '../../components/common/Toggle';
 
 export default function BackupScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -24,6 +25,7 @@ export default function BackupScreen({ navigation }: any) {
     const [backingUp, setBackingUp] = useState(false);
     const [restoring, setRestoring] = useState(false);
     const [lastSync, setLastSync] = useState<string>('Never');
+    const [isAutoBackupEnabled, setIsAutoBackupEnabled] = useState(false);
 
     const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [showRestoreModal, setShowRestoreModal] = useState(false);
@@ -36,6 +38,9 @@ export default function BackupScreen({ navigation }: any) {
     const loadLastSync = () => {
         const time = storage.getString('@last_backup_time');
         if (time) setLastSync(new Date(time).toLocaleString());
+
+        const autoBackupStr = storage.getString('@auto_backup_enabled');
+        setIsAutoBackupEnabled(autoBackupStr === 'true');
     };
 
     const updateLastSync = () => {
@@ -56,6 +61,15 @@ export default function BackupScreen({ navigation }: any) {
         }
     };
 
+    const toggleAutoBackup = (value: boolean) => {
+        if (!isGoogleLinked && value) {
+            Alert.alert('Google Account Required', 'Please link your Google account to enable auto backup.');
+            return;
+        }
+        setIsAutoBackupEnabled(value);
+        storage.set('@auto_backup_enabled', String(value));
+    };
+
     const handleGoogleToggle = async () => {
         if (isGoogleLinked) {
             setShowDisconnectModal(true);
@@ -63,7 +77,7 @@ export default function BackupScreen({ navigation }: any) {
             try {
                 const user = await signInWithGoogle();
                 if (user) {
-                    dispatch(linkGoogleAccount(user.email));
+                    dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
                     Alert.alert('Success', 'Google account linked successfully!');
                 }
             } catch (error) {
@@ -77,7 +91,7 @@ export default function BackupScreen({ navigation }: any) {
             try {
                 const user = await signInWithGoogle();
                 if (user) {
-                    dispatch(linkGoogleAccount(user.email));
+                    dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
                 } else {
                     return; // User cancelled or failed
                 }
@@ -170,6 +184,17 @@ export default function BackupScreen({ navigation }: any) {
                         </Pressable>
                         {isGoogleLinked && (
                             <>
+                                <View style={styles.divider} />
+                                <View style={styles.item}>
+                                    <View style={styles.itemLeft}>
+                                        <CloudUpload size={20} color={theme.colors.accent} />
+                                        <View>
+                                            <Text style={styles.itemLabel}>Auto Backup (Daily)</Text>
+                                            <Text style={styles.itemSubLabel}>{`Automatically sync to Google Drive\nevery 24h`}</Text>
+                                        </View>
+                                    </View>
+                                    <Toggle value={isAutoBackupEnabled} onValueChange={toggleAutoBackup} />
+                                </View>
                                 <View style={styles.divider} />
                                 <Pressable style={styles.item} onPress={handleGoogleBackup} disabled={backingUp || restoring}>
                                     <View style={styles.itemLeft}>

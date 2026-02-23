@@ -12,6 +12,7 @@ import { theme } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import * as Updates from 'expo-updates';
 import AppLockWrapper from './src/components/AppLockWrapper';
+import AutoBackupHandler from './src/components/AutoBackupHandler';
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
@@ -72,6 +73,7 @@ export default function App() {
     <Provider store={store}>
       <ThemeProvider>
         <SafeAreaProvider>
+          <AutoBackupHandler />
           <AppLockWrapper>
             <RootNavigator />
           </AppLockWrapper>
