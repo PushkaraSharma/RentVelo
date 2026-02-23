@@ -32,7 +32,7 @@ import {
 import Header from '../../../components/common/Header';
 import { getReceiptConfigByPropertyId, upsertReceiptConfig } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
+import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import SignatureModal from '../../../components/common/SignatureModal';
 
 const WALLET_OPTIONS = [
@@ -106,16 +106,11 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
         }
     };
 
-    const pickImage = async (setter: (uri: string) => void) => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
+    const pickImage = (setter: (uri: string) => void) => {
+        handleImageSelection((uri) => setter(uri), {
             allowsEditing: true,
             quality: 0.8,
         });
-
-        if (!result.canceled) {
-            setter(result.assets[0].uri);
-        }
     };
 
     const handleSignatureSave = (filepath: string) => {

@@ -11,6 +11,10 @@
   "dependencies": {
     "@react-native-community/datetimepicker": "^8.6.0",
     "@react-native-community/slider": "5.0.1",
+    "@react-native-firebase/analytics": "^23.8.6",
+    "@react-native-firebase/app": "^23.8.6",
+    "@react-native-firebase/auth": "^23.8.6",
+    "@react-native-firebase/firestore": "^23.8.6",
     "@react-native-google-signin/google-signin": "^16.1.1",
     "@react-navigation/bottom-tabs": "^7.10.1",
     "@react-navigation/native": "^7.1.28",
@@ -19,6 +23,7 @@
     "drizzle-orm": "^0.45.1",
     "expo": "~54.0.32",
     "expo-auth-session": "~7.0.10",
+    "expo-build-properties": "^1.0.10",
     "expo-contacts": "^15.0.11",
     "expo-device": "~8.0.10",
     "expo-file-system": "~19.0.21",

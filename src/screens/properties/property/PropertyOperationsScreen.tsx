@@ -58,8 +58,27 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                 getUnitsByPropertyId(propertyId),
                 getActiveTenantByPropertyId(propertyId)
             ]);
+
+            // Auto-repair legacy single-unit properties
+            let finalUnits = unitsData;
+            if (propData && propData.is_multi_unit === false && unitsData.length === 0) {
+                const { createUnit, updateTenant } = await import('../../../db');
+                const unitData = {
+                    property_id: propertyId,
+                    name: 'Main Property',
+                    rent_amount: 0,
+                    rent_cycle: 'monthly',
+                };
+                const newUnitId = await createUnit(unitData as any);
+                finalUnits = [...unitsData, { id: newUnitId, ...unitData }];
+
+                if (tenantData && !tenantData.unit_id) {
+                    await updateTenant(tenantData.id, { unit_id: newUnitId });
+                }
+            }
+
             setProperty(propData);
-            setUnits(unitsData);
+            setUnits(finalUnits);
             setActiveTenant(tenantData);
         } catch (error) {
             console.error('Error loading property data:', error);
@@ -103,10 +122,13 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             onPress: () => {
                 if (property?.is_multi_unit) {
                     navigation.navigate('RoomsList', { propertyId });
-                } else if (activeTenant) {
-                    navigation.navigate('AddTenant', { tenantId: activeTenant.id, propertyId });
                 } else {
-                    navigation.navigate('AddTenant', { propertyId });
+                    if (units.length > 0) {
+                        navigation.navigate('RoomDetails', { propertyId, unitId: units[0].id, initialTab: 'tenants' });
+                    } else {
+                        // Fallback just in case
+                        navigation.navigate('AddTenant', { propertyId });
+                    }
                 }
             }
         },

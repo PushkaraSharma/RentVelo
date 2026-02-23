@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Bell } from 'lucide-react-native';
 import FinancialSummary from '../../components/dashboard/FinancialSummary';
@@ -60,7 +60,11 @@ export default function DashboardScreen({ navigation }: any) {
                 <View style={styles.header}>
                     <View style={styles.profileRow}>
                         <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{user?.name?.[0] || 'U'}</Text>
+                            {user?.photoUrl ? (
+                                <Image source={{ uri: user.photoUrl }} style={styles.avatarImage} />
+                            ) : (
+                                <Text style={styles.avatarText}>{user?.name?.[0] || 'U'}</Text>
+                            )}
                         </View>
                         <View>
                             <Text style={styles.greeting}>WELCOME BACK</Text>
@@ -179,6 +183,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginRight: theme.spacing.s,
         borderWidth: 2,
         borderColor: theme.colors.surface
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 20
     },
     avatarText: {
         color: theme.colors.primaryForeground,

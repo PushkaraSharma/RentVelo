@@ -3,7 +3,7 @@ import {
     rentBills, billExpenses, payments, units, tenants, properties,
     RentBill, NewRentBill, BillExpense, NewBillExpense, Payment, NewPayment
 } from './schema';
-import { eq, and, desc, sum } from 'drizzle-orm';
+import { eq, and, desc, sum, sql } from 'drizzle-orm';
 
 // Re-export types
 export { RentBill, BillExpense };
@@ -28,7 +28,35 @@ export const generateBillsForProperty = async (
     const isPostPaid = property?.rent_payment_type === 'previous_month';
 
     // Get all units for this property
-    const propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
+    let propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
+
+    // AUTO-REPAIR: If single-unit property has no units, create one
+    if (property && property.is_multi_unit === false && propertyUnits.length === 0) {
+        const unitData = {
+            property_id: propertyId,
+            name: 'Main Property',
+            rent_amount: 0,
+            rent_cycle: 'monthly',
+        };
+        const result = await db.insert(units).values(unitData as any).returning({ id: units.id });
+        const newUnitId = result[0].id;
+
+        // Refresh property units
+        propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
+
+        // If there's an active tenant with no unit_id, link them
+        const activeTenantsNoUnit = await db.select()
+            .from(tenants)
+            .where(and(
+                eq(tenants.property_id, propertyId),
+                eq(tenants.status, 'active'),
+                sql`${tenants.unit_id} IS NULL`
+            ));
+
+        for (const t of activeTenantsNoUnit) {
+            await db.update(tenants).set({ unit_id: newUnitId }).where(eq(tenants.id, t.id));
+        }
+    }
 
     for (const unit of propertyUnits) {
         // Find active tenant for this unit
@@ -188,7 +216,40 @@ export const getBillsForPropertyMonth = async (
     const db = getDb();
 
     // Get all units for the property
-    const propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
+    let propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
+
+    // AUTO-REPAIR: If single-unit property has no units, create one
+    if (propertyUnits.length === 0) {
+        const propResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
+        const property = propResult[0];
+
+        if (property && property.is_multi_unit === false) {
+            const unitData = {
+                property_id: propertyId,
+                name: 'Main Property',
+                rent_amount: 0,
+                rent_cycle: 'monthly',
+            };
+            const result = await db.insert(units).values(unitData as any).returning({ id: units.id });
+            const newUnitId = result[0].id;
+
+            // Refresh property units
+            propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
+
+            // Link active tenant if missing unit_id
+            const activeTenantsNoUnit = await db.select()
+                .from(tenants)
+                .where(and(
+                    eq(tenants.property_id, propertyId),
+                    eq(tenants.status, 'active'),
+                    sql`${tenants.unit_id} IS NULL`
+                ));
+
+            for (const t of activeTenantsNoUnit) {
+                await db.update(tenants).set({ unit_id: newUnitId }).where(eq(tenants.id, t.id));
+            }
+        }
+    }
 
     const results: any[] = [];
 

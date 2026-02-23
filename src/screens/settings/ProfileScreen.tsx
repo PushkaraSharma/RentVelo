@@ -10,7 +10,7 @@ import { login } from '../../redux/authSlice';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
+import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import { storage } from '../../utils/storage';
 
 export default function ProfileScreen({ navigation }: any) {
@@ -39,17 +39,12 @@ export default function ProfileScreen({ navigation }: any) {
         }
     };
 
-    const pickImage = async () => {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
+    const pickImage = () => {
+        handleImageSelection((uri) => setPhotoUrl(uri), {
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.5,
         });
-
-        if (!result.canceled) {
-            setPhotoUrl(result.assets[0].uri);
-        }
     };
 
     const handleSave = async () => {

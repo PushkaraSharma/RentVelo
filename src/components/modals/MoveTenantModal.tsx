@@ -13,6 +13,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, ChevronRight, X } from 'lucide-react-native';
 import Button from '../common/Button';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface MoveTenantModalProps {
     visible: boolean;
@@ -45,6 +46,7 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
+    const insets = useSafeAreaInsets();
     const [showDatePicker, setShowDatePicker] = React.useState(false);
 
     return (
@@ -61,7 +63,6 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
                     style={styles.keyboardView}
                 >
                     <View style={styles.modalContent}>
-                        <View style={styles.handle} />
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Move Tenant</Text>
                             <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -102,7 +103,7 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
                             />
                         )}
 
-                        <View style={styles.modalActions}>
+                        <View style={[styles.modalActions, { paddingBottom: insets.bottom }]}>
                             <Button
                                 title="Cancel"
                                 onPress={onClose}
@@ -156,7 +157,8 @@ const getStyles = (theme: any) => StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 20,
-        paddingHorizontal: theme.spacing.s
+        paddingHorizontal: theme.spacing.s,
+        paddingTop: theme.spacing.l
     },
     closeBtn: {
         padding: 4

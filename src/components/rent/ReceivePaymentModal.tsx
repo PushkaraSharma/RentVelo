@@ -4,7 +4,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide-react-native';
 import { addPaymentToBill } from '../../db';
-import * as ImagePicker from 'expo-image-picker';
+import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
 
@@ -63,15 +63,11 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
         }
     };
 
-    const pickPhoto = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
+    const pickPhoto = () => {
+        handleImageSelection((uri) => setPhotoUri(uri), {
             allowsEditing: true,
             quality: 0.8,
         });
-        if (!result.canceled) {
-            setPhotoUri(result.assets[0].uri);
-        }
     };
 
     const formatDate = (d: Date) => {

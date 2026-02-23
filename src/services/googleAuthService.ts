@@ -1,8 +1,8 @@
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { storage } from '../utils/storage';
 
-// In a real app, you would replace this with your actual Web Client ID from Google Cloud Console
-const GOOGLE_WEB_CLIENT_ID = 'YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com';
+// We are using the web client ID extracted from google-services.json (oauth_client with client_type 3)
+const GOOGLE_WEB_CLIENT_ID = '221955250116-tfa60qhpibsg77pmt6i43u80ovp40rij.apps.googleusercontent.com';
 
 export const initGoogleAuth = () => {
     GoogleSignin.configure({

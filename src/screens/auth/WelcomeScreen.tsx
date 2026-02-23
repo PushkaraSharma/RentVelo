@@ -3,19 +3,38 @@ import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
-import { login, completeOnboarding } from '../../redux/authSlice';
+import { login, linkGoogleAccount } from '../../redux/authSlice';
+import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
 
 export default function WelcomeScreen() {
     const dispatch = useDispatch();
     const { theme, isDark } = useAppTheme();
     const styles = getStyles(theme, isDark);
+    const [loading, setLoading] = React.useState(false);
 
-    const handleGoogleLogin = () => {
-        // Implementing Mock Auth Logic as per plan
-        dispatch(login({
-            name: 'User',
-            email: 'user@example.com'
-        }));
+    React.useEffect(() => {
+        initGoogleAuth();
+    }, []);
+
+    const handleGoogleLogin = async () => {
+        try {
+            setLoading(true);
+            const user = await signInWithGoogle();
+            if (user) {
+                dispatch(login({
+                    name: user.name || 'Google User',
+                    email: user.email,
+                    photoUrl: user.photo || undefined
+                }));
+                dispatch(linkGoogleAccount(user.email));
+            }
+        } catch (error) {
+            console.error('Failed to sign in with Google:', error);
+            // In a real app, you'd show an Alert here, but we'll stick to console for now
+            // or perhaps fallback if needed.
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSkip = () => {
@@ -42,11 +61,17 @@ export default function WelcomeScreen() {
 
                 <View style={styles.spacer} />
 
-                <Pressable style={styles.googleButton} onPress={handleGoogleLogin}>
+                <Pressable
+                    style={[styles.googleButton, loading && { opacity: 0.7 }]}
+                    onPress={handleGoogleLogin}
+                    disabled={loading}
+                >
                     <View style={styles.gIcon}>
                         <Text style={{ fontWeight: 'bold', color: '#FFF' }}>G</Text>
                     </View>
-                    <Text style={styles.googleButtonText}>Continue with Google</Text>
+                    <Text style={styles.googleButtonText}>
+                        {loading ? 'Signing In...' : 'Continue with Google'}
+                    </Text>
                 </Pressable>
 
                 <Pressable onPress={handleSkip} style={styles.skipButton}>

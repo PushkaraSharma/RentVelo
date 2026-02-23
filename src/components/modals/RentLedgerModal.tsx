@@ -112,7 +112,6 @@ export default function RentLedgerModal({
             <View style={styles.overlay}>
                 <Pressable style={styles.dismissArea} onPress={onClose} />
                 <View style={styles.modalContainer}>
-                    <View style={styles.handle} />
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>Rent Ledger</Text>
@@ -236,6 +235,7 @@ const getStyles = (theme: any) => StyleSheet.create({
         alignItems: 'center',
         padding: theme.spacing.l,
         paddingBottom: theme.spacing.m,
+        paddingTop: theme.spacing.l
     },
     closeBtn: {
         padding: 4

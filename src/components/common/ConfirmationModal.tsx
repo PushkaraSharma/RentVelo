@@ -10,6 +10,7 @@ import {
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Trash2, AlertTriangle, X } from 'lucide-react-native';
 import Button from './Button';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ConfirmationModalProps {
     visible: boolean;
@@ -35,6 +36,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     loading = false
 }) => {
     const { theme, isDark } = useAppTheme();
+    const insets = useSafeAreaInsets();
     const styles = getStyles(theme, isDark, variant);
 
     const getIcon = () => {
@@ -69,7 +71,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                         <Text style={styles.message}>{message}</Text>
                     </View>
 
-                    <View style={styles.actions}>
+                    <View style={[styles.actions, { paddingBottom: insets.bottom }]}>
                         <Button
                             title={cancelText}
                             onPress={onClose}
@@ -120,7 +122,7 @@ const getStyles = (theme: any, isDark: boolean, variant: string) => StyleSheet.c
         marginBottom: 24
     },
     header: {
-        paddingTop: 24,
+        paddingTop: theme.spacing.l,
         width: '100%',
         flexDirection: 'row',
         justifyContent: 'center',

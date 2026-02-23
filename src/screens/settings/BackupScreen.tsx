@@ -12,6 +12,7 @@ import { linkGoogleAccount, unlinkGoogleAccount } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn } from '../../services/googleAuthService';
 import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive } from '../../services/backupService';
 import { storage } from '../../utils/storage';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 export default function BackupScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -23,6 +24,9 @@ export default function BackupScreen({ navigation }: any) {
     const [backingUp, setBackingUp] = useState(false);
     const [restoring, setRestoring] = useState(false);
     const [lastSync, setLastSync] = useState<string>('Never');
+
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+    const [showRestoreModal, setShowRestoreModal] = useState(false);
 
     useEffect(() => {
         initGoogleAuth();
@@ -54,19 +58,7 @@ export default function BackupScreen({ navigation }: any) {
 
     const handleGoogleToggle = async () => {
         if (isGoogleLinked) {
-            Alert.alert(
-                'Disconnect Google Drive',
-                'Are you sure you want to disconnect? Auto-backups will stop.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Disconnect', style: 'destructive', onPress: async () => {
-                            await signOutGoogle();
-                            dispatch(unlinkGoogleAccount());
-                        }
-                    }
-                ]
-            );
+            setShowDisconnectModal(true);
         } else {
             try {
                 const user = await signInWithGoogle();
@@ -101,25 +93,25 @@ export default function BackupScreen({ navigation }: any) {
             Alert.alert('Not Linked', 'Please connect your Google account to restore from Drive.');
             return;
         }
-        Alert.alert(
-            'Restore Data',
-            'This will overwrite all current data. Are you sure you want to proceed?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Restore', style: 'destructive', onPress: async () => {
-                        setRestoring(true);
-                        const success = await restoreFromGoogleDrive();
-                        setRestoring(false);
-                        if (success) {
-                            Alert.alert('Success', 'Data restored successfully. Please restart the app for changes to take effect.');
-                        } else {
-                            Alert.alert('Restore Failed', 'Could not restore data from Google Drive.');
-                        }
-                    }
-                }
-            ]
-        );
+        setShowRestoreModal(true);
+    };
+
+    const confirmDisconnect = async () => {
+        setShowDisconnectModal(false);
+        await signOutGoogle();
+        dispatch(unlinkGoogleAccount());
+    };
+
+    const confirmRestore = async () => {
+        setShowRestoreModal(false);
+        setRestoring(true);
+        const success = await restoreFromGoogleDrive();
+        setRestoring(false);
+        if (success) {
+            Alert.alert('Success', 'Data restored successfully. Please restart the app for changes to take effect.');
+        } else {
+            Alert.alert('Restore Failed', 'Could not restore data from Google Drive.');
+        }
     };
 
     return (
@@ -167,6 +159,21 @@ export default function BackupScreen({ navigation }: any) {
                                 <View style={styles.badge}><Text style={styles.badgeText}>LINK</Text></View>
                             )}
                         </Pressable>
+                        {isGoogleLinked && (
+                            <>
+                                <View style={styles.divider} />
+                                <Pressable style={styles.item} onPress={handleGoogleBackup} disabled={backingUp || restoring}>
+                                    <View style={styles.itemLeft}>
+                                        <CloudUpload size={20} color={theme.colors.accent} />
+                                        <View>
+                                            <Text style={styles.itemLabel}>Backup Now</Text>
+                                            <Text style={styles.itemSubLabel}>Manually upload database to Google Drive</Text>
+                                        </View>
+                                    </View>
+                                    {backingUp && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                                </Pressable>
+                            </>
+                        )}
                     </View>
                 </View>
 
@@ -191,6 +198,29 @@ export default function BackupScreen({ navigation }: any) {
                     <Text style={styles.lastBackupText}>Last Backup: {lastSync}</Text>
                 </View>
             </ScrollView>
+
+            <ConfirmationModal
+                visible={showDisconnectModal}
+                onClose={() => setShowDisconnectModal(false)}
+                onConfirm={confirmDisconnect}
+                title="Disconnect Google Drive"
+                message="Are you sure you want to disconnect? Auto-backups will stop."
+                confirmText="Disconnect"
+                cancelText="Cancel"
+                variant="danger"
+            />
+
+            <ConfirmationModal
+                visible={showRestoreModal}
+                onClose={() => setShowRestoreModal(false)}
+                onConfirm={confirmRestore}
+                title="Restore Data"
+                message="This will overwrite all current local data. Are you sure you want to proceed?"
+                confirmText="Restore"
+                cancelText="Cancel"
+                variant="warning"
+                loading={restoring}
+            />
         </SafeAreaView>
     );
 }

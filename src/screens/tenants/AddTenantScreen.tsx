@@ -14,7 +14,7 @@ import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, RENT_CYCLE_OPTIONS, FURNISHING_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
-import * as ImagePicker from 'expo-image-picker';
+import { handleImageSelection } from '../../utils/ImagePickerUtil';
 
 export default function AddTenantScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -137,17 +137,12 @@ export default function AddTenantScreen({ navigation, route }: any) {
         }
     };
 
-    const pickPhoto = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
+    const pickPhoto = () => {
+        handleImageSelection((uri) => setPhotoUri(uri), {
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.8,
         });
-
-        if (!result.canceled) {
-            setPhotoUri(result.assets[0].uri);
-        }
     };
 
     const importFromContacts = async () => {
@@ -177,17 +172,12 @@ export default function AddTenantScreen({ navigation, route }: any) {
         }
     };
 
-    const pickDocument = async (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            quality: 0.8,
-        });
-
-        if (!result.canceled) {
-            if (type === 'aadhaar_front') setAadhaarFrontUri(result.assets[0].uri);
-            else if (type === 'aadhaar_back') setAadhaarBackUri(result.assets[0].uri);
-            else setPanUri(result.assets[0].uri);
-        }
+    const pickDocument = (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
+        handleImageSelection((uri) => {
+            if (type === 'aadhaar_front') setAadhaarFrontUri(uri);
+            else if (type === 'aadhaar_back') setAadhaarBackUri(uri);
+            else setPanUri(uri);
+        }, { quality: 0.8, allowsEditing: false });
     };
 
     const handleSubmit = async () => {

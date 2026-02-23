@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
@@ -23,6 +23,8 @@ import {
 import Toggle from '../../components/common/Toggle';
 import Constants from 'expo-constants';
 import { OTA_VERSION } from '../../utils/Constants';
+import { signOutGoogle } from '../../services/googleAuthService';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -30,15 +32,19 @@ export default function SettingsScreen({ navigation }: any) {
     const { theme, isDark, setMode } = useAppTheme();
     const styles = getStyles(theme, isDark);
 
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+
     const handleLogout = () => {
-        Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Logout', style: 'destructive', onPress: () => dispatch(logout()) }
-            ]
-        );
+        setShowLogoutModal(true);
+    };
+
+    const confirmLogout = async () => {
+        try {
+            await signOutGoogle();
+        } catch (e) {
+            // Ignored if not signed in or error occurs
+        }
+        dispatch(logout());
     };
 
     const handleShare = async () => {
@@ -75,7 +81,11 @@ export default function SettingsScreen({ navigation }: any) {
                 {/* Profile Card */}
                 <View style={styles.profileCard}>
                     <View style={styles.profileImageContainer}>
-                        <CircleUser size={60} color={theme.colors.accent} strokeWidth={1.5} />
+                        {user?.photoUrl ? (
+                            <Image source={{ uri: user.photoUrl }} style={styles.profileImage} />
+                        ) : (
+                            <CircleUser size={60} color={theme.colors.accent} strokeWidth={1.5} />
+                        )}
                     </View>
                     <View style={styles.profileInfo}>
                         <Text style={styles.profileName}>{user?.name || 'Velo Owner'}</Text>
@@ -166,6 +176,17 @@ export default function SettingsScreen({ navigation }: any) {
                     <Text style={styles.version}>RentVelo v{Constants.expoConfig?.version}_{OTA_VERSION} • Made with ❤️</Text>
                 </View>
             </ScrollView>
+
+            <ConfirmationModal
+                visible={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                onConfirm={confirmLogout}
+                title="Logout"
+                message="Are you sure you want to logout?"
+                confirmText="Logout"
+                cancelText="Cancel"
+                variant="danger"
+            />
         </SafeAreaView>
     );
 }
@@ -220,6 +241,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: theme.spacing.l,
+    },
+    profileImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 40,
     },
     profileInfo: {
         flex: 1,

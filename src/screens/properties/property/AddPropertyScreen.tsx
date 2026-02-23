@@ -8,9 +8,11 @@ import Toggle from '../../../components/common/Toggle';
 import { ArrowLeft, Camera, Building, Layers, User, Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
 import * as ImagePicker from 'expo-image-picker';
-import { createProperty, updateProperty, getPropertyById } from '../../../db';
+import { handleImageSelection } from '../../../utils/ImagePickerUtil';
+import { createProperty, updateProperty, getPropertyById, createUnit, updateUnit } from '../../../db';
 import SuccessModal from '../../../components/common/SuccessModal';
-import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES } from '../../../utils/Constants';
+import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES, RENT_CYCLE_OPTIONS, METER_TYPES } from '../../../utils/Constants';
+import { Zap, Droplets } from 'lucide-react-native';
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
@@ -38,6 +40,19 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [rentPaymentType, setRentPaymentType] = useState('previous_month');
     const [customAmenity, setCustomAmenity] = useState('');
 
+    // Single Unit Form State
+    const [rentAmount, setRentAmount] = useState('');
+    const [rentCycle, setRentCycle] = useState<'first_of_month' | 'relative'>('first_of_month');
+    const [electricityEnabled, setElectricityEnabled] = useState(true);
+    const [electricityType, setElectricityType] = useState('Metered');
+    const [electricityValue, setElectricityValue] = useState('');
+    const [initialElectricityReading, setInitialElectricityReading] = useState('');
+    const [waterEnabled, setWaterEnabled] = useState(false);
+    const [waterType, setWaterType] = useState('Fixed');
+    const [waterValue, setWaterValue] = useState('');
+    const [initialWaterReading, setInitialWaterReading] = useState('');
+    const [defaultUnitId, setDefaultUnitId] = useState<number | null>(null);
+
     React.useEffect(() => {
         if (isEditMode) {
             loadPropertyData();
@@ -59,23 +74,60 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 if (data.rent_payment_type) {
                     setRentPaymentType(data.rent_payment_type);
                 }
+
+                // If it's a single unit and edit mode, load the unit details
+                if (data.is_multi_unit === false && isEditMode) {
+                    const { getUnitsByPropertyId } = await import('../../../db');
+                    const units = await getUnitsByPropertyId(propertyId);
+                    if (units.length > 0) {
+                        const unit = units[0];
+                        setDefaultUnitId(unit.id);
+                        setRentAmount(unit.rent_amount?.toString() || '');
+                        setRentCycle(unit.rent_cycle as any || 'first_of_month');
+
+                        // Electricity
+                        if (unit.electricity_rate || unit.electricity_fixed_amount || unit.initial_electricity_reading) {
+                            setElectricityEnabled(true);
+                            if (unit.electricity_rate) {
+                                setElectricityType('Metered');
+                                setElectricityValue(unit.electricity_rate.toString());
+                                setInitialElectricityReading(unit.initial_electricity_reading?.toString() || '');
+                            } else if (unit.electricity_fixed_amount) {
+                                setElectricityType('Fixed');
+                                setElectricityValue(unit.electricity_fixed_amount.toString());
+                            } else {
+                                setElectricityType('Free');
+                            }
+                        }
+
+                        // Water
+                        if (unit.water_rate || unit.water_fixed_amount || unit.initial_water_reading) {
+                            setWaterEnabled(true);
+                            if (unit.water_rate) {
+                                setWaterType('Metered');
+                                setWaterValue(unit.water_rate.toString());
+                                setInitialWaterReading(unit.initial_water_reading?.toString() || '');
+                            } else if (unit.water_fixed_amount) {
+                                setWaterType('Fixed');
+                                setWaterValue(unit.water_fixed_amount.toString());
+                            } else {
+                                setWaterType('Free');
+                            }
+                        }
+                    }
+                }
             }
         } catch (error) {
             console.error('Error loading property:', error);
         }
     };
 
-    const pickImage = async () => {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
+    const pickImage = () => {
+        handleImageSelection((uri) => setImage(uri), {
             allowsEditing: true,
-            aspect: [4, 3],
-            quality: 1,
+            aspect: [16, 9],
+            quality: 0.8,
         });
-
-        if (!result.canceled) {
-            setImage(result.assets[0].uri);
-        }
     };
 
     const toggleAmenity = (id: string) => {
@@ -104,6 +156,13 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             return;
         }
 
+        if (!isMultiUnit) {
+            if (!rentAmount || parseFloat(rentAmount) <= 0) {
+                Alert.alert('Error', 'Please enter valid rent amount for single room property');
+                return;
+            }
+        }
+
         setLoading(true);
         try {
             const propertyData: any = {
@@ -120,11 +179,46 @@ export default function AddPropertyScreen({ navigation, route }: any) {
 
             if (isEditMode) {
                 await updateProperty(propertyId, propertyData);
+
+                if (!isMultiUnit && defaultUnitId) {
+                    const unitData: any = {
+                        rent_amount: parseFloat(rentAmount),
+                        rent_cycle: rentCycle,
+                        is_metered: (electricityEnabled && electricityType === 'Metered') || (waterEnabled && waterType === 'Metered'),
+                        electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
+                        electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
+                        initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
+                        water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
+                        water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
+                        initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
+                    };
+                    await updateUnit(defaultUnitId, unitData);
+                }
+
                 Alert.alert('Success', 'Property updated successfully', [
                     { text: 'OK', onPress: () => navigation.goBack() }
                 ]);
             } else {
                 const newId = await createProperty(propertyData);
+
+                if (!isMultiUnit) {
+                    // Create default unit automatically
+                    const unitData: any = {
+                        property_id: newId,
+                        name: 'Main Property',
+                        rent_amount: parseFloat(rentAmount),
+                        rent_cycle: rentCycle,
+                        is_metered: (electricityEnabled && electricityType === 'Metered') || (waterEnabled && waterType === 'Metered'),
+                        electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
+                        electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
+                        initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
+                        water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
+                        water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
+                        initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
+                    };
+                    await createUnit(unitData);
+                }
+
                 setCreatedPropertyId(newId);
                 setShowSuccessModal(true);
             }
@@ -261,6 +355,157 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         )}
                     </View>
 
+                    {/* Single Unit Details */}
+                    {!isMultiUnit && (
+                        <>
+                            <Text style={styles.sectionTitle}>Room Details</Text>
+                            <Input
+                                label="Rent Amount"
+                                placeholder="e.g. 12000"
+                                value={rentAmount}
+                                onChangeText={setRentAmount}
+                                keyboardType="numeric"
+                            />
+
+                            <Text style={styles.sectionTitle}>Rent Calculation</Text>
+                            <View style={styles.rentTypeContainer}>
+                                {RENT_CYCLE_OPTIONS.map((option, index) => (
+                                    <Pressable
+                                        key={option.id}
+                                        style={[
+                                            styles.rentTypeBtn,
+                                            index !== RENT_CYCLE_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+                                            rentCycle === option.id && styles.rentTypeBtnActive
+                                        ]}
+                                        onPress={() => setRentCycle(option.id as 'first_of_month' | 'relative')}
+                                    >
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.rentTypeText}>{option.label}</Text>
+                                            <Text style={[styles.rentTypeText, { fontSize: theme.typography.s, color: theme.colors.textSecondary }]}>{option.description}</Text>
+                                        </View>
+                                        <View style={[styles.radio, rentCycle === option.id && styles.radioActive]}>
+                                            {rentCycle === option.id && <View style={styles.radioInner} />}
+                                        </View>
+                                    </Pressable>
+                                ))}
+                            </View>
+
+                            <Text style={styles.sectionTitle}>Utilities</Text>
+
+                            {/* Electricity Card */}
+                            <View style={styles.utilityCard}>
+                                <View style={styles.utilityHeader}>
+                                    <View style={[styles.utilityIconBg, { backgroundColor: '#F3E8FF' }]}>
+                                        <Zap size={20} color="#9333EA" />
+                                    </View>
+                                    <Text style={styles.utilityTitle}>Electricity</Text>
+                                    <Toggle value={electricityEnabled} onValueChange={setElectricityEnabled} />
+                                </View>
+
+                                {electricityEnabled && (
+                                    <>
+                                        <View style={styles.segmentContainer}>
+                                            {METER_TYPES.map((type) => (
+                                                <Pressable
+                                                    key={type}
+                                                    style={[
+                                                        styles.segmentParam,
+                                                        electricityType === type && styles.segmentActive
+                                                    ]}
+                                                    onPress={() => {
+                                                        setElectricityType(type);
+                                                        setElectricityValue('');
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.segmentText,
+                                                        electricityType === type && styles.segmentTextActive
+                                                    ]}>{type}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                        {electricityType !== 'Free' && (
+                                            <View style={{ marginTop: theme.spacing.m }}>
+                                                <Input
+                                                    label={electricityType === 'Metered' ? "Rate per Unit (₹)" : "Fixed Monthly Amount (₹)"}
+                                                    placeholder={electricityType === 'Metered' ? "e.g. 8.5" : "e.g. 500"}
+                                                    value={electricityValue}
+                                                    onChangeText={setElectricityValue}
+                                                    keyboardType="numeric"
+                                                />
+                                                {electricityType === 'Metered' && (
+                                                    <Input
+                                                        label="Initial Meter Reading"
+                                                        placeholder="e.g. 1045.5"
+                                                        value={initialElectricityReading}
+                                                        onChangeText={setInitialElectricityReading}
+                                                        keyboardType="numeric"
+                                                    />
+                                                )}
+                                            </View>
+                                        )}
+                                    </>
+                                )}
+                            </View>
+
+                            {/* Water Card */}
+                            <View style={styles.utilityCard}>
+                                <View style={styles.utilityHeader}>
+                                    <View style={[styles.utilityIconBg, { backgroundColor: '#E0F2FE' }]}>
+                                        <Droplets size={20} color="#0284C7" />
+                                    </View>
+                                    <Text style={styles.utilityTitle}>Water</Text>
+                                    <Toggle value={waterEnabled} onValueChange={setWaterEnabled} />
+                                </View>
+
+                                {waterEnabled && (
+                                    <>
+                                        <View style={styles.segmentContainer}>
+                                            {METER_TYPES.map((type) => (
+                                                <Pressable
+                                                    key={type}
+                                                    style={[
+                                                        styles.segmentParam,
+                                                        waterType === type && styles.segmentActive
+                                                    ]}
+                                                    onPress={() => {
+                                                        setWaterType(type);
+                                                        setWaterValue('');
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.segmentText,
+                                                        waterType === type && styles.segmentTextActive
+                                                    ]}>{type}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                        {waterType !== 'Free' && (
+                                            <View style={{ marginTop: theme.spacing.m }}>
+                                                <Input
+                                                    label={waterType === 'Metered' ? "Rate per Unit (₹)" : "Fixed Monthly Amount (₹)"}
+                                                    placeholder={waterType === 'Metered' ? "e.g. 15" : "e.g. 200"}
+                                                    value={waterValue}
+                                                    onChangeText={setWaterValue}
+                                                    keyboardType="numeric"
+                                                />
+                                                {waterType === 'Metered' && (
+                                                    <Input
+                                                        label="Initial Meter Reading"
+                                                        placeholder="e.g. 520.0"
+                                                        value={initialWaterReading}
+                                                        onChangeText={setInitialWaterReading}
+                                                        keyboardType="numeric"
+                                                    />
+                                                )}
+                                            </View>
+                                        )}
+                                    </>
+                                )}
+                            </View>
+                        </>
+                    )}
+
                     {/* Rent Payment Type */}
                     <Text style={styles.sectionTitle}>Take Rent Of</Text>
                     <View style={styles.rentTypeContainer}>
@@ -297,6 +542,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     <Input
                         placeholder="Phone Number"
                         value={phone}
+                        maxLength={10}
                         onChangeText={setPhone}
                         keyboardType="phone-pad"
                         icon={<Phone size={20} color={theme.colors.textSecondary} />}
@@ -638,6 +884,58 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         height: 10,
         borderRadius: 5,
         backgroundColor: theme.colors.accent,
+    },
+    utilityCard: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.l,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        padding: theme.spacing.m,
+        marginBottom: theme.spacing.m
+    },
+    utilityHeader: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    utilityIconBg: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: theme.spacing.m
+    },
+    utilityTitle: {
+        flex: 1,
+        fontSize: theme.typography.m,
+        fontWeight: theme.typography.medium,
+        color: theme.colors.textPrimary
+    },
+    segmentContainer: {
+        flexDirection: 'row',
+        backgroundColor: isDark ? theme.colors.background : theme.colors.accentLight + '40',
+        borderRadius: theme.borderRadius.m,
+        padding: 4,
+        marginTop: theme.spacing.m
+    },
+    segmentParam: {
+        flex: 1,
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderRadius: theme.borderRadius.s
+    },
+    segmentActive: {
+        backgroundColor: theme.colors.surface,
+        ...theme.shadows.small
+    },
+    segmentText: {
+        fontSize: theme.typography.s,
+        color: theme.colors.textSecondary,
+        fontWeight: theme.typography.medium
+    },
+    segmentTextActive: {
+        color: theme.colors.accent,
+        fontWeight: theme.typography.bold
     },
     modalOverlay: {
         flex: 1,

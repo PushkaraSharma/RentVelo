@@ -14,6 +14,7 @@ import { Calendar, Info, X } from 'lucide-react-native';
 import Button from '../common/Button';
 import Input from '../common/Input';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface RemoveTenantModalProps {
     visible: boolean;
@@ -38,6 +39,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
+    const insets = useSafeAreaInsets();
     const [showDatePicker, setShowDatePicker] = React.useState(false);
 
     return (
@@ -54,7 +56,6 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                     style={styles.keyboardView}
                 >
                     <View style={styles.modalContent}>
-                        <View style={styles.handle} />
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Remove Tenant</Text>
                             <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -106,7 +107,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                                 <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
                             </View>
 
-                            <View style={styles.modalActions}>
+                            <View style={[styles.modalActions, { paddingBottom: insets.bottom }]}>
                                 <Button
                                     title="Cancel"
                                     onPress={onClose}
@@ -138,7 +139,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-        maxHeight: '90%',
         paddingHorizontal: theme.spacing.m
     },
     dismissArea: {
@@ -161,7 +161,9 @@ const getStyles = (theme: any) => StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 20,
-        paddingHorizontal: theme.spacing.s
+        paddingHorizontal: theme.spacing.s,
+        paddingTop: theme.spacing.l
+
     },
     closeBtn: {
         padding: 4

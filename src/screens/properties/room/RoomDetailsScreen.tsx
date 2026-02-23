@@ -55,11 +55,11 @@ import ConfirmationModal from '../../../components/common/ConfirmationModal';
 export default function RoomDetailsScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
     const styles = getStyles(theme, isDark);
-    const { propertyId, unitId } = route.params;
+    const { propertyId, unitId, initialTab } = route.params;
     const [property, setProperty] = useState<any>(null);
     const [unit, setUnit] = useState<any>(null);
     const [tenants, setTenants] = useState<any[]>([]);
-    const [activeTab, setActiveTab] = useState<'info' | 'tenants'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'tenants'>(initialTab || 'info');
     const [refreshing, setRefreshing] = useState(false);
 
     // Modals
@@ -299,36 +299,40 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 title={unit?.name || 'Room Details'}
                 subTitle={property?.name}
                 rightAction={
-                    <Pressable onPress={() => setShowDeleteModal(true)} style={{ padding: 4 }}>
-                        <Trash2 size={24} color={theme.colors.danger} />
-                    </Pressable>
+                    property?.is_multi_unit !== false ? (
+                        <Pressable onPress={() => setShowDeleteModal(true)} style={{ padding: 4 }}>
+                            <Trash2 size={24} color={theme.colors.danger} />
+                        </Pressable>
+                    ) : null
                 }
             />
 
             {/* Tabs */}
-            <View style={styles.tabContainer}>
-                <Pressable
-                    style={[styles.tab, activeTab === 'info' && styles.activeTab]}
-                    onPress={() => setActiveTab('info')}
-                >
-                    <Info size={20} color={activeTab === 'info' ? theme.colors.accent : theme.colors.textTertiary} />
-                    <Text style={[styles.tabText, activeTab === 'info' && styles.activeTabText]}>Room Info</Text>
-                </Pressable>
-                <Pressable
-                    style={[styles.tab, activeTab === 'tenants' && styles.activeTab]}
-                    onPress={() => setActiveTab('tenants')}
-                >
-                    <User size={20} color={activeTab === 'tenants' ? theme.colors.accent : theme.colors.textTertiary} />
-                    <Text style={[styles.tabText, activeTab === 'tenants' && styles.activeTabText]}>Tenants</Text>
-                </Pressable>
-            </View>
+            {property?.is_multi_unit !== false && (
+                <View style={styles.tabContainer}>
+                    <Pressable
+                        style={[styles.tab, activeTab === 'info' && styles.activeTab]}
+                        onPress={() => setActiveTab('info')}
+                    >
+                        <Info size={20} color={activeTab === 'info' ? theme.colors.accent : theme.colors.textTertiary} />
+                        <Text style={[styles.tabText, activeTab === 'info' && styles.activeTabText]}>Room Info</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.tab, activeTab === 'tenants' && styles.activeTab]}
+                        onPress={() => setActiveTab('tenants')}
+                    >
+                        <User size={20} color={activeTab === 'tenants' ? theme.colors.accent : theme.colors.textTertiary} />
+                        <Text style={[styles.tabText, activeTab === 'tenants' && styles.activeTabText]}>Tenants</Text>
+                    </Pressable>
+                </View>
+            )}
 
             <ScrollView
                 contentContainerStyle={styles.content}
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             >
-                {activeTab === 'info' ? (
+                {activeTab === 'info' && property?.is_multi_unit !== false ? (
                     <View style={styles.infoSection}>
                         <View style={styles.infoCard}>
                             <Text style={styles.infoLabel}>Details</Text>

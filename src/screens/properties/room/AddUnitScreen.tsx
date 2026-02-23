@@ -11,6 +11,7 @@ import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-
 import Header from '../../../components/common/Header';
 import { createUnit, updateUnit, getUnitById } from '../../../db';
 import * as ImagePicker from 'expo-image-picker';
+import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 
 export default function AddUnitScreen({ navigation, route }: any) {
@@ -111,17 +112,12 @@ export default function AddUnitScreen({ navigation, route }: any) {
         }
     };
 
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsMultipleSelection: true,
+    const pickImage = () => {
+        handleImageSelection((uri) => setImages(prevImages => [...prevImages, uri]), {
+            allowsEditing: true,
+            aspect: [4, 3],
             quality: 0.8,
         });
-
-        if (!result.canceled) {
-            const newImages = result.assets.map(asset => asset.uri);
-            setImages([...images, ...newImages]);
-        }
     };
 
     const removeImage = (index: number) => {
