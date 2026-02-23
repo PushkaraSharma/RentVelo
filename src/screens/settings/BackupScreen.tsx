@@ -74,8 +74,17 @@ export default function BackupScreen({ navigation }: any) {
 
     const handleGoogleBackup = async () => {
         if (!isGoogleLinked) {
-            Alert.alert('Not Linked', 'Please connect your Google account first.');
-            return;
+            try {
+                const user = await signInWithGoogle();
+                if (user) {
+                    dispatch(linkGoogleAccount(user.email));
+                } else {
+                    return; // User cancelled or failed
+                }
+            } catch (error) {
+                Alert.alert('Sign-In Error', 'Could not link Google account.');
+                return;
+            }
         }
         setBackingUp(true);
         const success = await backupToGoogleDrive();

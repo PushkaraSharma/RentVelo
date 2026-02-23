@@ -121,19 +121,25 @@ export const getDashboardData = async (): Promise<DashboardData> => {
     const pendingBills = allBills.filter(b => b.status === 'pending' || b.status === 'partial');
     const pendingTenantCount = new Set(pendingBills.map(b => b.tenant_id)).size;
 
-    // --- Occupancy ---
-    const allUnits = await db.select().from(units);
-    const totalRooms = allUnits.length;
-    const activeTenantUnits = await db.select({ unitId: tenants.unit_id })
-        .from(tenants)
-        .where(eq(tenants.status, 'active'));
-    const occupiedIds = new Set(activeTenantUnits.map(t => t.unitId));
-    const occupiedCount = allUnits.filter(u => occupiedIds.has(u.id)).length;
-    const vacantCount = totalRooms - occupiedCount;
-
     // --- Pending properties (for property picker) ---
     const allProps = await db.select().from(properties);
     const pendingProperties: { id: number; name: string; pendingCount: number }[] = [];
+
+    // --- Occupancy ---
+    // Only count units that belong to an existing property
+    const propIds = new Set(allProps.map(p => p.id));
+    const allUnits = await db.select().from(units);
+    const validUnits = allUnits.filter(u => propIds.has(u.property_id));
+    const totalRooms = validUnits.length;
+
+    // Only count active tenants in valid properties
+    const activeTenantUnits = await db.select({ unitId: tenants.unit_id })
+        .from(tenants)
+        .where(and(eq(tenants.status, 'active')));
+
+    const occupiedIds = new Set(activeTenantUnits.map(t => t.unitId));
+    const occupiedCount = validUnits.filter(u => occupiedIds.has(u.id)).length;
+    const vacantCount = totalRooms - occupiedCount;
     for (const prop of allProps) {
         const count = pendingBills.filter(b => b.property_id === prop.id).length;
         if (count > 0) {

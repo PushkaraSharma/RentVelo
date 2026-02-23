@@ -11,6 +11,7 @@ import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { theme } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import * as Updates from 'expo-updates';
+import AppLockWrapper from './src/components/AppLockWrapper';
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
@@ -71,7 +72,9 @@ export default function App() {
     <Provider store={store}>
       <ThemeProvider>
         <SafeAreaProvider>
-          <RootNavigator />
+          <AppLockWrapper>
+            <RootNavigator />
+          </AppLockWrapper>
           <StatusBar style="auto" />
         </SafeAreaProvider>
       </ThemeProvider>

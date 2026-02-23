@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import { tenants, documents, Tenant, NewTenant, Document, NewDocument } from './schema';
+import { tenants, documents, properties, units, Tenant, NewTenant, Document, NewDocument } from './schema';
 import { eq, desc, and } from 'drizzle-orm';
 
 // Re-export types
@@ -8,7 +8,32 @@ export { Tenant, Document };
 // Create Tenant
 export const createTenant = async (tenant: NewTenant): Promise<number> => {
     const db = getDb();
-    const result = await db.insert(tenants).values(tenant).returning({ id: tenants.id });
+    let finalTenant = { ...tenant };
+
+    // If tenant has no unit_id, check if property is single_unit. 
+    // If so, get or create the "Main Property" unit.
+    if (!finalTenant.unit_id && finalTenant.property_id) {
+        const propRes = await db.select().from(properties).where(eq(properties.id, finalTenant.property_id)).limit(1);
+        const prop = propRes[0];
+
+        if (prop && prop.is_multi_unit === false) {
+            let propUnits = await db.select().from(units).where(eq(units.property_id, prop.id));
+            if (propUnits.length === 0) {
+                // Determine rent amount from tenant deposit or just 0 (will be updated later)
+                const newUnit = await db.insert(units).values({
+                    property_id: prop.id,
+                    name: 'Main Property',
+                    rent_amount: 0,
+                    rent_cycle: 'first_of_month',
+                }).returning({ id: units.id });
+                finalTenant.unit_id = newUnit[0].id;
+            } else {
+                finalTenant.unit_id = propUnits[0].id;
+            }
+        }
+    }
+
+    const result = await db.insert(tenants).values(finalTenant).returning({ id: tenants.id });
     return result[0].id;
 };
 
