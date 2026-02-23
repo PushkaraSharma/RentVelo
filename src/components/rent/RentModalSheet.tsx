@@ -35,7 +35,7 @@ export default function RentModalSheet({
 
     return (
         <Modal visible={visible} transparent animationType="fade">
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}>
                 <Pressable style={styles.overlay} onPress={onClose}>
                     <Pressable style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]} onPress={e => e.stopPropagation()}>
                         {/* Header */}

@@ -226,7 +226,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                         />
                         <Input
                             label="Account Holder Name"
-                            placeholder="e.g. Pushkara Sharma"
+                            placeholder="e.g. Adam"
                             value={bankAccHolder}
                             onChangeText={setBankAccHolder}
                         />
@@ -257,7 +257,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                         />
                         <Input
                             label="Wallet Name (Display)"
-                            placeholder="e.g. Pushkara Sharma"
+                            placeholder="e.g. Adam"
                             value={walletName}
                             onChangeText={setWalletName}
                         />

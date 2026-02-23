@@ -501,7 +501,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                             <View style={{ flex: 1, marginRight: theme.spacing.m }}>
                                 <Input
                                     label="Emergency Contact Name"
-                                    placeholder="e.g. Father/Partner"
+                                    placeholder="e.g. Father"
                                     value={emergencyName}
                                     onChangeText={setEmergencyName}
                                 />

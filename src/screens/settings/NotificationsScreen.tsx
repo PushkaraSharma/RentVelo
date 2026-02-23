@@ -143,7 +143,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                             value={prefs.rentDueDaysBefore}
                                             onSlidingComplete={(v) => updatePref('rentDueDaysBefore', v)}
                                             minimumTrackTintColor={theme.colors.accent}
-                                            maximumTrackTintColor={theme.colors.border}
+                                            maximumTrackTintColor={theme.colors.primary}
                                             thumbTintColor={theme.colors.accent}
                                         />
                                     </View>
@@ -172,7 +172,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                             value={prefs.overdueDaysAfter}
                                             onSlidingComplete={(v) => updatePref('overdueDaysAfter', v)}
                                             minimumTrackTintColor={theme.colors.danger}
-                                            maximumTrackTintColor={theme.colors.border}
+                                            maximumTrackTintColor={theme.colors.primary}
                                             thumbTintColor={theme.colors.danger}
                                         />
                                     </View>

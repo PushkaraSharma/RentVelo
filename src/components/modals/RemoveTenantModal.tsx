@@ -50,7 +50,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
             <View style={styles.modalOverlay}>
                 <Pressable style={styles.dismissArea} onPress={onClose} />
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
                     style={styles.keyboardView}
                 >
                     <View style={styles.modalContent}>
