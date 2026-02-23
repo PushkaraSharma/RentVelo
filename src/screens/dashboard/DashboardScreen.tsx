@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Bell } from 'lucide-react-native';
 import FinancialSummary from '../../components/dashboard/FinancialSummary';
@@ -10,6 +10,8 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../redux/store';
 import { getDashboardData, DashboardData, getUnreadNotificationCount } from '../../db';
 import { useFocusEffect } from '@react-navigation/native';
+import { storage } from '../../utils/storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -19,6 +21,7 @@ export default function DashboardScreen({ navigation }: any) {
     const [loading, setLoading] = useState(true);
     const [showPropertyPicker, setShowPropertyPicker] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [isPrivacyMode, setIsPrivacyMode] = useState(false);
 
     const loadDashboardData = async () => {
         try {
@@ -38,6 +41,12 @@ export default function DashboardScreen({ navigation }: any) {
     useFocusEffect(
         useCallback(() => {
             loadDashboardData();
+            try {
+                const privacy = storage.getString('@privacy_mode_enabled');
+                setIsPrivacyMode(privacy === 'true');
+            } catch (e) {
+                console.error('Failed to load privacy mode setting:', e);
+            }
         }, [])
     );
 
@@ -80,6 +89,7 @@ export default function DashboardScreen({ navigation }: any) {
                             expected={data.expected}
                             collected={data.collected}
                             onPress={() => (navigation as any).navigate('Payments')}
+                            isPrivacyMode={isPrivacyMode}
                         />
 
                         {/* Pending Alert */}
@@ -87,10 +97,11 @@ export default function DashboardScreen({ navigation }: any) {
                             amount={data.pending}
                             tenantCount={data.pendingTenantCount}
                             onSendReminders={() => setShowPropertyPicker(true)}
+                            isPrivacyMode={isPrivacyMode}
                         />
 
                         {/* Collection Trends */}
-                        <CollectionTrends trends={data.trends} />
+                        <CollectionTrends trends={data.trends} isPrivacyMode={isPrivacyMode} />
 
                         {/* Occupancy Insight */}
                         <View style={styles.occupancyCard}>

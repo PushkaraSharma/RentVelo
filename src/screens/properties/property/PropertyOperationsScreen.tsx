@@ -29,6 +29,7 @@ import {
     Receipt
 } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
+import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, deleteProperty } from '../../../db';
 
 const { width } = Dimensions.get('window');
@@ -41,6 +42,8 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
     const [units, setUnits] = useState<any[]>([]);
     const [activeTenant, setActiveTenant] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -65,22 +68,19 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
         }
     };
 
-    const handleDelete = () => {
-        Alert.alert(
-            'Delete Property',
-            'Are you sure you want to delete this property?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await deleteProperty(propertyId);
-                        navigation.goBack();
-                    }
-                }
-            ]
-        );
+    const handleDelete = async () => {
+        setIsDeleting(true);
+        try {
+            await deleteProperty(propertyId);
+            setShowDeleteModal(false);
+            navigation.goBack();
+            Alert.alert('Success', 'Property deleted successfully');
+        } catch (error) {
+            console.error('Error deleting property:', error);
+            Alert.alert('Error', 'Failed to delete property. Make sure it has no active rooms/tenants.');
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     if (loading) return null;
@@ -138,7 +138,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             <Header
                 title="Manage Property"
                 rightAction={
-                    <Pressable onPress={handleDelete} style={styles.deleteBtn}>
+                    <Pressable onPress={() => setShowDeleteModal(true)} style={styles.deleteBtn}>
                         <Trash2 size={24} color={theme.colors.danger} />
                     </Pressable>
                 }
@@ -236,6 +236,15 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
 
                 {/* <View style={{ height: 40 }} /> */}
             </ScrollView>
+
+            <ConfirmationModal
+                visible={showDeleteModal}
+                onClose={() => setShowDeleteModal(false)}
+                onConfirm={handleDelete}
+                title="Delete Property"
+                message={`Are you sure you want to delete ${property?.name}? This will delete all rooms and data associated with it. This action cannot be undone.`}
+                loading={isDeleting}
+            />
         </SafeAreaView>
     );
 }

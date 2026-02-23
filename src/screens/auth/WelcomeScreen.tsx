@@ -29,7 +29,7 @@ export default function WelcomeScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.iconContainer}>
-                    <Image source={require('../../assets/logo.png')} style={{ width: 60, height: 60, resizeMode: 'contain' }} />
+                    <Image source={isDark ? require('../../../assets/app-icon-dark.png') : require('../../../assets/app-icon.png')} style={{ width: 60, height: 60, resizeMode: 'contain' }} />
                 </View>
                 <Text style={styles.subtitle}>RentVelo</Text>
 

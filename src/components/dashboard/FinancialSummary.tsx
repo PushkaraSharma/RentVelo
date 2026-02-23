@@ -10,9 +10,10 @@ interface FinancialSummaryProps {
     expected: number;
     collected: number;
     onPress?: () => void;
+    isPrivacyMode?: boolean;
 }
 
-export default function FinancialSummary({ expected, collected, onPress }: FinancialSummaryProps) {
+export default function FinancialSummary({ expected, collected, onPress, isPrivacyMode }: FinancialSummaryProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const progress = expected ? Math.min((collected / expected) * 100, 100) : 0;
@@ -22,7 +23,9 @@ export default function FinancialSummary({ expected, collected, onPress }: Finan
             {/* Expected Card */}
             <View style={styles.card}>
                 <Text style={styles.label}>EXPECTED</Text>
-                <Text style={styles.amount}>{CURRENCY}{expected.toLocaleString()}</Text>
+                <Text style={styles.amount}>
+                    {isPrivacyMode ? `${CURRENCY} •••••` : `${CURRENCY}${expected.toLocaleString()}`}
+                </Text>
                 <View style={styles.badge}>
                     <TrendingUp size={12} color={theme.colors.accent} />
                     <Text style={styles.badgeText}>Monthly Target</Text>
@@ -34,7 +37,9 @@ export default function FinancialSummary({ expected, collected, onPress }: Finan
             {/* Collected Card */}
             <View style={styles.card}>
                 <Text style={styles.label}>COLLECTED</Text>
-                <Text style={styles.amount}>{CURRENCY}{collected.toLocaleString()}</Text>
+                <Text style={styles.amount}>
+                    {isPrivacyMode ? `${CURRENCY} •••••` : `${CURRENCY}${collected.toLocaleString()}`}
+                </Text>
                 <Text style={styles.progressLabel}>{Math.round(progress)}% Complete</Text>
 
                 {/* Progress Bar */}

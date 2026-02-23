@@ -34,7 +34,7 @@ export default function RentModalSheet({
     const insets = useSafeAreaInsets();
 
     return (
-        <Modal visible={visible} transparent animationType="slide">
+        <Modal visible={visible} transparent animationType="fade">
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <Pressable style={styles.overlay} onPress={onClose}>
                     <Pressable style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]} onPress={e => e.stopPropagation()}>
@@ -129,7 +129,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     actionBtnText: {
         fontSize: 15,
         fontWeight: theme.typography.bold,
-        color: '#FFF',
+        color: theme.colors.background,
         letterSpacing: 1,
     },
 });

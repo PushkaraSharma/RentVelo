@@ -13,14 +13,14 @@ const slides = [
         title: 'Automated Collections',
         description: 'Set up automated reminders for tenants and let our system handle rent calculations instantly. Never miss a payment again.',
         imagePlaceholder: 'Automated Collections UI',
-        image: require('../../assets/onboard-1.png'),
+        image: require('../../../assets/onboard-1.png'),
     },
     {
         id: 2,
         title: 'Manage with Ease',
         description: 'Track rent, units, and tenants in one simple command center. Experience property management reimagined.',
         imagePlaceholder: 'Building Image',
-        image: require('../../assets/onboard-2.png'),
+        image: require('../../../assets/onboard-2.png'),
     }
 ];
 

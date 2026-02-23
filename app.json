@@ -1,17 +1,12 @@
 {
   "expo": {
     "name": "RentVelo",
-    "slug": "RentVelo",
+    "slug": "rentvelo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/app-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.indieroots.rentVelo"
@@ -23,7 +18,13 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.indieroots.rentVelo"
+      "package": "com.indieroots.rentVelo",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "favicon": "./assets/app-icon.png"
@@ -37,7 +38,31 @@
         {
           "faceIDPermission": "Allow $(PRODUCT_NAME) to use Face ID."
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/app-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/app-icon-dark.png",
+            "backgroundColor": "#020617"
+          }
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c8a7eae9-aeb2-451d-82a9-96da5d1e627e"
+      }
+    },
+    "owner": "pushkara11",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c8a7eae9-aeb2-451d-82a9-96da5d1e627e"
+    }
   }
 }

@@ -39,7 +39,8 @@ import {
     getTenantsByUnitId,
     updateTenant,
     getAllProperties,
-    getUnitsByPropertyId
+    getUnitsByPropertyId,
+    deleteUnit
 } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import Button from '../../../components/common/Button';
@@ -49,6 +50,7 @@ import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import RemoveTenantModal from '../../../components/modals/RemoveTenantModal';
 import MoveTenantModal from '../../../components/modals/MoveTenantModal';
 import RentLedgerModal from '../../../components/modals/RentLedgerModal';
+import ConfirmationModal from '../../../components/common/ConfirmationModal';
 
 export default function RoomDetailsScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -77,6 +79,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     const [showPropertyPicker, setShowPropertyPicker] = useState(false);
     const [showUnitPicker, setShowUnitPicker] = useState(false);
     const [showLedgerModal, setShowLedgerModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const loadData = async () => {
         try {
@@ -202,6 +206,21 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
         }
     }, [targetPropertyId]);
 
+    const handleDeleteRoom = async () => {
+        setIsDeleting(true);
+        try {
+            await deleteUnit(unitId);
+            setShowDeleteModal(false);
+            navigation.goBack();
+            Alert.alert('Success', 'Room deleted successfully');
+        } catch (error) {
+            console.error('Error deleting room:', error);
+            Alert.alert('Error', 'Failed to delete room. Make sure it has no active tenants.');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     const renderTenantCard = (tenant: any, isActive: boolean) => (
         <Pressable
             key={tenant.id}
@@ -279,6 +298,11 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
             <Header
                 title={unit?.name || 'Room Details'}
                 subTitle={property?.name}
+                rightAction={
+                    <Pressable onPress={() => setShowDeleteModal(true)} style={{ padding: 4 }}>
+                        <Trash2 size={24} color={theme.colors.danger} />
+                    </Pressable>
+                }
             />
 
             {/* Tabs */}
@@ -442,6 +466,15 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 }))}
                 selectedValue={targetUnitId?.toString()}
                 onSelect={(val) => setTargetUnitId(parseInt(val))}
+            />
+
+            <ConfirmationModal
+                visible={showDeleteModal}
+                onClose={() => setShowDeleteModal(false)}
+                onConfirm={handleDeleteRoom}
+                title="Delete Room"
+                message={`Are you sure you want to delete ${unit?.name}? This action cannot be undone.`}
+                loading={isDeleting}
             />
         </SafeAreaView>
     );

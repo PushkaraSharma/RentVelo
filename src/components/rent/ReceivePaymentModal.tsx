@@ -85,7 +85,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
             onClose={onClose}
             title="Receive Payment"
             subtitle={unit?.name}
-            actionLabel="ADD AMOUNT"
+            actionLabel="Add Amount"
             onAction={handleAddPayment}
             actionDisabled={loading}
         >

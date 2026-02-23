@@ -35,7 +35,7 @@ const PickerBottomSheet: React.FC<PickerBottomSheetProps> = ({
         <Modal
             visible={visible}
             transparent
-            animationType="slide"
+            animationType="fade"
             onRequestClose={onClose}
         >
             <Pressable style={styles.overlay} onPress={onClose}>

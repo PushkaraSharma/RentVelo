@@ -6,7 +6,8 @@ import {
     Pressable,
     KeyboardAvoidingView,
     Platform,
-    Dimensions
+    Dimensions,
+    Modal
 } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, ChevronRight, X } from 'lucide-react-native';
@@ -46,101 +47,119 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
     const styles = getStyles(theme);
     const [showDatePicker, setShowDatePicker] = React.useState(false);
 
-    if (!visible) return null;
-
     return (
-        <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.keyboardView}
-            >
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Move Tenant</Text>
-                        <Pressable onPress={onClose}>
-                            <X size={24} color={theme.colors.textPrimary} />
+        <Modal
+            visible={visible}
+            transparent
+            animationType="fade"
+            onRequestClose={onClose}
+        >
+            <View style={styles.modalOverlay}>
+                <Pressable style={styles.dismissArea} onPress={onClose} />
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.keyboardView}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.handle} />
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Move Tenant</Text>
+                            <Pressable onPress={onClose} style={styles.closeBtn}>
+                                <X size={24} color={theme.colors.textPrimary} />
+                            </Pressable>
+                        </View>
+
+                        <Text style={styles.inputLabel}>Choose Property</Text>
+                        <Pressable style={styles.pickerTrigger} onPress={onPropertyPress}>
+                            <Text style={styles.pickerTriggerText}>
+                                {availableProperties.find(p => p.id === targetPropertyId)?.name || 'Select Property'}
+                            </Text>
+                            <ChevronRight size={20} color={theme.colors.textSecondary} />
                         </Pressable>
+
+                        <Text style={styles.inputLabel}>Target Room</Text>
+                        <Pressable style={styles.pickerTrigger} onPress={onUnitPress}>
+                            <Text style={styles.pickerTriggerText}>
+                                {availableUnits.find(u => u.id === targetUnitId)?.name || 'Select Room'}
+                            </Text>
+                            <ChevronRight size={20} color={theme.colors.textSecondary} />
+                        </Pressable>
+
+                        <Text style={[styles.inputLabel, { marginTop: 15 }]}>Move Date</Text>
+                        <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
+                            <Calendar size={20} color={theme.colors.accent} />
+                            <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
+                        </Pressable>
+
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={moveOutDate}
+                                mode="date"
+                                onChange={(event: any, date?: Date) => {
+                                    setShowDatePicker(false);
+                                    if (date) onDateChange(date);
+                                }}
+                            />
+                        )}
+
+                        <View style={styles.modalActions}>
+                            <Button
+                                title="Cancel"
+                                onPress={onClose}
+                                variant="outline"
+                                style={{ flex: 1, marginRight: 10 }}
+                            />
+                            <Button
+                                title="Move Tenant"
+                                onPress={onSubmit}
+                                style={{ flex: 1 }}
+                            />
+                        </View>
                     </View>
-
-                    <Text style={styles.inputLabel}>Choose Property</Text>
-                    <Pressable style={styles.pickerTrigger} onPress={onPropertyPress}>
-                        <Text style={styles.pickerTriggerText}>
-                            {availableProperties.find(p => p.id === targetPropertyId)?.name || 'Select Property'}
-                        </Text>
-                        <ChevronRight size={20} color={theme.colors.textSecondary} />
-                    </Pressable>
-
-                    <Text style={styles.inputLabel}>Target Room</Text>
-                    <Pressable style={styles.pickerTrigger} onPress={onUnitPress}>
-                        <Text style={styles.pickerTriggerText}>
-                            {availableUnits.find(u => u.id === targetUnitId)?.name || 'Select Room'}
-                        </Text>
-                        <ChevronRight size={20} color={theme.colors.textSecondary} />
-                    </Pressable>
-
-                    <Text style={[styles.inputLabel, { marginTop: 15 }]}>Move Date</Text>
-                    <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
-                        <Calendar size={20} color={theme.colors.accent} />
-                        <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
-                    </Pressable>
-
-                    {showDatePicker && (
-                        <DateTimePicker
-                            value={moveOutDate}
-                            mode="date"
-                            onChange={(event: any, date?: Date) => {
-                                setShowDatePicker(false);
-                                if (date) onDateChange(date);
-                            }}
-                        />
-                    )}
-
-                    <View style={styles.modalActions}>
-                        <Button
-                            title="Cancel"
-                            onPress={onClose}
-                            variant="outline"
-                            style={{ flex: 1, marginRight: 10 }}
-                        />
-                        <Button
-                            title="Move Tenant"
-                            onPress={onSubmit}
-                            style={{ flex: 1 }}
-                        />
-                    </View>
-                </View>
-            </KeyboardAvoidingView>
-        </View>
+                </KeyboardAvoidingView>
+            </View>
+        </Modal>
     );
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
     modalOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
-        zIndex: 1000
+    },
+    dismissArea: {
+        flex: 1,
     },
     keyboardView: {
         width: '100%'
     },
     modalContent: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-        padding: theme.spacing.m,
+        paddingHorizontal: theme.spacing.m,
         ...theme.shadows.medium
+    },
+    handle: {
+        width: 40,
+        height: 4,
+        backgroundColor: theme.colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginTop: 12,
+        marginBottom: 20
     },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20
+        marginBottom: 20,
+        paddingHorizontal: theme.spacing.s
+    },
+    closeBtn: {
+        padding: 4
     },
     modalTitle: {
         fontSize: 20,

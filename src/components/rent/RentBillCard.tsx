@@ -42,8 +42,8 @@ interface RentBillCardProps {
 
 export default function RentBillCard({ item, period, onRefresh, navigation, propertyId }: RentBillCardProps) {
     const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired } = item;
-    const { theme } = useAppTheme();
-    const styles = getStyles(theme);
+    const { theme, isDark } = useAppTheme();
+    const styles = getStyles(theme, isDark);
 
     // Modal states
     const [showRoomInfo, setShowRoomInfo] = useState(false);
@@ -232,7 +232,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         return (
             <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: theme.colors.warning }]}>
                 <View style={styles.vacantContent}>
-                    <View style={[styles.vacantIcon, { backgroundColor: '#FEF3C7' }]}>
+                    <View style={[styles.vacantIcon, { backgroundColor: theme.colors.warningLight }]}>
                         <User size={24} color={theme.colors.warning} />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -274,7 +274,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     // Status-based styling
     const isPaid = bill.status === 'paid' || bill.status === 'overpaid';
     const isPartial = bill.status === 'partial';
-    const statusColor = isPaid ? theme.colors.success : isPartial ? theme.colors.warning : theme.colors.danger;
+    const statusColor = isPaid ? theme.colors.success : theme.colors.danger;
     const hasElectricity = unit.is_metered || (unit.electricity_fixed_amount && unit.electricity_fixed_amount > 0);
     const isMetered = unit.is_metered;
 
@@ -372,7 +372,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
             {/* === ELECTRICITY SECTION (if applicable) === */}
             {hasElectricity && (
                 <View style={styles.electricityRow}>
-                    <Zap size={16} color="#F59E0B" />
+                    <Zap size={16} color={theme.colors.warning} />
                     {isMetered ? (
                         <View style={styles.meterRow}>
                             <Text style={styles.meterLabel}>Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}</Text>
@@ -512,7 +512,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                                 <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
                                 <Text style={[styles.swipeLabel, { color: bgColor, position: 'absolute' }]}>{label}</Text>
                                 <Animated.View
-                                    style={[styles.swipeThumb, { backgroundColor: bgColor, transform: [{ translateX: swipeAnim }] }]}
+                                    style={[styles.swipeThumb, { backgroundColor: isDark ? '#111827' : bgColor, transform: [{ translateX: swipeAnim }] }]}
                                     {...panResponder.panHandlers}
                                 >
                                     {hasPaid ? (
@@ -608,7 +608,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     );
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     card: {
         backgroundColor: theme.colors.surface,
         borderRadius: 20,
@@ -714,7 +714,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     electricityRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFBEB',
+        backgroundColor: theme.colors.warningLight,
         borderRadius: 12,
         padding: theme.spacing.s,
         marginBottom: theme.spacing.m,
@@ -851,14 +851,14 @@ const getStyles = (theme: any) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: '#FEF2F2',
+        backgroundColor: theme.colors.dangerLight,
         borderRadius: 12,
         paddingHorizontal: theme.spacing.m,
         paddingVertical: 10,
         marginBottom: theme.spacing.s,
     },
     balanceRowPaid: {
-        backgroundColor: '#ECFDF5',
+        backgroundColor: theme.colors.successLight,
     },
     balanceLabel: {
         fontSize: 14,
@@ -913,21 +913,21 @@ const getStyles = (theme: any) => StyleSheet.create({
     },
     // Locked Card Styles
     lockedCard: {
-        backgroundColor: '#F9FAFB',
-        borderColor: '#E5E7EB',
+        backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
+        borderColor: theme.colors.border,
     },
     lockedBanner: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: '#F3F4F6',
+        backgroundColor: isDark ? theme.colors.surface : '#F3F4F6',
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,
         alignSelf: 'flex-start',
         marginBottom: theme.spacing.m,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
+        borderColor: theme.colors.border,
     },
     lockedText: {
         fontSize: 11,
@@ -940,10 +940,10 @@ const getStyles = (theme: any) => StyleSheet.create({
         borderRadius: 4,
     },
     leaseBadgeMonthly: {
-        backgroundColor: '#E0F2FE', // Blue tint
+        backgroundColor: isDark ? theme.colors.accentLight : '#E0F2FE', // Blue tint
     },
     leaseBadgeFixed: {
-        backgroundColor: '#F3E8FF', // Purple tint
+        backgroundColor: isDark ? theme.colors.warningLight : '#F3E8FF', // Purple-ish / Amber tint
     },
     leaseBadgeText: {
         fontSize: 10,

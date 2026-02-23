@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Modal, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { X, Check, ChevronDown, ChevronUp, Share2 } from 'lucide-react-native';
 import Button from '../common/Button';
@@ -103,115 +103,132 @@ export default function RentLedgerModal({
     };
 
     return (
-        <View style={styles.overlay}>
-            <View style={styles.modalContainer}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.title}>Rent Ledger</Text>
-                    <Pressable onPress={onClose}>
-                        <X size={24} color={theme.colors.textPrimary} />
-                    </Pressable>
-                </View>
-
-                <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-                    {/* Included (always on) */}
-                    <Text style={styles.sectionLabel}>Included</Text>
-                    <View style={styles.includedRow}>
-                        <View style={styles.includedChip}>
-                            <Check size={14} color={theme.colors.accent} />
-                            <Text style={styles.includedText}>Room & Owner Details</Text>
-                        </View>
-                        <View style={styles.includedChip}>
-                            <Check size={14} color={theme.colors.accent} />
-                            <Text style={styles.includedText}>Tenant & Dates Details</Text>
-                        </View>
+        <Modal
+            visible={visible}
+            transparent
+            animationType="fade"
+            onRequestClose={onClose}
+        >
+            <View style={styles.overlay}>
+                <Pressable style={styles.dismissArea} onPress={onClose} />
+                <View style={styles.modalContainer}>
+                    <View style={styles.handle} />
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <Text style={styles.title}>Rent Ledger</Text>
+                        <Pressable onPress={onClose} style={styles.closeBtn}>
+                            <X size={24} color={theme.colors.textPrimary} />
+                        </Pressable>
                     </View>
 
-                    <View style={styles.divider} />
-
-                    {/* Optional */}
-                    <Text style={styles.sectionLabel}>Optional</Text>
-
-                    <CheckboxRow
-                        label="Tenant ID-Proof [ Images & PDF Only ]"
-                        value={includeIdProof}
-                        onToggle={() => setIncludeIdProof(!includeIdProof)}
-                    />
-
-                    <CheckboxRow
-                        label="Rent-Payment Transactions"
-                        value={includeTransactions}
-                        onToggle={() => setIncludeTransactions(!includeTransactions)}
-                    >
-                        {includeTransactions && (
-                            <View style={styles.radioGroup}>
-                                <RadioOption
-                                    label="Ascending Order"
-                                    selected={transactionOrder === 'asc'}
-                                    onPress={() => setTransactionOrder('asc')}
-                                />
-                                <RadioOption
-                                    label="Descending Order"
-                                    selected={transactionOrder === 'desc'}
-                                    onPress={() => setTransactionOrder('desc')}
-                                />
+                    <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+                        {/* Included (always on) */}
+                        <Text style={styles.sectionLabel}>Included</Text>
+                        <View style={styles.includedRow}>
+                            <View style={styles.includedChip}>
+                                <Check size={14} color={theme.colors.accent} />
+                                <Text style={styles.includedText}>Room & Owner Details</Text>
                             </View>
-                        )}
-                    </CheckboxRow>
+                            <View style={styles.includedChip}>
+                                <Check size={14} color={theme.colors.accent} />
+                                <Text style={styles.includedText}>Tenant & Dates Details</Text>
+                            </View>
+                        </View>
 
-                    <CheckboxRow
-                        label="Amenities & Facilities"
-                        value={includeAmenities}
-                        onToggle={() => setIncludeAmenities(!includeAmenities)}
-                    />
+                        <View style={styles.divider} />
 
-                    <CheckboxRow
-                        label="Terms & Conditions"
-                        value={includeTerms}
-                        onToggle={() => setIncludeTerms(!includeTerms)}
-                    />
+                        {/* Optional */}
+                        <Text style={styles.sectionLabel}>Optional</Text>
 
-                    <CheckboxRow
-                        label="Include Signature"
-                        value={includeSignature}
-                        onToggle={() => setIncludeSignature(!includeSignature)}
-                    />
-                </ScrollView>
+                        <CheckboxRow
+                            label="Tenant ID-Proof [ Images & PDF Only ]"
+                            value={includeIdProof}
+                            onToggle={() => setIncludeIdProof(!includeIdProof)}
+                        />
 
-                {/* Footer */}
-                <View style={styles.footer}>
-                    <Button
-                        title="Generate"
-                        onPress={handleGenerate}
-                        loading={generating}
-                        style={styles.generateBtn}
-                        icon={<Share2 size={18} color="#FFF" />}
-                    />
-                    <Text style={styles.footerNote}>
-                        Before generating, Make sure to save Everything
-                    </Text>
+                        <CheckboxRow
+                            label="Rent-Payment Transactions"
+                            value={includeTransactions}
+                            onToggle={() => setIncludeTransactions(!includeTransactions)}
+                        >
+                            {includeTransactions && (
+                                <View style={styles.radioGroup}>
+                                    <RadioOption
+                                        label="Ascending Order"
+                                        selected={transactionOrder === 'asc'}
+                                        onPress={() => setTransactionOrder('asc')}
+                                    />
+                                    <RadioOption
+                                        label="Descending Order"
+                                        selected={transactionOrder === 'desc'}
+                                        onPress={() => setTransactionOrder('desc')}
+                                    />
+                                </View>
+                            )}
+                        </CheckboxRow>
+
+                        <CheckboxRow
+                            label="Amenities & Facilities"
+                            value={includeAmenities}
+                            onToggle={() => setIncludeAmenities(!includeAmenities)}
+                        />
+
+                        <CheckboxRow
+                            label="Terms & Conditions"
+                            value={includeTerms}
+                            onToggle={() => setIncludeTerms(!includeTerms)}
+                        />
+
+                        <CheckboxRow
+                            label="Include Signature"
+                            value={includeSignature}
+                            onToggle={() => setIncludeSignature(!includeSignature)}
+                        />
+                    </ScrollView>
+
+                    {/* Footer */}
+                    <View style={styles.footer}>
+                        <Button
+                            title="Generate"
+                            onPress={handleGenerate}
+                            loading={generating}
+                            style={styles.generateBtn}
+                            icon={<Share2 size={18} color="#FFF" />}
+                        />
+                        <Text style={styles.footerNote}>
+                            Before generating, Make sure to save Everything
+                        </Text>
+                    </View>
                 </View>
             </View>
-        </View>
+        </Modal>
     );
 }
 
 const getStyles = (theme: any) => StyleSheet.create({
     overlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
     },
+    dismissArea: {
+        flex: 1,
+    },
     modalContainer: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: '80%',
-        paddingBottom: 20,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        maxHeight: '90%',
+        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    },
+    handle: {
+        width: 40,
+        height: 4,
+        backgroundColor: theme.colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginTop: 12,
+        marginBottom: 8
     },
     header: {
         flexDirection: 'row',
@@ -219,6 +236,9 @@ const getStyles = (theme: any) => StyleSheet.create({
         alignItems: 'center',
         padding: theme.spacing.l,
         paddingBottom: theme.spacing.m,
+    },
+    closeBtn: {
+        padding: 4
     },
     title: {
         fontSize: 22,

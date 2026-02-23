@@ -21,7 +21,8 @@ import {
     Share2
 } from 'lucide-react-native';
 import Toggle from '../../components/common/Toggle';
-import Header from '../../components/common/Header';
+import Constants from 'expo-constants';
+import { OTA_VERSION } from '../../utils/Constants';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -160,9 +161,9 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={styles.logoutWrapper}>
                     <Pressable style={styles.logoutBtn} onPress={handleLogout}>
                         <LogOut size={20} color={theme.colors.danger} />
-                        <Text style={styles.logoutText}>Log Out Account</Text>
+                        <Text style={styles.logoutText}>Log Out</Text>
                     </Pressable>
-                    <Text style={styles.version}>RentVelo v1.1.0 • Made with ❤️</Text>
+                    <Text style={styles.version}>RentVelo v{Constants.expoConfig?.version}_{OTA_VERSION} • Made with ❤️</Text>
                 </View>
             </ScrollView>
         </SafeAreaView>

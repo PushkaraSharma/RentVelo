@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { X, Trash2 } from 'lucide-react-native';
 import SignatureScreen from 'react-native-signature-canvas';
@@ -16,6 +16,7 @@ interface SignatureModalProps {
 
 export default function SignatureModal({ visible, onClose, onSave, propertyId }: SignatureModalProps) {
     const signatureRef = useRef<any>(null);
+    const insets = useSafeAreaInsets();
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
 
@@ -42,10 +43,10 @@ export default function SignatureModal({ visible, onClose, onSave, propertyId }:
     return (
         <Modal
             visible={visible}
-            animationType="slide"
+            animationType="fade"
             onRequestClose={onClose}
         >
-            <SafeAreaView style={styles.signatureContainer} edges={['top', 'bottom']}>
+            <View style={[styles.signatureContainer, { paddingTop: insets.top }]}>
                 <View style={styles.signatureHeader}>
                     <Pressable onPress={onClose}>
                         <X size={24} color={theme.colors.textPrimary} />
@@ -66,7 +67,7 @@ export default function SignatureModal({ visible, onClose, onSave, propertyId }:
                     />
                 </View>
 
-                <View style={styles.signatureFooter}>
+                <View style={[styles.signatureFooter, { paddingBottom: insets.bottom }]}>
                     <Button
                         title="Clear"
                         onPress={() => signatureRef.current?.clearSignature()}
@@ -79,7 +80,7 @@ export default function SignatureModal({ visible, onClose, onSave, propertyId }:
                         style={{ flex: 1 }}
                     />
                 </View>
-            </SafeAreaView>
+            </View>
         </Modal>
     );
 }

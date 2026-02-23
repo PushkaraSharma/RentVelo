@@ -14,13 +14,14 @@ interface TrendItem {
 
 interface CollectionTrendsProps {
     trends: TrendItem[];
+    isPrivacyMode?: boolean;
 }
 
 const CHART_HEIGHT = 140;
 const BAR_WIDTH = 20;
 const BAR_GAP = 6;
 
-export default function CollectionTrends({ trends }: CollectionTrendsProps) {
+export default function CollectionTrends({ trends, isPrivacyMode }: CollectionTrendsProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const maxVal = Math.max(...trends.map(t => Math.max(t.expected, t.collected)), 1);
@@ -106,7 +107,9 @@ export default function CollectionTrends({ trends }: CollectionTrendsProps) {
                     <Text style={styles.statLabel}>Best Month</Text>
                 </View>
                 <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{CURRENCY}{(totalCollected / 1000).toFixed(1)}K</Text>
+                    <Text style={styles.statValue}>
+                        {isPrivacyMode ? `${CURRENCY} •••` : `${CURRENCY}${(totalCollected / 1000).toFixed(1)}K`}
+                    </Text>
                     <Text style={styles.statLabel}>YTD Collected</Text>
                 </View>
             </View>

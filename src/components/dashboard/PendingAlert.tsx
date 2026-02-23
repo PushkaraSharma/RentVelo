@@ -8,9 +8,10 @@ interface PendingAlertProps {
     amount: number;
     tenantCount: number;
     onSendReminders: () => void;
+    isPrivacyMode?: boolean;
 }
 
-export default function PendingAlert({ amount, tenantCount, onSendReminders }: PendingAlertProps) {
+export default function PendingAlert({ amount, tenantCount, onSendReminders, isPrivacyMode }: PendingAlertProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     return (
@@ -24,7 +25,9 @@ export default function PendingAlert({ amount, tenantCount, onSendReminders }: P
                 </View>
             </View>
 
-            <Text style={styles.amount}>{CURRENCY}{amount.toLocaleString()}</Text>
+            <Text style={styles.amount}>
+                {isPrivacyMode ? `${CURRENCY} •••••` : `${CURRENCY}${amount.toLocaleString()}`}
+            </Text>
             <Text style={styles.description}>Outstanding from {tenantCount} tenants</Text>
 
             <View style={styles.actionRow}>

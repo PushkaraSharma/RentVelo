@@ -47,78 +47,82 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
             animationType="fade"
             onRequestClose={onClose}
         >
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.modalOverlay}
-            >
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Remove Tenant</Text>
-                        <Pressable onPress={onClose}>
-                            <X size={24} color={theme.colors.textPrimary} />
-                        </Pressable>
+            <View style={styles.modalOverlay}>
+                <Pressable style={styles.dismissArea} onPress={onClose} />
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.keyboardView}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.handle} />
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Remove Tenant</Text>
+                            <Pressable onPress={onClose} style={styles.closeBtn}>
+                                <X size={24} color={theme.colors.textPrimary} />
+                            </Pressable>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            <View style={styles.statRow}>
+                                <View style={styles.statBox}>
+                                    <Text style={styles.statLabel}>Security Deposit</Text>
+                                    <Text style={styles.statValue}>₹ {tenant?.security_deposit || 0}</Text>
+                                </View>
+                                <View style={styles.statBox}>
+                                    <Text style={styles.statLabel}>Balance Left</Text>
+                                    <Text style={[styles.statValue, { color: (tenant?.balance_amount || 0) > 0 ? '#EF4444' : '#10B981' }]}>
+                                        ₹ {tenant?.balance_amount || 0}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <Input
+                                label="Return Amount (Refund)"
+                                value={refundAmount}
+                                onChangeText={onRefundAmountChange}
+                                keyboardType="numeric"
+                                placeholder="Enter amount to return"
+                            />
+
+                            <Text style={styles.inputLabel}>Move-out Date</Text>
+                            <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
+                                <Calendar size={20} color={theme.colors.accent} />
+                                <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
+                            </Pressable>
+
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={moveOutDate}
+                                    mode="date"
+                                    onChange={(event: any, date?: Date) => {
+                                        setShowDatePicker(false);
+                                        if (date) onDateChange(date);
+                                    }}
+                                />
+                            )}
+
+                            <View style={styles.noteBox}>
+                                <Info size={16} color={theme.colors.textSecondary} />
+                                <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
+                            </View>
+
+                            <View style={styles.modalActions}>
+                                <Button
+                                    title="Cancel"
+                                    onPress={onClose}
+                                    variant="outline"
+                                    style={{ flex: 1, marginRight: 10 }}
+                                />
+                                <Button
+                                    title="Remove"
+                                    onPress={onSubmit}
+                                    style={{ flex: 1, backgroundColor: '#EF4444' }}
+                                />
+                            </View>
+                        </ScrollView>
                     </View>
-
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                        <View style={styles.statRow}>
-                            <View style={styles.statBox}>
-                                <Text style={styles.statLabel}>Security Deposit</Text>
-                                <Text style={styles.statValue}>₹ {tenant?.security_deposit || 0}</Text>
-                            </View>
-                            <View style={styles.statBox}>
-                                <Text style={styles.statLabel}>Balance Left</Text>
-                                <Text style={[styles.statValue, { color: (tenant?.balance_amount || 0) > 0 ? '#EF4444' : '#10B981' }]}>
-                                    ₹ {tenant?.balance_amount || 0}
-                                </Text>
-                            </View>
-                        </View>
-
-                        <Input
-                            label="Return Amount (Refund)"
-                            value={refundAmount}
-                            onChangeText={onRefundAmountChange}
-                            keyboardType="numeric"
-                            placeholder="Enter amount to return"
-                        />
-
-                        <Text style={styles.inputLabel}>Move-out Date</Text>
-                        <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
-                            <Calendar size={20} color={theme.colors.accent} />
-                            <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
-                        </Pressable>
-
-                        {showDatePicker && (
-                            <DateTimePicker
-                                value={moveOutDate}
-                                mode="date"
-                                onChange={(event: any, date?: Date) => {
-                                    setShowDatePicker(false);
-                                    if (date) onDateChange(date);
-                                }}
-                            />
-                        )}
-
-                        <View style={styles.noteBox}>
-                            <Info size={16} color={theme.colors.textSecondary} />
-                            <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <Button
-                                title="Cancel"
-                                onPress={onClose}
-                                variant="outline"
-                                style={{ flex: 1, marginRight: 10 }}
-                            />
-                            <Button
-                                title="Remove"
-                                onPress={onSubmit}
-                                style={{ flex: 1, backgroundColor: '#EF4444' }}
-                            />
-                        </View>
-                    </ScrollView>
-                </View>
-            </KeyboardAvoidingView>
+                </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 };
@@ -131,17 +135,36 @@ const getStyles = (theme: any) => StyleSheet.create({
     },
     modalContent: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
         paddingBottom: Platform.OS === 'ios' ? 40 : 20,
         maxHeight: '90%',
-        padding: theme.spacing.m
+        paddingHorizontal: theme.spacing.m
+    },
+    dismissArea: {
+        flex: 1,
+    },
+    keyboardView: {
+        width: '100%'
+    },
+    handle: {
+        width: 40,
+        height: 4,
+        backgroundColor: theme.colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginTop: 12,
+        marginBottom: 20
     },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20
+        marginBottom: 20,
+        paddingHorizontal: theme.spacing.s
+    },
+    closeBtn: {
+        padding: 4
     },
     modalTitle: {
         fontSize: 20,

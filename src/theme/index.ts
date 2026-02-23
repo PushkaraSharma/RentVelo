@@ -41,9 +41,9 @@ export const darkColors: ThemeColors = {
   success: '#34D399', // Lighter Green
   warning: '#FBBF24', // Lighter Amber
   danger: '#F87171', // Lighter Red
-  dangerLight: '#7F1D1D', // Dark red background
+  dangerLight: '#480d0dff', // Dark red background
   successLight: '#064E3B', // Dark green background
-  warningLight: '#78350F', // Dark amber background
+  warningLight: '#391906ff', // Dark amber background
 
   // Text
   textPrimary: '#F9FAFB', // Almost white
