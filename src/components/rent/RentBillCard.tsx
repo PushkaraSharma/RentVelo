@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
@@ -6,14 +6,16 @@ import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send, Lock } from 'l
 import {
     updateBill, recalculateBill,
     getBillExpenses, getBillPayments,
-    getReceiptConfigByPropertyId, getPropertyById
+    getReceiptConfigByPropertyId, getPropertyById, getTenantById, getUnitById
 } from '../../db';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { generateRentReceiptHTML } from '../../utils/rentReceiptTemplate';
 import { generateRentReminderHTML } from '../../utils/rentReminderTemplate';
 import { WebView } from 'react-native-webview';
 import ViewShot from 'react-native-view-shot';
+import { hapticsLight, hapticsMedium } from '../../utils/haptics';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -56,6 +58,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
 
     // Local state for metered reading
     const [meterReading, setMeterReading] = useState(bill?.curr_reading?.toString() || '');
+    const [meterFocused, setMeterFocused] = useState(false);
     const [generatingReceipt, setGeneratingReceipt] = useState(false);
     const [sendingReminder, setSendingReminder] = useState(false);
 
@@ -70,15 +73,39 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder' } | null>(null);
     const viewShotRef = useRef<any>(null);
 
+    // B12: Fix image loading in WebView by converting local files to base64
+    const getBase64Image = async (uri: string) => {
+        if (!uri) return '';
+        if (uri.startsWith('data:') || uri.startsWith('http')) return uri;
+        try {
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            const extension = uri.split('.').pop() || 'png';
+            return `data:image/${extension};base64,${base64}`;
+        } catch (e) {
+            console.error('Error converting image to base64:', e);
+            return uri;
+        }
+    };
+
     const generateAndShareReceipt = async (format: 'PDF' | 'Image') => {
         setGeneratingReceipt(true);
         try {
-            const [payments, expenses, receiptConfig, property] = await Promise.all([
+            const [payments, freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillPayments(bill.id),
                 getBillExpenses(bill.id),
                 getReceiptConfigByPropertyId(propertyId),
                 getPropertyById(propertyId),
             ]);
+
+            // B12: Convert images to base64 for WebView/ViewShot capture
+            if (format === 'Image' && receiptConfig) {
+                if (receiptConfig.logo_uri) {
+                    receiptConfig.logo_uri = await getBase64Image(receiptConfig.logo_uri);
+                }
+                if (receiptConfig.payment_qr_uri) {
+                    receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+            }
 
             const html = generateRentReceiptHTML({
                 property,
@@ -86,7 +113,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 tenant,
                 bill,
                 payments,
-                expenses,
+                expenses: freshExpenses,
                 receiptConfig,
                 period,
             });
@@ -117,18 +144,28 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const generateAndShareReminder = async (format: 'PDF' | 'Image') => {
         setSendingReminder(true);
         try {
-            const [expenses, receiptConfig, property] = await Promise.all([
+            const [freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillExpenses(bill.id),
                 getReceiptConfigByPropertyId(propertyId),
                 getPropertyById(propertyId),
             ]);
+
+            // B12: Convert images to base64 for WebView/ViewShot capture
+            if (format === 'Image' && receiptConfig) {
+                if (receiptConfig.logo_uri) {
+                    receiptConfig.logo_uri = await getBase64Image(receiptConfig.logo_uri);
+                }
+                if (receiptConfig.payment_qr_uri) {
+                    receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+            }
 
             const html = generateRentReminderHTML({
                 property,
                 unit,
                 tenant,
                 bill,
-                expenses,
+                expenses: freshExpenses,
                 receiptConfig,
                 period,
             });
@@ -297,6 +334,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         const rate = unit.electricity_rate ?? 0;
         const electricityAmount = unitsUsed * rate;
 
+        hapticsLight();
         await updateBill(bill.id, {
             curr_reading: newReading,
             prev_reading: prevReading,
@@ -306,14 +344,20 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         onRefresh();
     };
 
-    // Handle save (for meter reading auto-save on blur)
-    const handleMeterSave = async () => {
-        if (isMetered && meterReading) {
-            await handleMeterReadingSave();
+    // Live calculation for electricity amount based on current input text
+    const liveElectricityAmount = React.useMemo(() => {
+        const val = parseFloat(meterReading);
+        if (isNaN(val)) return bill.electricity_amount ?? 0;
+        const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
+        return Math.max(0, val - prev) * (unit.electricity_rate ?? 0);
+    }, [meterReading, bill.prev_reading, bill.electricity_amount, unit.initial_electricity_reading, unit.electricity_rate]);
+
+    // B12: Sync meter reading from prop changes ONLY when user is not typing
+    React.useEffect(() => {
+        if (!meterFocused && bill?.curr_reading !== undefined && bill?.curr_reading !== null) {
+            setMeterReading(bill.curr_reading.toString());
         }
-        // B12: handleMeterReadingSave already calls recalculateBill, no need to call again
-        onRefresh();
-    };
+    }, [bill?.curr_reading]);
 
     const formatAmount = (amt: number) => {
         if (amt === undefined || amt === null) return `${CURRENCY}0`;
@@ -381,13 +425,16 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                                 style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
                                 value={meterReading}
                                 onChangeText={setMeterReading}
-                                onBlur={handleMeterReadingSave}
+                                onFocus={() => setMeterFocused(true)}
+                                onBlur={() => { setMeterFocused(false); handleMeterReadingSave(); }}
+                                onSubmitEditing={() => { setMeterFocused(false); handleMeterReadingSave(); }}
                                 keyboardType="numeric"
                                 placeholder="New"
                                 placeholderTextColor={theme.colors.textTertiary}
                                 editable={!isLocked}
+                                returnKeyType="done"
                             />
-                            <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
+                            <Text style={styles.electricityAmt}>{formatAmount(liveElectricityAmount)}</Text>
                         </View>
                     ) : (
                         <Pressable
@@ -474,6 +521,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                     },
                     onPanResponderRelease: (_, gestureState) => {
                         if (gestureState.dx > SWIPE_THRESHOLD) {
+                            hapticsMedium();
                             Animated.timing(swipeAnim, {
                                 toValue: TRACK_WIDTH - 48,
                                 duration: 150,
@@ -535,13 +583,26 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
             )}
 
             {/* Hidden WebView for capturing as Image */}
+            {/* A4 at 96dpi = 794 × 1123 px. We render at this size so mm-based CSS fits correctly. */}
             {shareHtml && (
                 <View style={styles.hiddenViewShotContainer} pointerEvents="none">
-                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
+                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1, width: 794, height: 1123 }}>
                         <WebView
                             source={{ html: shareHtml.html }}
-                            style={{ width: 595, height: 842 }}
+                            style={{ width: 794, height: 1123 }}
                             onLoadEnd={handleCaptureImage}
+                            originWhitelist={['*']}
+                            allowFileAccess={true}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            scalesPageToFit={false}
+                            injectedJavaScript={`
+                                const meta = document.createElement('meta');
+                                meta.name = 'viewport';
+                                meta.content = 'width=794';
+                                document.head.appendChild(meta);
+                                true;
+                            `}
                         />
                     </ViewShot>
                 </View>

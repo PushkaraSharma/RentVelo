@@ -186,6 +186,8 @@ const getStyles = (theme: any) => StyleSheet.create({
         marginBottom: 15
     },
     pickerTriggerText: {
+        flex: 1,
+        paddingRight: 4,
         fontSize: 16,
         color: theme.colors.textPrimary
     },
@@ -201,6 +203,8 @@ const getStyles = (theme: any) => StyleSheet.create({
         marginBottom: 20
     },
     datePickerText: {
+        flex: 1,
+        paddingRight: 4,
         fontSize: 16,
         color: theme.colors.textPrimary
     },

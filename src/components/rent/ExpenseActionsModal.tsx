@@ -7,6 +7,7 @@ import { addExpenseToBill, recalculateBill } from '../../db';
 import Toggle from '../common/Toggle';
 import PickerBottomSheet from '../common/PickerBottomSheet';
 import RentModalSheet from './RentModalSheet';
+import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
 
 interface ExpenseActionsModalProps {
     visible: boolean;
@@ -35,7 +36,10 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
 
     const handleSubmit = async () => {
         const amt = parseFloat(amount);
-        if (isNaN(amt) || amt <= 0) return;
+        if (isNaN(amt) || amt <= 0) {
+            hapticsError();
+            return;
+        }
 
         const finalAmount = actionType === 'remove' ? -amt : amt;
 
@@ -53,6 +57,7 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
             is_recurring: isRecurring,
         });
 
+        hapticsMedium();
         await recalculateBill(bill.id);
         setLabel('');
         setRemarks('');
@@ -76,14 +81,14 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
             <View style={styles.toggleRow}>
                 <Pressable
                     style={[styles.toggleBtn, actionType === 'add' && styles.toggleBtnActive]}
-                    onPress={() => setActionType('add')}
+                    onPress={() => { hapticsSelection(); setActionType('add'); }}
                 >
                     <Plus size={16} color={actionType === 'add' ? '#FFF' : theme.colors.textSecondary} />
                     <Text style={[styles.toggleText, actionType === 'add' && styles.toggleTextActive]}>Add</Text>
                 </Pressable>
                 <Pressable
                     style={[styles.toggleBtn, actionType === 'remove' && styles.toggleBtnRemove]}
-                    onPress={() => setActionType('remove')}
+                    onPress={() => { hapticsSelection(); setActionType('remove'); }}
                 >
                     <Minus size={16} color={actionType === 'remove' ? '#FFF' : theme.colors.textSecondary} />
                     <Text style={[styles.toggleText, actionType === 'remove' && styles.toggleTextActive]}>Remove</Text>

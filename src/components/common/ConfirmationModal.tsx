@@ -11,6 +11,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { Trash2, AlertTriangle, X } from 'lucide-react-native';
 import Button from './Button';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { hapticsError, hapticsHeavy } from '../../utils/haptics';
 
 interface ConfirmationModalProps {
     visible: boolean;
@@ -81,7 +82,10 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                         />
                         <Button
                             title={confirmText}
-                            onPress={onConfirm}
+                            onPress={() => {
+                                variant === 'danger' ? hapticsHeavy() : hapticsError();
+                                onConfirm();
+                            }}
                             variant="primary"
                             style={StyleSheet.flatten([
                                 styles.actionBtn,

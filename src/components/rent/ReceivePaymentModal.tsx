@@ -7,6 +7,7 @@ import { addPaymentToBill } from '../../db';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
+import { hapticsSelection, hapticsSuccess, hapticsError } from '../../utils/haptics';
 
 interface ReceivePaymentModalProps {
     visible: boolean;
@@ -37,7 +38,10 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
 
     const handleAddPayment = async () => {
         const amt = parseFloat(amount);
-        if (isNaN(amt) || amt <= 0) return;
+        if (isNaN(amt) || amt <= 0) {
+            hapticsError();
+            return;
+        }
 
         setLoading(true);
         try {
@@ -51,12 +55,14 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 tenant_id: bill.tenant_id,
                 unit_id: bill.unit_id,
             });
+            hapticsSuccess();
             setAmount('');
             setRemarks('');
             setPhotoUri(null);
             setPaymentDate(new Date());
             onClose();
         } catch (err) {
+            hapticsError();
             console.error('Error adding payment:', err);
         } finally {
             setLoading(false);
@@ -104,7 +110,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                     <Pressable
                         key={m.id}
                         style={[styles.methodChip, method === m.id && { backgroundColor: m.color + '15', borderColor: m.color }]}
-                        onPress={() => setMethod(m.id)}
+                        onPress={() => { hapticsSelection(); setMethod(m.id); }}
                     >
                         <m.icon size={16} color={method === m.id ? m.color : theme.colors.textTertiary} />
                         <Text style={[styles.methodText, method === m.id && { color: m.color }]}>{m.label}</Text>
