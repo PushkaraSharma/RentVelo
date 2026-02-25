@@ -10,7 +10,6 @@ import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
 import { createUnit, updateUnit, getUnitById } from '../../../db';
-import * as ImagePicker from 'expo-image-picker';
 import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 

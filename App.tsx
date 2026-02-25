@@ -13,6 +13,7 @@ import { ThemeProvider } from './src/theme/ThemeContext';
 import * as Updates from 'expo-updates';
 import AppLockWrapper from './src/components/AppLockWrapper';
 import AutoBackupHandler from './src/components/AutoBackupHandler';
+import { migrateOldImagesToPermanentStorage } from './src/services/imageMigrationService';
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
@@ -37,6 +38,13 @@ export default function App() {
       onFetchUpdateAsync();
     }
   }, []);
+
+  React.useEffect(() => {
+    if (success) {
+      // Run once on initial db success to fix any legacy temporary image URIs
+      migrateOldImagesToPermanentStorage();
+    }
+  }, [success]);
 
   if (!success && !error) {
     return (

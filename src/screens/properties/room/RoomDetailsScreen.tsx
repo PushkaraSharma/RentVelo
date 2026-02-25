@@ -51,6 +51,7 @@ import RemoveTenantModal from '../../../components/modals/RemoveTenantModal';
 import MoveTenantModal from '../../../components/modals/MoveTenantModal';
 import RentLedgerModal from '../../../components/modals/RentLedgerModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import { getFullImageUri } from '../../../services/imageService';
 
 export default function RoomDetailsScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -232,7 +233,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
         >
             <View style={styles.tenantPhotoContainer}>
                 {tenant.photo_uri ? (
-                    <Image source={{ uri: tenant.photo_uri }} style={styles.tenantPhoto} />
+                    <Image source={{ uri: getFullImageUri(tenant.photo_uri) || tenant.photo_uri }} style={styles.tenantPhoto} />
                 ) : (
                     <View style={styles.tenantPhotoPlaceholder}>
                         <User size={24} color={theme.colors.textTertiary} />

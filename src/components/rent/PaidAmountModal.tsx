@@ -5,6 +5,7 @@ import { CURRENCY } from '../../utils/Constants';
 import { Plus, Banknote, Trash2, Image as ImageIcon, X } from 'lucide-react-native';
 import { getBillPayments, removePaymentFromBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
+import { getFullImageUri } from '../../services/imageService';
 
 interface PaidAmountModalProps {
     visible: boolean;
@@ -37,7 +38,7 @@ export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPay
     const formatDate = (d: any) => {
         if (!d) return '';
         const date = new Date(d);
-        return `${date.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()]}, ${date.getFullYear().toString().slice(-2)}`;
+        return `${date.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()]}, ${date.getFullYear().toString().slice(-2)} `;
     };
 
     const totalPaid = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -62,7 +63,7 @@ export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPay
                         keyExtractor={(item) => item.id.toString()}
                         scrollEnabled={false}
                         renderItem={({ item }) => {
-                            const imageUrl = item.receipt_url || item.photo_uri;
+                            const imageUrl = item.receipt_url ? item.receipt_url : getFullImageUri(item.photo_uri);
                             return (
                                 <View style={styles.paymentItem}>
                                     <View style={styles.paymentIcon}>
