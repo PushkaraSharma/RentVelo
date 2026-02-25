@@ -419,7 +419,9 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                     <Zap size={16} color={theme.colors.warning} />
                     {isMetered ? (
                         <View style={styles.meterRow}>
-                            <Text style={styles.meterLabel}>Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}</Text>
+                            <Text style={styles.meterLabel} numberOfLines={1}>
+                                Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}
+                            </Text>
                             <Text style={styles.meterArrow}>→</Text>
                             <TextInput
                                 style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
@@ -780,15 +782,18 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
     },
     meterLabel: {
         fontSize: 12,
         color: theme.colors.textSecondary,
+        flexShrink: 0,
+        minWidth: 60,
     },
     meterArrow: {
         fontSize: 14,
         color: theme.colors.textTertiary,
+        flexShrink: 0,
     },
     meterInput: {
         backgroundColor: theme.colors.surface,
@@ -798,9 +803,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 15,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-        minWidth: 60,
+        minWidth: 68,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        flexShrink: 1,
     },
     fixedElecRow: {
         flex: 1,

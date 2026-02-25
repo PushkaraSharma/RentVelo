@@ -217,6 +217,8 @@ const getStyles = (theme: any) => StyleSheet.create({
         fontSize: 14,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
+        flexShrink: 1,
+        textAlign: 'center',
     },
     contactSection: {
         marginBottom: theme.spacing.m,

@@ -194,7 +194,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     statValue: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: theme.colors.textPrimary
+        color: theme.colors.textPrimary,
+        flexShrink: 1,
     },
     inputLabel: {
         fontSize: 14,
