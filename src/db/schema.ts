@@ -34,6 +34,7 @@ export const units = sqliteTable('units', {
     electricity_rate: real('electricity_rate'),
     electricity_fixed_amount: real('electricity_fixed_amount'),
     initial_electricity_reading: real('initial_electricity_reading'),
+    electricity_default_units: real('electricity_default_units'),
     water_rate: real('water_rate'),
     water_fixed_amount: real('water_fixed_amount'),
     initial_water_reading: real('initial_water_reading'),

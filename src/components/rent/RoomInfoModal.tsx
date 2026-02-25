@@ -116,9 +116,14 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                     </Pressable>
 
                     {/* Meter Info */}
-                    {unit.is_metered && unit.initial_electricity_reading !== null && (
+                    {unit.is_metered && (
                         <View style={styles.meterRow}>
-                            <Text style={styles.meterText}>⚡ Meter No: {unit.initial_electricity_reading}</Text>
+                            {unit.initial_electricity_reading !== null && (
+                                <Text style={styles.meterText}>⚡ Meter No: {unit.initial_electricity_reading}</Text>
+                            )}
+                            {unit.electricity_default_units !== null && unit.electricity_default_units > 0 && (
+                                <Text style={styles.meterText}>Min Units: {unit.electricity_default_units}</Text>
+                            )}
                         </View>
                     )}
                 </Pressable>

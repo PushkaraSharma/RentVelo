@@ -324,13 +324,28 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         return diff > 1;
     })();
 
+    const [meterReadingError, setMeterReadingError] = useState('');
+
     // Handle meter reading change
     const handleMeterReadingSave = async () => {
         const newReading = parseFloat(meterReading);
         if (isNaN(newReading)) return;
 
         const prevReading = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
-        const unitsUsed = Math.max(0, newReading - prevReading);
+
+        if (newReading < prevReading) {
+            setMeterReadingError(`Cannot be less than old reading (${prevReading})`);
+            return;
+        } else {
+            setMeterReadingError('');
+        }
+
+        let unitsUsed = Math.max(0, newReading - prevReading);
+        const defaultUnits = unit.electricity_default_units;
+        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+            unitsUsed = defaultUnits;
+        }
+
         const rate = unit.electricity_rate ?? 0;
         const electricityAmount = unitsUsed * rate;
 
@@ -349,8 +364,17 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         const val = parseFloat(meterReading);
         if (isNaN(val)) return bill.electricity_amount ?? 0;
         const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
-        return Math.max(0, val - prev) * (unit.electricity_rate ?? 0);
-    }, [meterReading, bill.prev_reading, bill.electricity_amount, unit.initial_electricity_reading, unit.electricity_rate]);
+
+        if (val < prev) return 0;
+
+        let unitsUsed = Math.max(0, val - prev);
+        const defaultUnits = unit.electricity_default_units;
+        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+            unitsUsed = defaultUnits;
+        }
+
+        return unitsUsed * (unit.electricity_rate ?? 0);
+    }, [meterReading, bill.prev_reading, bill.electricity_amount, unit.initial_electricity_reading, unit.electricity_rate, unit.electricity_default_units]);
 
     // B12: Sync meter reading from prop changes ONLY when user is not typing
     React.useEffect(() => {
@@ -415,38 +439,43 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
 
             {/* === ELECTRICITY SECTION (if applicable) === */}
             {hasElectricity && (
-                <View style={styles.electricityRow}>
-                    <Zap size={16} color={theme.colors.warning} />
-                    {isMetered ? (
-                        <View style={styles.meterRow}>
-                            <Text style={styles.meterLabel} numberOfLines={1}>
-                                Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}
-                            </Text>
-                            <Text style={styles.meterArrow}>→</Text>
-                            <TextInput
-                                style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
-                                value={meterReading}
-                                onChangeText={setMeterReading}
-                                onFocus={() => setMeterFocused(true)}
-                                onBlur={() => { setMeterFocused(false); handleMeterReadingSave(); }}
-                                onSubmitEditing={() => { setMeterFocused(false); handleMeterReadingSave(); }}
-                                keyboardType="numeric"
-                                placeholder="New"
-                                placeholderTextColor={theme.colors.textTertiary}
-                                editable={!isLocked}
-                                returnKeyType="done"
-                            />
-                            <Text style={styles.electricityAmt}>{formatAmount(liveElectricityAmount)}</Text>
-                        </View>
-                    ) : (
-                        <Pressable
-                            style={styles.fixedElecRow}
-                            onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditElectricity(true)}
-                        >
-                            <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
-                            <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
-                            {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
-                        </Pressable>
+                <View style={styles.electricityRowMetered}>
+                    <View style={styles.electricityRow}>
+                        <Zap size={16} color={theme.colors.warning} />
+                        {isMetered ? (
+                            <View style={styles.meterRow}>
+                                <Text style={styles.meterLabel}>
+                                    Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}
+                                </Text>
+                                <Text style={styles.meterArrow}>→</Text>
+                                <TextInput
+                                    style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
+                                    value={meterReading}
+                                    onChangeText={setMeterReading}
+                                    onFocus={() => setMeterFocused(true)}
+                                    onBlur={() => { setMeterFocused(false); handleMeterReadingSave(); }}
+                                    onSubmitEditing={() => { setMeterFocused(false); handleMeterReadingSave(); }}
+                                    keyboardType="numeric"
+                                    placeholder="New"
+                                    placeholderTextColor={theme.colors.textTertiary}
+                                    editable={!isLocked}
+                                    returnKeyType="done"
+                                />
+                                <Text style={styles.electricityAmt}>{formatAmount(liveElectricityAmount)}</Text>
+                            </View>
+                        ) : (
+                            <Pressable
+                                style={styles.fixedElecRow}
+                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditElectricity(true)}
+                            >
+                                <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
+                                <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
+                                {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
+                            </Pressable>
+                        )}
+                    </View>
+                    {isMetered && !!meterReadingError && (
+                        <Text style={styles.meterErrorText}>{meterReadingError}</Text>
                     )}
                 </View>
             )}
@@ -509,101 +538,107 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
             </View>
 
             {/* === SWIPE ACTION === */}
-            {(() => {
-                const hasPaid = (bill.paid_amount ?? 0) > 0;
-                const label = hasPaid ? 'Swipe → Receipt' : 'Swipe → Reminder';
-                const bgColor = hasPaid ? theme.colors.primary : theme.colors.warning;
+            {
+                (() => {
+                    const hasPaid = (bill.paid_amount ?? 0) > 0;
+                    const label = hasPaid ? 'Swipe → Receipt' : 'Swipe → Reminder';
+                    const bgColor = hasPaid ? theme.colors.primary : theme.colors.warning;
 
-                const panResponder = PanResponder.create({
-                    onStartShouldSetPanResponder: () => true,
-                    onPanResponderMove: (_, gestureState) => {
-                        if (gestureState.dx > 0) {
-                            swipeAnim.setValue(Math.min(gestureState.dx, TRACK_WIDTH - 48));
-                        }
-                    },
-                    onPanResponderRelease: (_, gestureState) => {
-                        if (gestureState.dx > SWIPE_THRESHOLD) {
-                            hapticsMedium();
-                            Animated.timing(swipeAnim, {
-                                toValue: TRACK_WIDTH - 48,
-                                duration: 150,
-                                useNativeDriver: false,
-                            }).start(() => {
-                                swipeAnim.setValue(0);
-                                if (hasPaid) {
-                                    setPendingAction('receipt');
-                                } else {
-                                    setPendingAction('reminder');
-                                }
-                                setShareFormatPickerVisible(true);
-                            });
-                        } else {
-                            Animated.spring(swipeAnim, {
-                                toValue: 0,
-                                useNativeDriver: false,
-                            }).start();
-                        }
-                    },
-                });
+                    const panResponder = PanResponder.create({
+                        onStartShouldSetPanResponder: () => true,
+                        onPanResponderMove: (_, gestureState) => {
+                            if (gestureState.dx > 0) {
+                                swipeAnim.setValue(Math.min(gestureState.dx, TRACK_WIDTH - 48));
+                            }
+                        },
+                        onPanResponderRelease: (_, gestureState) => {
+                            if (gestureState.dx > SWIPE_THRESHOLD) {
+                                hapticsMedium();
+                                Animated.timing(swipeAnim, {
+                                    toValue: TRACK_WIDTH - 48,
+                                    duration: 150,
+                                    useNativeDriver: false,
+                                }).start(() => {
+                                    swipeAnim.setValue(0);
+                                    if (hasPaid) {
+                                        setPendingAction('receipt');
+                                    } else {
+                                        setPendingAction('reminder');
+                                    }
+                                    setShareFormatPickerVisible(true);
+                                });
+                            } else {
+                                Animated.spring(swipeAnim, {
+                                    toValue: 0,
+                                    useNativeDriver: false,
+                                }).start();
+                            }
+                        },
+                    });
 
-                const fillWidth = Animated.add(swipeAnim, 48);
+                    const fillWidth = Animated.add(swipeAnim, 48);
 
-                return (
-                    <View style={[styles.swipeTrack, { backgroundColor: bgColor + '12' }]}>
-                        {(generatingReceipt || sendingReminder) ? (
-                            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
-                                <ActivityIndicator size="small" color={bgColor} />
-                                <Text style={[styles.swipeLabel, { color: bgColor }]}>
-                                    {generatingReceipt ? 'Generating Receipt...' : 'Sending Reminder...'}
-                                </Text>
-                            </View>
-                        ) : (
-                            <>
-                                <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
-                                <Text style={[styles.swipeLabel, { color: bgColor, position: 'absolute' }]}>{label}</Text>
-                                <Animated.View
-                                    style={[styles.swipeThumb, { backgroundColor: isDark ? '#111827' : bgColor, transform: [{ translateX: swipeAnim }] }]}
-                                    {...panResponder.panHandlers}
-                                >
-                                    {hasPaid ? (
-                                        <FileText size={18} color="#FFF" />
-                                    ) : (
-                                        <Send size={18} color="#FFF" />
-                                    )}
-                                </Animated.View>
-                            </>
-                        )}
-                    </View>
-                );
-            })()}
+                    return (
+                        <View style={[styles.swipeTrack, { backgroundColor: bgColor + '12' }]}>
+                            {(generatingReceipt || sendingReminder) ? (
+                                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+                                    <ActivityIndicator size="small" color={bgColor} />
+                                    <Text style={[styles.swipeLabel, { color: bgColor }]}>
+                                        {generatingReceipt ? 'Generating Receipt...' : 'Sending Reminder...'}
+                                    </Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
+                                    <Text style={[styles.swipeLabel, { color: bgColor, position: 'absolute' }]}>{label}</Text>
+                                    <Animated.View
+                                        style={[styles.swipeThumb, { backgroundColor: isDark ? '#111827' : bgColor, transform: [{ translateX: swipeAnim }] }]}
+                                        {...panResponder.panHandlers}
+                                    >
+                                        {hasPaid ? (
+                                            <FileText size={18} color="#FFF" />
+                                        ) : (
+                                            <Send size={18} color="#FFF" />
+                                        )}
+                                    </Animated.View>
+                                </>
+                            )}
+                        </View>
+                    );
+                })()
+            }
 
             {/* Bill Info */}
-            {bill.bill_number && (
-                <Text style={styles.billInfo}>
-                    {bill.bill_number} | {formattedDate()}
-                </Text>
-            )}
+            {
+                bill.bill_number && (
+                    <Text style={styles.billInfo}>
+                        {bill.bill_number} | {formattedDate()}
+                    </Text>
+                )
+            }
 
             {/* Hidden WebView for capturing as Image */}
             {/* WebView matches the CSS .page exactly (794×1123px).
                 ViewShot captures at PixelRatio.get() scale automatically —
                 on a 3× iPhone this gives 2382×3369 native pixels, crisp with no white borders. */}
-            {shareHtml && (
-                <View style={styles.hiddenViewShotContainer} pointerEvents="none">
-                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
-                        <WebView
-                            source={{ html: shareHtml.html }}
-                            style={{ width: 794, height: 1123 }}
-                            onLoadEnd={handleCaptureImage}
-                            originWhitelist={['*']}
-                            allowFileAccess={true}
-                            javaScriptEnabled={true}
-                            domStorageEnabled={true}
-                            scalesPageToFit={false}
-                        />
-                    </ViewShot>
-                </View>
-            )}
+            {
+                shareHtml && (
+                    <View style={styles.hiddenViewShotContainer} pointerEvents="none">
+                        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
+                            <WebView
+                                source={{ html: shareHtml.html }}
+                                style={{ width: 794, height: 1123 }}
+                                onLoadEnd={handleCaptureImage}
+                                originWhitelist={['*']}
+                                allowFileAccess={true}
+                                javaScriptEnabled={true}
+                                domStorageEnabled={true}
+                                scalesPageToFit={false}
+                            />
+                        </ViewShot>
+                    </View>
+                )
+            }
 
             {/* ===== MODALS ===== */}
             <PickerBottomSheet
@@ -662,7 +697,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 bill={bill}
                 unit={unit}
             />
-        </View>
+        </View >
     );
 }
 
@@ -772,11 +807,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     electricityRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: theme.spacing.s,
+    },
+    electricityRowMetered: {
+        marginBottom: theme.spacing.m,
         backgroundColor: theme.colors.warningLight,
         borderRadius: 12,
         padding: theme.spacing.s,
-        marginBottom: theme.spacing.m,
-        gap: theme.spacing.s,
     },
     meterRow: {
         flex: 1,
@@ -787,13 +824,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     meterLabel: {
         fontSize: 12,
         color: theme.colors.textSecondary,
-        flexShrink: 0,
-        minWidth: 60,
     },
     meterArrow: {
         fontSize: 14,
         color: theme.colors.textTertiary,
-        flexShrink: 0,
     },
     meterInput: {
         backgroundColor: theme.colors.surface,
@@ -806,7 +840,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         minWidth: 68,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        flexShrink: 1,
+    },
+    meterErrorText: {
+        fontSize: 11,
+        color: theme.colors.danger,
+        marginTop: 2,
     },
     fixedElecRow: {
         flex: 1,

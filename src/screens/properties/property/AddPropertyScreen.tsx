@@ -47,6 +47,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [electricityType, setElectricityType] = useState('Metered');
     const [electricityValue, setElectricityValue] = useState('');
     const [initialElectricityReading, setInitialElectricityReading] = useState('');
+    const [electricityDefaultUnits, setElectricityDefaultUnits] = useState('');
     const [waterEnabled, setWaterEnabled] = useState(false);
     const [waterType, setWaterType] = useState('Fixed');
     const [waterValue, setWaterValue] = useState('');
@@ -92,6 +93,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                                 setElectricityType('Metered');
                                 setElectricityValue(unit.electricity_rate.toString());
                                 setInitialElectricityReading(unit.initial_electricity_reading?.toString() || '');
+                                setElectricityDefaultUnits(unit.electricity_default_units?.toString() || '');
                             } else if (unit.electricity_fixed_amount) {
                                 setElectricityType('Fixed');
                                 setElectricityValue(unit.electricity_fixed_amount.toString());
@@ -188,6 +190,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
                         electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
                         initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
+                        electricity_default_units: electricityEnabled && electricityType === 'Metered' && electricityDefaultUnits ? parseFloat(electricityDefaultUnits) : null,
                         water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
                         water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
                         initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
@@ -212,6 +215,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
                         electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
                         initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
+                        electricity_default_units: electricityEnabled && electricityType === 'Metered' && electricityDefaultUnits ? parseFloat(electricityDefaultUnits) : null,
                         water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
                         water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
                         initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
@@ -434,13 +438,22 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                                                     keyboardType="numeric"
                                                 />
                                                 {electricityType === 'Metered' && (
-                                                    <Input
-                                                        label="Initial Meter Reading"
-                                                        placeholder="e.g. 1045.5"
-                                                        value={initialElectricityReading}
-                                                        onChangeText={setInitialElectricityReading}
-                                                        keyboardType="numeric"
-                                                    />
+                                                    <>
+                                                        <Input
+                                                            label="Initial Meter Reading"
+                                                            placeholder="e.g. 1045.5"
+                                                            value={initialElectricityReading}
+                                                            onChangeText={setInitialElectricityReading}
+                                                            keyboardType="numeric"
+                                                        />
+                                                        <Input
+                                                            label="Default Minimum Units (Optional)"
+                                                            placeholder="e.g. 5"
+                                                            value={electricityDefaultUnits}
+                                                            onChangeText={setElectricityDefaultUnits}
+                                                            keyboardType="numeric"
+                                                        />
+                                                    </>
                                                 )}
                                             </View>
                                         )}
