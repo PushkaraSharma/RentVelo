@@ -53,10 +53,15 @@
     "react-redux": "^9.2.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
     "babel-plugin-inline-import": "^3.0.0",
     "babel-preset-expo": "^54.0.10",
+    "better-sqlite3": "^12.6.2",
     "drizzle-kit": "^0.31.8",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
     "typescript": "~5.9.2"
   },
   "private": true
