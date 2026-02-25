@@ -34,7 +34,7 @@ export const RENT_CYCLE_OPTIONS = [
 export const METER_TYPES = ['Metered', 'Fixed', 'Free'];
 
 export const ROOM_TYPES = [
-    '1 BHK', '2 BHK', '3 BHK', '1 RK', 'Studio', 'Penthouse', 'Office', 'Shop', 'Godown', 'Other'
+    '1 BHK', '2 BHK', '3 BHK', '1 RK', '2RK', 'Studio', 'Penthouse', 'Office', 'Shop', 'Godown', 'Other'
 ];
 
 export const LEASE_TYPES = [
