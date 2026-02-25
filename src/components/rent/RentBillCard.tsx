@@ -583,10 +583,12 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
             )}
 
             {/* Hidden WebView for capturing as Image */}
-            {/* A4 at 96dpi = 794 × 1123 px. We render at this size so mm-based CSS fits correctly. */}
+            {/* WebView matches the CSS .page exactly (794×1123px).
+                ViewShot captures at PixelRatio.get() scale automatically —
+                on a 3× iPhone this gives 2382×3369 native pixels, crisp with no white borders. */}
             {shareHtml && (
                 <View style={styles.hiddenViewShotContainer} pointerEvents="none">
-                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1, width: 794, height: 1123 }}>
+                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
                         <WebView
                             source={{ html: shareHtml.html }}
                             style={{ width: 794, height: 1123 }}
@@ -596,13 +598,6 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                             javaScriptEnabled={true}
                             domStorageEnabled={true}
                             scalesPageToFit={false}
-                            injectedJavaScript={`
-                                const meta = document.createElement('meta');
-                                meta.name = 'viewport';
-                                meta.content = 'width=794';
-                                document.head.appendChild(meta);
-                                true;
-                            `}
                         />
                     </ViewShot>
                 </View>
