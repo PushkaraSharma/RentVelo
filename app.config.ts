@@ -8,7 +8,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     "name": appName,
     "slug": "rentvelo",
-    "version": "1.0.0",
+    "version": "0.0.2",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "automatic",
