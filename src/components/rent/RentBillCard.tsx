@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
@@ -6,14 +6,16 @@ import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send, Lock } from 'l
 import {
     updateBill, recalculateBill,
     getBillExpenses, getBillPayments,
-    getReceiptConfigByPropertyId, getPropertyById
+    getReceiptConfigByPropertyId, getPropertyById, getTenantById, getUnitById
 } from '../../db';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { generateRentReceiptHTML } from '../../utils/rentReceiptTemplate';
 import { generateRentReminderHTML } from '../../utils/rentReminderTemplate';
 import { WebView } from 'react-native-webview';
 import ViewShot from 'react-native-view-shot';
+import { hapticsLight, hapticsMedium } from '../../utils/haptics';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -56,6 +58,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
 
     // Local state for metered reading
     const [meterReading, setMeterReading] = useState(bill?.curr_reading?.toString() || '');
+    const [meterFocused, setMeterFocused] = useState(false);
     const [generatingReceipt, setGeneratingReceipt] = useState(false);
     const [sendingReminder, setSendingReminder] = useState(false);
 
@@ -70,15 +73,39 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder' } | null>(null);
     const viewShotRef = useRef<any>(null);
 
+    // B12: Fix image loading in WebView by converting local files to base64
+    const getBase64Image = async (uri: string) => {
+        if (!uri) return '';
+        if (uri.startsWith('data:') || uri.startsWith('http')) return uri;
+        try {
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            const extension = uri.split('.').pop() || 'png';
+            return `data:image/${extension};base64,${base64}`;
+        } catch (e) {
+            console.error('Error converting image to base64:', e);
+            return uri;
+        }
+    };
+
     const generateAndShareReceipt = async (format: 'PDF' | 'Image') => {
         setGeneratingReceipt(true);
         try {
-            const [payments, expenses, receiptConfig, property] = await Promise.all([
+            const [payments, freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillPayments(bill.id),
                 getBillExpenses(bill.id),
                 getReceiptConfigByPropertyId(propertyId),
                 getPropertyById(propertyId),
             ]);
+
+            // B12: Convert images to base64 for WebView/ViewShot capture
+            if (format === 'Image' && receiptConfig) {
+                if (receiptConfig.logo_uri) {
+                    receiptConfig.logo_uri = await getBase64Image(receiptConfig.logo_uri);
+                }
+                if (receiptConfig.payment_qr_uri) {
+                    receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+            }
 
             const html = generateRentReceiptHTML({
                 property,
@@ -86,7 +113,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 tenant,
                 bill,
                 payments,
-                expenses,
+                expenses: freshExpenses,
                 receiptConfig,
                 period,
             });
@@ -117,18 +144,28 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const generateAndShareReminder = async (format: 'PDF' | 'Image') => {
         setSendingReminder(true);
         try {
-            const [expenses, receiptConfig, property] = await Promise.all([
+            const [freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillExpenses(bill.id),
                 getReceiptConfigByPropertyId(propertyId),
                 getPropertyById(propertyId),
             ]);
+
+            // B12: Convert images to base64 for WebView/ViewShot capture
+            if (format === 'Image' && receiptConfig) {
+                if (receiptConfig.logo_uri) {
+                    receiptConfig.logo_uri = await getBase64Image(receiptConfig.logo_uri);
+                }
+                if (receiptConfig.payment_qr_uri) {
+                    receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+            }
 
             const html = generateRentReminderHTML({
                 property,
                 unit,
                 tenant,
                 bill,
-                expenses,
+                expenses: freshExpenses,
                 receiptConfig,
                 period,
             });
@@ -287,16 +324,32 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         return diff > 1;
     })();
 
+    const [meterReadingError, setMeterReadingError] = useState('');
+
     // Handle meter reading change
     const handleMeterReadingSave = async () => {
         const newReading = parseFloat(meterReading);
         if (isNaN(newReading)) return;
 
         const prevReading = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
-        const unitsUsed = Math.max(0, newReading - prevReading);
+
+        if (newReading < prevReading) {
+            setMeterReadingError(`Cannot be less than old reading (${prevReading})`);
+            return;
+        } else {
+            setMeterReadingError('');
+        }
+
+        let unitsUsed = Math.max(0, newReading - prevReading);
+        const defaultUnits = unit.electricity_default_units;
+        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+            unitsUsed = defaultUnits;
+        }
+
         const rate = unit.electricity_rate ?? 0;
         const electricityAmount = unitsUsed * rate;
 
+        hapticsLight();
         await updateBill(bill.id, {
             curr_reading: newReading,
             prev_reading: prevReading,
@@ -306,14 +359,29 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         onRefresh();
     };
 
-    // Handle save (for meter reading auto-save on blur)
-    const handleMeterSave = async () => {
-        if (isMetered && meterReading) {
-            await handleMeterReadingSave();
+    // Live calculation for electricity amount based on current input text
+    const liveElectricityAmount = React.useMemo(() => {
+        const val = parseFloat(meterReading);
+        if (isNaN(val)) return bill.electricity_amount ?? 0;
+        const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
+
+        if (val < prev) return 0;
+
+        let unitsUsed = Math.max(0, val - prev);
+        const defaultUnits = unit.electricity_default_units;
+        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+            unitsUsed = defaultUnits;
         }
-        // B12: handleMeterReadingSave already calls recalculateBill, no need to call again
-        onRefresh();
-    };
+
+        return unitsUsed * (unit.electricity_rate ?? 0);
+    }, [meterReading, bill.prev_reading, bill.electricity_amount, unit.initial_electricity_reading, unit.electricity_rate, unit.electricity_default_units]);
+
+    // B12: Sync meter reading from prop changes ONLY when user is not typing
+    React.useEffect(() => {
+        if (!meterFocused && bill?.curr_reading !== undefined && bill?.curr_reading !== null) {
+            setMeterReading(bill.curr_reading.toString());
+        }
+    }, [bill?.curr_reading]);
 
     const formatAmount = (amt: number) => {
         if (amt === undefined || amt === null) return `${CURRENCY}0`;
@@ -371,33 +439,43 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
 
             {/* === ELECTRICITY SECTION (if applicable) === */}
             {hasElectricity && (
-                <View style={styles.electricityRow}>
-                    <Zap size={16} color={theme.colors.warning} />
-                    {isMetered ? (
-                        <View style={styles.meterRow}>
-                            <Text style={styles.meterLabel}>Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}</Text>
-                            <Text style={styles.meterArrow}>→</Text>
-                            <TextInput
-                                style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
-                                value={meterReading}
-                                onChangeText={setMeterReading}
-                                onBlur={handleMeterReadingSave}
-                                keyboardType="numeric"
-                                placeholder="New"
-                                placeholderTextColor={theme.colors.textTertiary}
-                                editable={!isLocked}
-                            />
-                            <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
-                        </View>
-                    ) : (
-                        <Pressable
-                            style={styles.fixedElecRow}
-                            onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditElectricity(true)}
-                        >
-                            <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
-                            <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
-                            {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
-                        </Pressable>
+                <View style={styles.electricityRowMetered}>
+                    <View style={styles.electricityRow}>
+                        <Zap size={16} color={theme.colors.warning} />
+                        {isMetered ? (
+                            <View style={styles.meterRow}>
+                                <Text style={styles.meterLabel}>
+                                    Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}
+                                </Text>
+                                <Text style={styles.meterArrow}>→</Text>
+                                <TextInput
+                                    style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
+                                    value={meterReading}
+                                    onChangeText={setMeterReading}
+                                    onFocus={() => setMeterFocused(true)}
+                                    onBlur={() => { setMeterFocused(false); handleMeterReadingSave(); }}
+                                    onSubmitEditing={() => { setMeterFocused(false); handleMeterReadingSave(); }}
+                                    keyboardType="numeric"
+                                    placeholder="New"
+                                    placeholderTextColor={theme.colors.textTertiary}
+                                    editable={!isLocked}
+                                    returnKeyType="done"
+                                />
+                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveElectricityAmount)}</Text>
+                            </View>
+                        ) : (
+                            <Pressable
+                                style={styles.fixedElecRow}
+                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditElectricity(true)}
+                            >
+                                <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
+                                <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
+                                {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
+                            </Pressable>
+                        )}
+                    </View>
+                    {isMetered && !!meterReadingError && (
+                        <Text style={styles.meterErrorText}>{meterReadingError}</Text>
                     )}
                 </View>
             )}
@@ -460,92 +538,107 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
             </View>
 
             {/* === SWIPE ACTION === */}
-            {(() => {
-                const hasPaid = (bill.paid_amount ?? 0) > 0;
-                const label = hasPaid ? 'Swipe → Receipt' : 'Swipe → Reminder';
-                const bgColor = hasPaid ? theme.colors.primary : theme.colors.warning;
+            {
+                (() => {
+                    const hasPaid = (bill.paid_amount ?? 0) > 0;
+                    const label = hasPaid ? 'Swipe → Receipt' : 'Swipe → Reminder';
+                    const bgColor = hasPaid ? theme.colors.primary : theme.colors.warning;
 
-                const panResponder = PanResponder.create({
-                    onStartShouldSetPanResponder: () => true,
-                    onPanResponderMove: (_, gestureState) => {
-                        if (gestureState.dx > 0) {
-                            swipeAnim.setValue(Math.min(gestureState.dx, TRACK_WIDTH - 48));
-                        }
-                    },
-                    onPanResponderRelease: (_, gestureState) => {
-                        if (gestureState.dx > SWIPE_THRESHOLD) {
-                            Animated.timing(swipeAnim, {
-                                toValue: TRACK_WIDTH - 48,
-                                duration: 150,
-                                useNativeDriver: false,
-                            }).start(() => {
-                                swipeAnim.setValue(0);
-                                if (hasPaid) {
-                                    setPendingAction('receipt');
-                                } else {
-                                    setPendingAction('reminder');
-                                }
-                                setShareFormatPickerVisible(true);
-                            });
-                        } else {
-                            Animated.spring(swipeAnim, {
-                                toValue: 0,
-                                useNativeDriver: false,
-                            }).start();
-                        }
-                    },
-                });
+                    const panResponder = PanResponder.create({
+                        onStartShouldSetPanResponder: () => true,
+                        onPanResponderMove: (_, gestureState) => {
+                            if (gestureState.dx > 0) {
+                                swipeAnim.setValue(Math.min(gestureState.dx, TRACK_WIDTH - 48));
+                            }
+                        },
+                        onPanResponderRelease: (_, gestureState) => {
+                            if (gestureState.dx > SWIPE_THRESHOLD) {
+                                hapticsMedium();
+                                Animated.timing(swipeAnim, {
+                                    toValue: TRACK_WIDTH - 48,
+                                    duration: 150,
+                                    useNativeDriver: false,
+                                }).start(() => {
+                                    swipeAnim.setValue(0);
+                                    if (hasPaid) {
+                                        setPendingAction('receipt');
+                                    } else {
+                                        setPendingAction('reminder');
+                                    }
+                                    setShareFormatPickerVisible(true);
+                                });
+                            } else {
+                                Animated.spring(swipeAnim, {
+                                    toValue: 0,
+                                    useNativeDriver: false,
+                                }).start();
+                            }
+                        },
+                    });
 
-                const fillWidth = Animated.add(swipeAnim, 48);
+                    const fillWidth = Animated.add(swipeAnim, 48);
 
-                return (
-                    <View style={[styles.swipeTrack, { backgroundColor: bgColor + '12' }]}>
-                        {(generatingReceipt || sendingReminder) ? (
-                            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
-                                <ActivityIndicator size="small" color={bgColor} />
-                                <Text style={[styles.swipeLabel, { color: bgColor }]}>
-                                    {generatingReceipt ? 'Generating Receipt...' : 'Sending Reminder...'}
-                                </Text>
-                            </View>
-                        ) : (
-                            <>
-                                <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
-                                <Text style={[styles.swipeLabel, { color: bgColor, position: 'absolute' }]}>{label}</Text>
-                                <Animated.View
-                                    style={[styles.swipeThumb, { backgroundColor: isDark ? '#111827' : bgColor, transform: [{ translateX: swipeAnim }] }]}
-                                    {...panResponder.panHandlers}
-                                >
-                                    {hasPaid ? (
-                                        <FileText size={18} color="#FFF" />
-                                    ) : (
-                                        <Send size={18} color="#FFF" />
-                                    )}
-                                </Animated.View>
-                            </>
-                        )}
-                    </View>
-                );
-            })()}
+                    return (
+                        <View style={[styles.swipeTrack, { backgroundColor: bgColor + '12' }]}>
+                            {(generatingReceipt || sendingReminder) ? (
+                                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+                                    <ActivityIndicator size="small" color={bgColor} />
+                                    <Text style={[styles.swipeLabel, { color: bgColor }]}>
+                                        {generatingReceipt ? 'Generating Receipt...' : 'Sending Reminder...'}
+                                    </Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <Animated.View style={[styles.swipeFill, { backgroundColor: bgColor + '50', width: fillWidth, borderRadius: 25 }]} />
+                                    <Text style={[styles.swipeLabel, { color: bgColor, position: 'absolute' }]}>{label}</Text>
+                                    <Animated.View
+                                        style={[styles.swipeThumb, { backgroundColor: isDark ? '#111827' : bgColor, transform: [{ translateX: swipeAnim }] }]}
+                                        {...panResponder.panHandlers}
+                                    >
+                                        {hasPaid ? (
+                                            <FileText size={18} color="#FFF" />
+                                        ) : (
+                                            <Send size={18} color="#FFF" />
+                                        )}
+                                    </Animated.View>
+                                </>
+                            )}
+                        </View>
+                    );
+                })()
+            }
 
             {/* Bill Info */}
-            {bill.bill_number && (
-                <Text style={styles.billInfo}>
-                    {bill.bill_number} | {formattedDate()}
-                </Text>
-            )}
+            {
+                bill.bill_number && (
+                    <Text style={styles.billInfo}>
+                        {bill.bill_number} | {formattedDate()}
+                    </Text>
+                )
+            }
 
             {/* Hidden WebView for capturing as Image */}
-            {shareHtml && (
-                <View style={styles.hiddenViewShotContainer} pointerEvents="none">
-                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
-                        <WebView
-                            source={{ html: shareHtml.html }}
-                            style={{ width: 595, height: 842 }}
-                            onLoadEnd={handleCaptureImage}
-                        />
-                    </ViewShot>
-                </View>
-            )}
+            {/* WebView matches the CSS .page exactly (794×1123px).
+                ViewShot captures at PixelRatio.get() scale automatically —
+                on a 3× iPhone this gives 2382×3369 native pixels, crisp with no white borders. */}
+            {
+                shareHtml && (
+                    <View style={styles.hiddenViewShotContainer} pointerEvents="none">
+                        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
+                            <WebView
+                                source={{ html: shareHtml.html }}
+                                style={{ width: 794, height: 1123 }}
+                                onLoadEnd={handleCaptureImage}
+                                originWhitelist={['*']}
+                                allowFileAccess={true}
+                                javaScriptEnabled={true}
+                                domStorageEnabled={true}
+                                scalesPageToFit={false}
+                            />
+                        </ViewShot>
+                    </View>
+                )
+            }
 
             {/* ===== MODALS ===== */}
             <PickerBottomSheet
@@ -604,7 +697,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 bill={bill}
                 unit={unit}
             />
-        </View>
+        </View >
     );
 }
 
@@ -714,17 +807,17 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     electricityRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: theme.spacing.s,
+    },
+    electricityRowMetered: {
+        marginBottom: theme.spacing.m,
         backgroundColor: theme.colors.warningLight,
         borderRadius: 12,
         padding: theme.spacing.s,
-        marginBottom: theme.spacing.m,
-        gap: theme.spacing.s,
     },
     meterRow: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
     },
     meterLabel: {
         fontSize: 12,
@@ -733,6 +826,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     meterArrow: {
         fontSize: 14,
         color: theme.colors.textTertiary,
+        marginHorizontal: theme.spacing.s,
     },
     meterInput: {
         backgroundColor: theme.colors.surface,
@@ -742,9 +836,14 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 15,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-        minWidth: 60,
+        minWidth: 68,
         borderWidth: 1,
         borderColor: theme.colors.border,
+    },
+    meterErrorText: {
+        fontSize: 11,
+        color: theme.colors.danger,
+        marginTop: 2,
     },
     fixedElecRow: {
         flex: 1,

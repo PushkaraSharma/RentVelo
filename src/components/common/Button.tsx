@@ -1,6 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle, TextStyle } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
+import { hapticsLight } from '../../utils/haptics';
 
 interface ButtonProps {
     title: string;
@@ -55,7 +56,7 @@ export default function Button({
                 },
                 style,
             ]}
-            onPress={onPress}
+            onPress={() => { hapticsLight(); onPress(); }}
             disabled={disabled || loading}
             activeOpacity={0.8}
         >

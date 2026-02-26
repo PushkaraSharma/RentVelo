@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { X, Check } from 'lucide-react-native';
+import { hapticsSelection } from '../../utils/haptics';
 
 interface PickerBottomSheetProps {
     visible: boolean;
@@ -65,6 +66,7 @@ const PickerBottomSheet: React.FC<PickerBottomSheetProps> = ({
                                         isSelected && styles.optionSelected
                                     ]}
                                     onPress={() => {
+                                        hapticsSelection();
                                         onSelect(value);
                                         onClose();
                                     }}
@@ -134,6 +136,8 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: theme.colors.accentLight,
     },
     optionText: {
+        flex: 1,
+        paddingRight: 4,
         fontSize: theme.typography.m,
         color: theme.colors.textPrimary,
     },

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Modal, Image, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Modal, Image, SafeAreaView, Alert } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Plus, Banknote, Trash2, Image as ImageIcon, X } from 'lucide-react-native';
 import { getBillPayments, removePaymentFromBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
 import { getFullImageUri } from '../../services/imageService';
+import { syncNotificationSchedules } from '../../services/pushNotificationService';
 
 interface PaidAmountModalProps {
     visible: boolean;
@@ -30,9 +31,28 @@ export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPay
         setPayments(data);
     };
 
-    const handleDelete = async (paymentId: number) => {
-        await removePaymentFromBill(paymentId);
-        await loadPayments();
+    const handleDelete = (paymentId: number) => {
+        Alert.alert(
+            'Delete Payment',
+            'Are you sure you want to remove this payment? The bill balance will be recalculated.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await removePaymentFromBill(paymentId);
+                            await syncNotificationSchedules();
+                            await loadPayments();
+                        } catch (err) {
+                            console.error('Error deleting payment:', err);
+                            Alert.alert('Error', 'Failed to delete payment.');
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const formatDate = (d: any) => {

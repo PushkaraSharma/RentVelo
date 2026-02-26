@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide-react-native';
-import { addPaymentToBill } from '../../db';
+import { addPaymentToBill } from '../../db/billService';
+import { syncNotificationSchedules } from '../../services/pushNotificationService';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage } from '../../services/imageService';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
+import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
 
 interface ReceivePaymentModalProps {
     visible: boolean;
@@ -38,7 +40,10 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
 
     const handleAddPayment = async () => {
         const amt = parseFloat(amount);
-        if (isNaN(amt) || amt <= 0) return;
+        if (isNaN(amt) || amt <= 0) {
+            hapticsError();
+            return;
+        }
 
         setLoading(true);
         try {
@@ -60,12 +65,16 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 tenant_id: bill.tenant_id,
                 unit_id: bill.unit_id,
             });
+
+            await syncNotificationSchedules();
+            hapticsMedium();
             setAmount('');
             setRemarks('');
             setPhotoUri(null);
             setPaymentDate(new Date());
             onClose();
-        } catch (err) {
+        } catch (err: any) {
+            hapticsError();
             console.error('Error adding payment:', err);
         } finally {
             setLoading(false);
@@ -113,7 +122,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                     <Pressable
                         key={m.id}
                         style={[styles.methodChip, method === m.id && { backgroundColor: m.color + '15', borderColor: m.color }]}
-                        onPress={() => setMethod(m.id)}
+                        onPress={() => { hapticsSelection(); setMethod(m.id); }}
                     >
                         <m.icon size={16} color={method === m.id ? m.color : theme.colors.textTertiary} />
                         <Text style={[styles.methodText, method === m.id && { color: m.color }]}>{m.label}</Text>

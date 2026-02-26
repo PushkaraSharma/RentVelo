@@ -1,6 +1,7 @@
 import React from 'react';
 import { Switch, StyleSheet } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
+import { hapticsSelection } from '../../utils/haptics';
 
 interface ToggleProps {
     value: boolean;
@@ -14,7 +15,7 @@ export default function Toggle({ value, onValueChange }: ToggleProps) {
             trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
             thumbColor={'#FFFFFF'}
             ios_backgroundColor={theme.colors.border}
-            onValueChange={onValueChange}
+            onValueChange={(v) => { hapticsSelection(); onValueChange(v); }}
             value={value}
             style={styles.switch}
         />

@@ -790,9 +790,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginBottom: theme.spacing.m,
     },
     pickerTriggerText: {
+        flex: 1,
+        paddingRight: 4,
         fontSize: theme.typography.m,
         color: theme.colors.textPrimary,
-        maxWidth: '80%',
     },
     row: {
         flexDirection: 'row',

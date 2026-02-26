@@ -123,16 +123,19 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                     </Pressable >
 
                     {/* Meter Info */}
-                    {
-                        unit.is_metered && unit.initial_electricity_reading !== null && (
-                            <View style={styles.meterRow}>
+                    {unit.is_metered && (
+                        <View style={styles.meterRow}>
+                            {unit.initial_electricity_reading !== null && (
                                 <Text style={styles.meterText}>⚡ Meter No: {unit.initial_electricity_reading}</Text>
-                            </View>
-                        )
-                    }
-                </Pressable >
-            </Pressable >
-        </Modal >
+                            )}
+                            {unit.electricity_default_units !== null && unit.electricity_default_units > 0 && (
+                                <Text style={styles.meterText}>Min Units: {unit.electricity_default_units}</Text>
+                            )}
+                        </View>
+                    )}
+                </Pressable>
+            </Pressable>
+        </Modal>
     );
 }
 
@@ -219,17 +222,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: theme.colors.border,
         marginHorizontal: theme.spacing.m,
     },
-    statValue: {
-        fontSize: 18,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        marginTop: 4,
-        marginBottom: 2,
-    },
-    statLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
     section: {
         flexDirection: 'row',
         backgroundColor: theme.colors.background,
@@ -245,6 +237,19 @@ const getStyles = (theme: any) => StyleSheet.create({
         borderLeftWidth: 1,
         borderRightWidth: 1,
         borderColor: theme.colors.border,
+    },
+    statLabel: {
+        fontSize: 11,
+        fontWeight: theme.typography.medium,
+        color: theme.colors.textTertiary,
+        marginBottom: 4,
+    },
+    statValue: {
+        fontSize: 14,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+        flexShrink: 1,
+        textAlign: 'center',
     },
     contactSection: {
         marginBottom: theme.spacing.m,

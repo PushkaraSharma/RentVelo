@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAppTheme } from '../theme/ThemeContext';
 import { LayoutDashboard, Settings, Building2 } from 'lucide-react-native';
+import { hapticsSelection } from '../utils/haptics';
 
 // Screens
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
@@ -36,6 +37,7 @@ export default function TabNavigator() {
             <Tab.Screen
                 name="Dashboard"
                 component={DashboardScreen}
+                listeners={{ tabPress: () => hapticsSelection() }}
                 options={{
                     tabBarIcon: ({ color, size }) => <LayoutDashboard size={size} color={color} />
                 }}
@@ -44,6 +46,7 @@ export default function TabNavigator() {
             <Tab.Screen
                 name="Properties"
                 component={PlacesListScreen}
+                listeners={{ tabPress: () => hapticsSelection() }}
                 options={{
                     tabBarIcon: ({ color, size }) => <Building2 size={size} color={color} />
                 }}
@@ -52,6 +55,7 @@ export default function TabNavigator() {
             <Tab.Screen
                 name="Settings"
                 component={SettingsScreen}
+                listeners={{ tabPress: () => hapticsSelection() }}
                 options={{
                     tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />
                 }}
