@@ -4,15 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
-import Toggle from '../../components/common/Toggle';
 import SuccessModal from '../../components/common/SuccessModal';
 import PickerBottomSheet from '../../components/common/PickerBottomSheet';
 import RentLedgerModal from '../../components/modals/RentLedgerModal';
+import ContactPickerModal from '../../components/modals/ContactPickerModal';
 import { UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2, Layout } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, Property, Unit, Tenant } from '../../db';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, RENT_CYCLE_OPTIONS, FURNISHING_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
+import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
@@ -25,6 +25,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
     const tenantId = route?.params?.tenantId;
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showContactPicker, setShowContactPicker] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<'active' | 'inactive' | 'archived'>('active');
     const [originalPropertyId, setOriginalPropertyId] = useState<number | null>(null);
@@ -149,28 +150,27 @@ export default function AddTenantScreen({ navigation, route }: any) {
     const importFromContacts = async () => {
         const { status } = await Contacts.requestPermissionsAsync();
         if (status === 'granted') {
-            const { data } = await Contacts.getContactsAsync({
-                fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails],
-            });
-
-            if (data.length > 0) {
-                // For a real app, you'd show a contact picker here. 
-                // For now, we'll just show the first contact as a demo or use a simpler picker
-                Alert.alert('Contacts', 'Contact picker would open here. Selecting the first one for demo.', [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            const contact = data[0];
-                            if (contact.name) setFullName(contact.name);
-                            if (contact.phoneNumbers?.[0]) setPrimaryPhone(contact.phoneNumbers[0].number || '');
-                            if (contact.emails?.[0]) setEmail(contact.emails[0].email || '');
-                        }
-                    }
-                ]);
-            }
+            setShowContactPicker(true);
         } else {
             Alert.alert('Permission Denied', 'Please allow contact access to use this feature.');
         }
+    };
+
+    const handleContactSelect = (contact: { name: string; phone: string; email: string }) => {
+        if (contact.name) setFullName(contact.name);
+        if (contact.phone) {
+            // Remove non-numeric characters for cleaner phone number
+            const cleaned = contact.phone.replace(/[^0-9]/g, '');
+            // If it starts with 91 and is 12 digits, take last 10
+            if (cleaned.length === 12 && cleaned.startsWith('91')) {
+                setPrimaryPhone(cleaned.slice(2));
+            } else if (cleaned.length > 10) {
+                setPrimaryPhone(cleaned.slice(-10));
+            } else {
+                setPrimaryPhone(cleaned);
+            }
+        }
+        if (contact.email) setEmail(contact.email);
     };
 
     const pickDocument = (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
@@ -599,6 +599,12 @@ export default function AddTenantScreen({ navigation, route }: any) {
             </KeyboardAvoidingView>
 
             {/* Pickers */}
+            <ContactPickerModal
+                visible={showContactPicker}
+                onClose={() => setShowContactPicker(false)}
+                onSelectContact={handleContactSelect}
+            />
+
             <PickerBottomSheet
                 visible={showProfessionPicker}
                 onClose={() => setShowProfessionPicker(false)}

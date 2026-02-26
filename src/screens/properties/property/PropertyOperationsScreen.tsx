@@ -112,7 +112,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             icon: Wallet,
             color: theme.colors.success,
             bg: isDark ? '#10B98120' : '#ECFDF5',
-            onPress: () => navigation.navigate('TakeRent', { propertyId })
+            onPress: () => navigation.navigate('TakeRent', { propertyId, initialFilter: 'pending' })
         },
         {
             id: 'rooms',

@@ -148,7 +148,7 @@ export default function DashboardScreen({ navigation }: any) {
                 onClose={() => setShowPropertyPicker(false)}
                 properties={data?.pendingProperties ?? []}
                 onSelect={(propertyId) => {
-                    navigation.navigate('TakeRent', { propertyId });
+                    navigation.navigate('TakeRent', { propertyId, initialFilter: 'pending' });
                 }}
             />
         </SafeAreaView>

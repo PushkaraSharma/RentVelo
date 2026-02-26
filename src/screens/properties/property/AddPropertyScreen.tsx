@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, Alert, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, Alert, KeyboardAvoidingView, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import Input from '../../../components/common/Input';
@@ -26,6 +26,11 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [createdPropertyId, setCreatedPropertyId] = useState<number | null>(null);
+
+    // Bulk Creation State
+    const [bulkCreating, setBulkCreating] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState(0);
+    const [currentBulkRoomName, setCurrentBulkRoomName] = useState('');
 
     // Form State
     const [propertyName, setPropertyName] = useState('');
@@ -251,6 +256,56 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleBulkCreateRooms = async () => {
+        if (!createdPropertyId || !totalUnits) return;
+
+        setShowSuccessModal(false);
+        setBulkCreating(true);
+        const count = parseInt(totalUnits);
+        const floors = parseInt(totalFloors) || 1;
+        const unitsPerFloor = Math.ceil(count / floors);
+
+        try {
+            for (let i = 1; i <= count; i++) {
+                const floorNum = Math.ceil(i / unitsPerFloor);
+                const unitInFloor = i % unitsPerFloor === 0 ? unitsPerFloor : i % unitsPerFloor;
+
+                let name = `Room ${i}`;
+                if (propertyType === 'pg') {
+                    name = `Bed ${i}`;
+                } else if (floors > 1 || count > 5) {
+                    // e.g. Flat 101, 102, 201...
+                    name = `Flat ${floorNum}${unitInFloor.toString().padStart(2, '0')}`;
+                }
+
+                setCurrentBulkRoomName(name);
+                setBulkProgress(i / count);
+
+                await createUnit({
+                    property_id: createdPropertyId,
+                    name: name,
+                    rent_amount: 0,
+                    rent_cycle: 'first_of_month',
+                    is_metered: true,
+                    electricity_rate: 0,
+                    water_fixed_amount: 0,
+                    floor: floors > 1 ? `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor` : undefined,
+                });
+
+                // Small delay to let the UI breathe and show progress
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            Alert.alert('Success', `Successfully created ${count} rooms!`);
+            navigation.goBack();
+        } catch (error) {
+            console.error('Bulk creation failed:', error);
+            Alert.alert('Error', 'Failed to create all rooms. Some rooms may have been created.');
+        } finally {
+            setBulkCreating(false);
         }
     };
 
@@ -685,16 +740,25 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     navigation.goBack();
                 }}
                 actions={[
-                    ...(isMultiUnit ? [{
-                        id: 'add-unit',
-                        title: 'Add Room',
-                        subtitle: 'Add rooms to this property',
-                        icon: Building,
-                        onPress: () => {
-                            setShowSuccessModal(false);
-                            navigation.replace('AddUnit', { propertyId: createdPropertyId });
+                    ...(isMultiUnit ? [
+                        {
+                            id: 'add-unit',
+                            title: 'Add Room',
+                            subtitle: 'Add rooms to this property',
+                            icon: Building,
+                            onPress: () => {
+                                setShowSuccessModal(false);
+                                navigation.replace('AddUnit', { propertyId: createdPropertyId });
+                            }
+                        },
+                        {
+                            id: 'bulk-units',
+                            title: 'Add Default Rooms',
+                            subtitle: `Quickly add ${totalUnits || 'all'} rooms with defaults`,
+                            icon: Layers,
+                            onPress: handleBulkCreateRooms
                         }
-                    }] : [{
+                    ] : [{
                         id: 'add-tenant',
                         title: 'Add Tenant',
                         subtitle: 'Register a tenant for this property',
@@ -706,6 +770,26 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     }])
                 ]}
             />
+
+            {/* Bulk Creation Overlay */}
+            <Modal visible={bulkCreating} transparent animationType="fade">
+                <View style={styles.bulkOverlay}>
+                    <View style={styles.bulkContent}>
+                        <View style={styles.bulkIconBg}>
+                            <Building size={40} color={theme.colors.accent} />
+                        </View>
+                        <Text style={styles.bulkTitle}>Generating Rooms...</Text>
+                        <Text style={styles.bulkSubtitle}>Creating {currentBulkRoomName}</Text>
+
+                        <View style={styles.progressBarContainer}>
+                            <View style={[styles.progressBar, { width: `${bulkProgress * 100}%` }]} />
+                        </View>
+                        <Text style={styles.progressText}>{Math.round(bulkProgress * 100)}% Complete</Text>
+
+                        <ActivityIndicator color={theme.colors.accent} style={{ marginTop: 20 }} />
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -1055,5 +1139,56 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontWeight: theme.typography.semiBold,
         color: theme.colors.accent,
         textAlign: 'center',
+    },
+    bulkOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.xl,
+    },
+    bulkContent: {
+        width: '100%',
+        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.xl,
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+    },
+    bulkIconBg: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: theme.colors.accentLight,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: theme.spacing.l,
+    },
+    bulkTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: theme.colors.textPrimary,
+        marginBottom: 4,
+    },
+    bulkSubtitle: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.xl,
+    },
+    progressBarContainer: {
+        width: '100%',
+        height: 10,
+        backgroundColor: theme.colors.border,
+        borderRadius: 5,
+        overflow: 'hidden',
+        marginBottom: 10,
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: theme.colors.accent,
+    },
+    progressText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: theme.colors.accent,
     },
 });

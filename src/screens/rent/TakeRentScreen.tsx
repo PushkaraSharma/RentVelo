@@ -30,7 +30,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const [year, setYear] = useState(now.getFullYear());
     const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState<FilterType>('all');
+    const [filter, setFilter] = useState<FilterType>(route?.params?.initialFilter || 'all');
     const [bills, setBills] = useState<any[]>([]);
     const [property, setProperty] = useState<any>(null);
     const [loading, setLoading] = useState(true);

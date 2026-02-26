@@ -41,7 +41,7 @@ export default function NotificationsCenterScreen({ navigation }: any) {
             await markNotificationAsRead(item.id);
         }
         if (item.property_id) {
-            navigation.navigate('TakeRent', { propertyId: item.property_id });
+            navigation.navigate('TakeRent', { propertyId: item.property_id, initialFilter: 'pending' });
         } else {
             loadNotifications();
         }
