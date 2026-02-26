@@ -35,7 +35,6 @@ export default function AppLockWrapper({ children }: AppLockWrapperProps) {
     };
 
     const authenticate = async () => {
-        console.log("here")
         try {
             const hasHardware = await LocalAuthentication.hasHardwareAsync();
             const isEnrolled = await LocalAuthentication.isEnrolledAsync();

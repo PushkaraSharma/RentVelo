@@ -1,4 +1,4 @@
-import { properties, units, tenants, rentBills, payments, billExpenses } from '../src/db/schema';
+import { properties, units, tenants, rentBills, payments, billExpenses, meterReadings, documents, rentReceiptConfig, notifications } from '../src/db/schema';
 import { generateBillsForProperty, recalculateBill } from '../src/db/billService';
 import { and, eq } from 'drizzle-orm';
 
@@ -9,6 +9,21 @@ const randomBool = (probability = 0.5) => Math.random() < probability;
 
 export async function generateRealUsageData(db: any) {
     console.log('🌱 Starting database seed...');
+    console.log('🧹 Purging all existing data...');
+
+    // Wipe all tables in order respecting foreign keys (cascades usually handle this, but being thorough)
+    await db.delete(notifications).execute();
+    await db.delete(rentReceiptConfig).execute().catch(() => { }); // might not exist
+    await db.delete(documents).execute();
+    await db.delete(meterReadings).execute();
+    await db.delete(billExpenses).execute();
+    await db.delete(payments).execute();
+    await db.delete(rentBills).execute();
+    await db.delete(tenants).execute();
+    await db.delete(units).execute();
+    await db.delete(properties).execute();
+
+    console.log('✨ Database clean. Injecting new random data...');
 
     const propertyNames = ['Sunshine PG', 'Green Valley Flats', 'Gokuldham Society', 'Sharma Niwas', 'Co-living Spaze', 'Elite Apartments', 'Standalone House'];
     const pTypes: ("pg" | "house" | "flat" | "building" | "shop")[] = ['pg', 'building', 'building', 'flat', 'pg', 'building', 'house'];
@@ -141,6 +156,16 @@ export async function generateRealUsageData(db: any) {
                 }
             }
         }
+    }
+
+    console.log('🌱 Simulating one future pending rent bill to trigger notifications...');
+    const futureMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+    const futureYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+
+    // Pick the first property to slap a future bill on 
+    const targetProp = await db.select({ id: properties.id }).from(properties).limit(1);
+    if (targetProp.length > 0) {
+        await generateBillsForProperty(targetProp[0].id, futureMonth, futureYear);
     }
 
     console.log('🌱 Database seeing complete.');

@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide-react-native';
-import { addPaymentToBill } from '../../db';
+import { addPaymentToBill } from '../../db/billService';
+import { syncNotificationSchedules } from '../../services/pushNotificationService';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
-import { hapticsSelection, hapticsSuccess, hapticsError } from '../../utils/haptics';
+import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
 
 interface ReceivePaymentModalProps {
     visible: boolean;
@@ -55,7 +56,9 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 tenant_id: bill.tenant_id,
                 unit_id: bill.unit_id,
             });
-            hapticsSuccess();
+
+            await syncNotificationSchedules();
+            hapticsMedium();
             setAmount('');
             setRemarks('');
             setPhotoUri(null);
