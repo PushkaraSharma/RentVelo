@@ -72,6 +72,7 @@ export {
     addPaymentToBill,
     removePaymentFromBill,
     getBillPayments,
+    resetBill,
 } from './billService';
 
 // Notification operations

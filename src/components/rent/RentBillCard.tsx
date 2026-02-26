@@ -26,6 +26,7 @@ import TransactionInfoModal from './TransactionInfoModal';
 import ExpenseActionsModal from './ExpenseActionsModal';
 import ExpenseListModal from './ExpenseListModal';
 import EditElectricityModal from './EditElectricityModal';
+import ConfirmationModal from '../common/ConfirmationModal';
 
 interface RentBillCardProps {
     item: {
@@ -35,19 +36,23 @@ interface RentBillCardProps {
         isVacant: boolean;
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
+        nextBillStatus?: { hasChanges: boolean; id: number | null };
     };
     period: { start: string; end: string; days: number };
     onRefresh: () => void;
     navigation: any;
     propertyId: number;
+    viewingMonth: number;
+    viewingYear: number;
 }
 
-export default function RentBillCard({ item, period, onRefresh, navigation, propertyId }: RentBillCardProps) {
+const RentBillCard = React.memo(({ item, period, onRefresh, navigation, propertyId, viewingMonth, viewingYear }: RentBillCardProps) => {
     const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired } = item;
     const { theme, isDark } = useAppTheme();
-    const styles = getStyles(theme, isDark);
+    const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+    const nextBillStatus = item.nextBillStatus || { hasChanges: false, id: null };
 
-    // Modal states
+    // B18: ALL HOOKS MUST BE AT THE TOP
     const [showRoomInfo, setShowRoomInfo] = useState(false);
     const [showReceivePayment, setShowReceivePayment] = useState(false);
     const [showPaidAmount, setShowPaidAmount] = useState(false);
@@ -55,23 +60,54 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const [showExpenseActions, setShowExpenseActions] = useState(false);
     const [showExpenseList, setShowExpenseList] = useState(false);
     const [showEditElectricity, setShowEditElectricity] = useState(false);
-
-    // Local state for metered reading
     const [meterReading, setMeterReading] = useState(bill?.curr_reading?.toString() || '');
     const [meterFocused, setMeterFocused] = useState(false);
     const [generatingReceipt, setGeneratingReceipt] = useState(false);
     const [sendingReminder, setSendingReminder] = useState(false);
-
-    // Swipe-to-save animation
-    const swipeAnim = useRef(new Animated.Value(0)).current;
-    const SWIPE_THRESHOLD = Dimensions.get('window').width * 0.35;
-    const TRACK_WIDTH = Dimensions.get('window').width - 72; // card padding approx
-
     const [shareFormatPickerVisible, setShareFormatPickerVisible] = useState(false);
     const [pendingAction, setPendingAction] = useState<'receipt' | 'reminder' | null>(null);
-
     const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder' } | null>(null);
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [isReseting, setIsReseting] = useState(false);
+    const [meterReadingError, setMeterReadingError] = useState('');
+
+    const swipeAnim = useRef(new Animated.Value(0)).current;
     const viewShotRef = useRef<any>(null);
+
+    // Memoize constants
+    const SWIPE_THRESHOLD = useMemo(() => Dimensions.get('window').width * 0.35, []);
+    const TRACK_WIDTH = useMemo(() => Dimensions.get('window').width - 72, []);
+
+    // Effect for electricity reading continuity (B17)
+    useEffect(() => {
+        if (!meterFocused && bill?.curr_reading !== undefined && bill?.curr_reading !== null) {
+            setMeterReading(bill.curr_reading.toString());
+        } else if (!meterFocused && bill?.curr_reading === null) {
+            setMeterReading('');
+        }
+    }, [bill?.curr_reading, meterFocused]);
+
+    // Derived locking state
+    const isLocked = useMemo(() => {
+        if (!bill) return false;
+        // 1. Hard lock if viewing an old month compared to current system month?
+        // Actually user said: "lock previous month if we have made user changes"
+        return nextBillStatus?.hasChanges;
+    }, [nextBillStatus?.hasChanges, bill]);
+
+    const liveElectricityAmount = useMemo(() => {
+        if (!unit?.is_metered || !bill) return 0;
+        const val = parseFloat(meterReading);
+        if (isNaN(val)) return bill.electricity_amount ?? 0;
+        const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
+        if (val < prev) return 0;
+        let unitsUsed = Math.max(0, val - prev);
+        const defaultUnits = unit.electricity_default_units;
+        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+            unitsUsed = defaultUnits;
+        }
+        return unitsUsed * (unit.electricity_rate ?? 0);
+    }, [meterReading, bill, unit]);
 
     // B12: Fix image loading in WebView by converting local files to base64
     const getBase64Image = async (uri: string) => {
@@ -316,7 +352,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
     const isMetered = unit.is_metered;
 
     // B16: Lock historical bills (older than last month) to prevent invalidating balances
-    const isLocked = (() => {
+    const isHistoricalLocked = (() => {
         const now = new Date();
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
@@ -324,32 +360,53 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         return diff > 1;
     })();
 
-    const [meterReadingError, setMeterReadingError] = useState('');
+    const formatAmount = (amt: number) => {
+        if (amt === undefined || amt === null) return `${CURRENCY}0`;
+        return `${CURRENCY}${amt.toLocaleString('en-IN')}`;
+    };
 
-    // Handle meter reading change
+    const handleResetBill = () => {
+        if (!nextBillStatus.id) return;
+        setShowResetModal(true);
+    };
+
+    const confirmResetBill = async () => {
+        if (!nextBillStatus.id) return;
+        try {
+            setIsReseting(true);
+            const { resetBill } = require('../../db');
+            await resetBill(nextBillStatus.id);
+            onRefresh();
+        } catch (e) {
+            console.error('Error resetting bill:', e);
+            Alert.alert('Error', 'Failed to reset bill');
+        } finally {
+            setIsReseting(false);
+            setShowResetModal(false);
+        }
+    };
+
     const handleMeterReadingSave = async () => {
+        if (!bill) return;
         const newReading = parseFloat(meterReading);
         if (isNaN(newReading)) return;
-
         const prevReading = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
-
         if (newReading < prevReading) {
             setMeterReadingError(`Cannot be less than old reading (${prevReading})`);
             return;
         } else {
             setMeterReadingError('');
         }
-
         let unitsUsed = Math.max(0, newReading - prevReading);
         const defaultUnits = unit.electricity_default_units;
         if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
             unitsUsed = defaultUnits;
         }
-
         const rate = unit.electricity_rate ?? 0;
         const electricityAmount = unitsUsed * rate;
-
+        const { hapticsLight } = require('../../utils/haptics');
         hapticsLight();
+        const { updateBill, recalculateBill } = require('../../db');
         await updateBill(bill.id, {
             curr_reading: newReading,
             prev_reading: prevReading,
@@ -357,35 +414,6 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
         });
         await recalculateBill(bill.id);
         onRefresh();
-    };
-
-    // Live calculation for electricity amount based on current input text
-    const liveElectricityAmount = React.useMemo(() => {
-        const val = parseFloat(meterReading);
-        if (isNaN(val)) return bill.electricity_amount ?? 0;
-        const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
-
-        if (val < prev) return 0;
-
-        let unitsUsed = Math.max(0, val - prev);
-        const defaultUnits = unit.electricity_default_units;
-        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
-            unitsUsed = defaultUnits;
-        }
-
-        return unitsUsed * (unit.electricity_rate ?? 0);
-    }, [meterReading, bill.prev_reading, bill.electricity_amount, unit.initial_electricity_reading, unit.electricity_rate, unit.electricity_default_units]);
-
-    // B12: Sync meter reading from prop changes ONLY when user is not typing
-    React.useEffect(() => {
-        if (!meterFocused && bill?.curr_reading !== undefined && bill?.curr_reading !== null) {
-            setMeterReading(bill.curr_reading.toString());
-        }
-    }, [bill?.curr_reading]);
-
-    const formatAmount = (amt: number) => {
-        if (amt === undefined || amt === null) return `${CURRENCY}0`;
-        return `${CURRENCY}${amt.toLocaleString('en-IN')}`;
     };
 
     const formattedDate = () => {
@@ -404,7 +432,12 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 </View>
             )}
             {/* === ROW 1: Room Name + Tenant + Paid Amount Header === */}
-            <Pressable style={styles.topRow} onPress={() => setShowRoomInfo(true)}>
+            <Pressable
+                style={styles.topRow}
+                onPress={() => setShowRoomInfo(true)}
+                onLongPress={isLocked ? handleResetBill : undefined}
+                delayLongPress={500}
+            >
                 <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Text style={styles.roomName}>{unit.name}</Text>
@@ -417,10 +450,19 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                         )}
                     </View>
                     <Text style={styles.tenantName}>{tenant?.name || '—'}</Text>
+                    {isLocked && (
+                        <Text style={styles.lockMessage}>
+                            Locked. To edit, long-press here to reset next month.
+                        </Text>
+                    )}
                 </View>
                 <Pressable
                     style={[styles.paidAmtBadge, isPaid && styles.paidAmtBadgePaid, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial, isLocked && { opacity: 0.8 }]}
                     onPress={() => {
+                        if (isLocked) {
+                            handleResetBill();
+                            return;
+                        }
                         if ((bill.paid_amount ?? 0) > 0) {
                             setShowPaidAmount(true);
                         } else if (!isLocked) {
@@ -697,9 +739,31 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                 bill={bill}
                 unit={unit}
             />
+            <ConfirmationModal
+                visible={showResetModal}
+                onClose={() => setShowResetModal(false)}
+                onConfirm={confirmResetBill}
+                title="Reset Future Bill?"
+                message="This will delete the bill for next month, including any payments or expenses. This will unlock the current month for editing."
+                confirmText="Reset Now"
+                variant="danger"
+                loading={isReseting}
+            />
         </View >
     );
-}
+}, (prevProps: RentBillCardProps, nextProps: RentBillCardProps) => {
+    // Custom comparison to prevent re-renders when parent states change
+    const prevBill = prevProps.item.bill;
+    const nextBill = nextProps.item.bill;
+    return (
+        prevBill?.id === nextBill?.id &&
+        prevBill?.updated_at?.getTime() === nextBill?.updated_at?.getTime() &&
+        prevProps.item.nextBillStatus?.hasChanges === nextProps.item.nextBillStatus?.hasChanges &&
+        prevProps.period.start === nextProps.period.start &&
+        prevProps.viewingMonth === nextProps.viewingMonth &&
+        prevProps.viewingYear === nextProps.viewingYear
+    );
+});
 
 const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     card: {
@@ -766,6 +830,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 13,
         color: theme.colors.textSecondary,
         marginTop: 2,
+    },
+    lockMessage: {
+        fontSize: 10,
+        color: theme.colors.danger,
+        marginTop: 4,
+        fontWeight: '600',
     },
     paidAmtBadge: {
         alignItems: 'flex-end',
@@ -1051,3 +1121,5 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         textTransform: 'uppercase',
     },
 });
+
+export default RentBillCard;

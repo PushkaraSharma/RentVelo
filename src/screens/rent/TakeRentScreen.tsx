@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
-    View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, ActivityIndicator
+    View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, ActivityIndicator, Platform
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
 import Header from '../../components/common/Header';
@@ -10,6 +10,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById } from '../../db';
 import MonthPickerModal from '../../components/rent/MonthPickerModal';
 import RentBillCard from '../../components/rent/RentBillCard';
+import RentBillSkeleton from '../../components/rent/RentBillSkeleton';
+import { hapticsHeavy } from '../../utils/haptics';
 
 const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -20,7 +22,8 @@ type FilterType = 'all' | 'paid' | 'partial' | 'pending' | 'vacant';
 
 export default function TakeRentScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
-    const styles = getStyles(theme, isDark);
+    const insets = useSafeAreaInsets();
+    const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
     const propertyId = route?.params?.propertyId;
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -32,7 +35,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const [property, setProperty] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const prop = await getPropertyById(propertyId);
@@ -47,7 +50,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [propertyId, month, year]);
 
     useFocusEffect(
         useCallback(() => {
@@ -84,6 +87,8 @@ export default function TakeRentScreen({ navigation, route }: any) {
     };
 
     const goMonth = (dir: number) => {
+        hapticsHeavy();
+        setLoading(true); // Immediate loader feedback
         let newMonth = month + dir;
         let newYear = year;
         if (newMonth < 1) { newMonth = 12; newYear--; }
@@ -100,7 +105,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
         { key: 'vacant', label: `Vacant: ${counts.vacant}` },
     ];
 
-    const getRentPeriod = () => {
+    const rentPeriod = useMemo(() => {
         let pMonth = month;
         let pYear = year;
 
@@ -117,10 +122,10 @@ export default function TakeRentScreen({ navigation, route }: any) {
         const start = `${startDate.getDate()} ${MONTHS[pMonth - 1].substring(0, 3)}`;
         const end = `${endDate.getDate()} ${MONTHS[pMonth - 1].substring(0, 3)} ${pYear}`;
         return { start, end, days: endDate.getDate() };
-    };
+    }, [month, year, property?.rent_payment_type]);
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header with Month Selector */}
             <Header
                 centerAction={
@@ -140,76 +145,78 @@ export default function TakeRentScreen({ navigation, route }: any) {
             />
 
             {/* Bills List (search + filters scroll with it) */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={theme.colors.accent} />
-                    <Text style={styles.loadingText}>Loading bills...</Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={filteredBills}
-                    keyExtractor={(item, index) => `${item.unit?.id || index}-${month}-${year}`}
-                    ListHeaderComponent={
-                        <>
-                            {/* Search */}
-                            <View style={styles.searchContainer}>
-                                <Search size={18} color={theme.colors.textTertiary} />
-                                <TextInput
-                                    style={styles.searchInput}
-                                    placeholder="Search Rooms or Tenants..."
-                                    placeholderTextColor={theme.colors.textTertiary}
-                                    value={search}
-                                    onChangeText={setSearch}
-                                />
-                                {search.length > 0 && (
-                                    <Pressable onPress={() => setSearch('')}>
-                                        <X size={18} color={theme.colors.textTertiary} />
-                                    </Pressable>
-                                )}
-                            </View>
-
-                            {/* Filter Chips */}
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.filterRow}
-                                style={styles.filterScroll}
-                            >
-                                {filters.map(f => (
-                                    <Pressable
-                                        key={f.key}
-                                        style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
-                                        onPress={() => setFilter(f.key)}
-                                    >
-                                        <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>
-                                            {f.label}
-                                        </Text>
-                                    </Pressable>
-                                ))}
-                            </ScrollView>
-                        </>
-                    }
-                    renderItem={({ item }) => (
-                        <RentBillCard
-                            item={item}
-                            period={getRentPeriod()}
-                            onRefresh={loadData}
-                            navigation={navigation}
-                            propertyId={propertyId}
-                        />
-                    )}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={
-                        <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyTitle}>No rooms found</Text>
-                            <Text style={styles.emptySubtitle}>
-                                {search ? 'Try a different search term' : 'Add rooms to this property first'}
-                            </Text>
+            <FlatList
+                data={loading ? [1, 2, 3] : filteredBills}
+                ListHeaderComponent={
+                    <>
+                        {/* Search */}
+                        <View style={styles.searchContainer}>
+                            <Search size={18} color={theme.colors.textTertiary} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search Rooms or Tenants..."
+                                placeholderTextColor={theme.colors.textTertiary}
+                                value={search}
+                                onChangeText={setSearch}
+                                editable={!loading}
+                            />
+                            {search.length > 0 && (
+                                <Pressable onPress={() => setSearch('')}>
+                                    <X size={18} color={theme.colors.textTertiary} />
+                                </Pressable>
+                            )}
                         </View>
-                    }
-                />
-            )}
+
+                        {/* Filter Chips */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.filterRow}
+                            style={styles.filterScroll}
+                        >
+                            {filters.map(f => (
+                                <Pressable
+                                    key={f.key}
+                                    style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
+                                    onPress={() => !loading && setFilter(f.key)}
+                                >
+                                    <Text style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>
+                                        {f.label}
+                                    </Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+                    </>
+                }
+                renderItem={({ item }) => loading ? (
+                    <RentBillSkeleton />
+                ) : (
+                    <RentBillCard
+                        item={item}
+                        period={rentPeriod}
+                        onRefresh={loadData}
+                        navigation={navigation}
+                        propertyId={propertyId}
+                        viewingMonth={month}
+                        viewingYear={year}
+                    />
+                )}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `bill-${item.unit.id}`}
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={Platform.OS === 'android'}
+                ListEmptyComponent={loading ? null : (
+                    <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyTitle}>No rooms found</Text>
+                        <Text style={styles.emptySubtitle}>
+                            {search ? 'Try a different search term' : 'Add rooms to this property first'}
+                        </Text>
+                    </View>
+                )}
+            />
 
             {/* Month Picker Overlay */}
             <MonthPickerModal
@@ -223,7 +230,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 }}
                 onClose={() => setShowMonthPicker(false)}
             />
-        </SafeAreaView>
+        </View>
     );
 }
 

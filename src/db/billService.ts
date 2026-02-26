@@ -3,7 +3,7 @@ import {
     rentBills, billExpenses, payments, units, tenants, properties,
     RentBill, NewRentBill, BillExpense, NewBillExpense, Payment, NewPayment
 } from './schema';
-import { eq, and, desc, sum, sql } from 'drizzle-orm';
+import { eq, and, desc, sum, sql, inArray } from 'drizzle-orm';
 import { differenceInDays, isAfter, startOfDay } from 'date-fns';
 
 // Re-export types
@@ -129,6 +129,12 @@ export const generateBillsForProperty = async (
             previousBalance = -(tenant.advance_rent);
         }
 
+        // B17: Carry over electricity readings
+        let prevReading = unit.initial_electricity_reading ?? 0;
+        if (prevBill.length > 0 && prevBill[0].curr_reading !== null && prevBill[0].curr_reading !== undefined) {
+            prevReading = prevBill[0].curr_reading;
+        }
+
         // Get electricity amount (for fixed cost units)
         let electricityAmount = 0;
         if (!unit.is_metered && unit.electricity_fixed_amount) {
@@ -155,6 +161,7 @@ export const generateBillsForProperty = async (
             rent_amount: rentAmount,
             electricity_amount: electricityAmount,
             previous_balance: previousBalance,
+            prev_reading: prevReading,
             total_expenses: 0,
             total_amount: totalAmount,
             paid_amount: 0,
@@ -253,15 +260,69 @@ export const getBillsForPropertyMonth = async (
     }
 
     const results: any[] = [];
+    const unitIds = propertyUnits.map(u => u.id);
+
+    if (unitIds.length === 0) return [];
+
+    // Fetch property config once for all units
+    const propResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
+    const property = propResult[0];
+
+    // 1. Batch fetch all active tenants for these units
+    const allActiveTenants = await db.select()
+        .from(tenants)
+        .where(
+            and(
+                inArray(tenants.unit_id, unitIds),
+                eq(tenants.status, 'active')
+            )
+        );
+
+    // 2. Batch fetch all bills for these units/month/year
+    const allBills = await db.select()
+        .from(rentBills)
+        .where(
+            and(
+                inArray(rentBills.unit_id, unitIds),
+                eq(rentBills.month, month),
+                eq(rentBills.year, year)
+            )
+        );
+
+    // Create maps for quick lookup
+    const tenantMap = new Map();
+    allActiveTenants.forEach(t => {
+        if (t.unit_id) tenantMap.set(t.unit_id, t);
+    });
+
+    const billMap = new Map();
+    allBills.forEach(b => {
+        billMap.set(b.unit_id, b);
+    });
+
+    // 3. Batch fetch all bills for the NEXT month to determine locking status
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    const allNextBills = await db.select()
+        .from(rentBills)
+        .where(
+            and(
+                inArray(rentBills.unit_id, unitIds),
+                eq(rentBills.month, nextMonth),
+                eq(rentBills.year, nextYear)
+            )
+        );
+
+    const nextBillMap = new Map();
+    allNextBills.forEach(nb => {
+        // Any payment OR any meter reading edit counts as a "change" that locks the previous month
+        const hasChanges = ((nb.paid_amount || 0) > 0) || (nb.curr_reading !== null && nb.curr_reading !== nb.prev_reading);
+        nextBillMap.set(nb.unit_id, { hasChanges, id: nb.id });
+    });
 
     for (const unit of propertyUnits) {
-        // Find active tenant
-        const activeTenants = await db.select()
-            .from(tenants)
-            .where(and(eq(tenants.unit_id, unit.id), eq(tenants.status, 'active')))
-            .limit(1);
-
-        const tenant = activeTenants.length > 0 ? activeTenants[0] : null;
+        const tenant = tenantMap.get(unit.id) || null;
+        const nextBillStatus = nextBillMap.get(unit.id) || { hasChanges: false, id: null };
 
         // Determine special states
         let isNotMovedIn = false;
@@ -293,23 +354,12 @@ export const getBillsForPropertyMonth = async (
             }
         }
 
-        // Find bill for this month
-        const bills = await db.select()
-            .from(rentBills)
-            .where(
-                and(
-                    eq(rentBills.unit_id, unit.id),
-                    eq(rentBills.month, month),
-                    eq(rentBills.year, year)
-                )
-            )
-            .limit(1);
-
-        let bill = bills.length > 0 ? bills[0] : null;
+        let bill = billMap.get(unit.id) || null;
 
         if (bill) {
             // Trigger penalty calculation lazily
-            await applyPenaltiesLazily(bill.id);
+            // Pass prefetched data to avoid redundant queries
+            await applyPenaltiesLazily(bill.id, { property, tenant, unit });
             // Re-fetch the bill in case properties changed
             const updatedBills = await db.select().from(rentBills).where(eq(rentBills.id, bill.id)).limit(1);
             if (updatedBills.length > 0) {
@@ -324,6 +374,7 @@ export const getBillsForPropertyMonth = async (
             isVacant: !tenant,
             isNotMovedIn,
             isLeaseExpired,
+            nextBillStatus,
         });
     }
 
@@ -338,29 +389,26 @@ export const getBillById = async (id: number): Promise<RentBill | null> => {
 
 // ===== BILL UPDATE & RECALCULATION =====
 
-/**
- * Automatically calculate and apply late payment penalties
- * This is called lazily when a bill is recalculated or fetched
- */
-export const applyPenaltiesLazily = async (billId: number): Promise<void> => {
+export const applyPenaltiesLazily = async (
+    billId: number,
+    prefetchedData?: { property?: any; tenant?: any; unit?: any }
+): Promise<void> => {
     const db = getDb();
     const bill = await getBillById(billId);
     if (!bill || bill.status === 'paid' || bill.status === 'overpaid') return;
 
     // Get Property config
-    const propResult = await db.select().from(properties).where(eq(properties.id, bill.property_id)).limit(1);
-    const property = propResult[0];
+    const property = prefetchedData?.property || (await db.select().from(properties).where(eq(properties.id, bill.property_id)).limit(1))[0];
     if (!property || property.penalty_amount_per_day === null || property.penalty_grace_period_days === null) return;
 
     // Get Tenant info to determine rent_start_date/cycle
-    const tenantResult = await db.select().from(tenants).where(eq(tenants.id, bill.tenant_id)).limit(1);
-    const tenant = tenantResult[0];
+    const tenant = prefetchedData?.tenant || (await db.select().from(tenants).where(eq(tenants.id, bill.tenant_id)).limit(1))[0];
     if (!tenant) return;
 
     // Determine due date (usually 1st of the bill month, or relative to rent_start_date)
     let dueDate = new Date(bill.year, bill.month - 1, 1);
-    const unitResult = await db.select().from(units).where(eq(units.id, bill.unit_id)).limit(1);
-    if (unitResult[0] && unitResult[0].rent_cycle === 'relative' && tenant.rent_start_date) {
+    const unit = prefetchedData?.unit || (await db.select().from(units).where(eq(units.id, bill.unit_id)).limit(1))[0];
+    if (unit && unit.rent_cycle === 'relative' && tenant.rent_start_date) {
         const startDay = new Date(tenant.rent_start_date).getDate();
         dueDate = new Date(bill.year, bill.month - 1, startDay);
     }
@@ -516,7 +564,32 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         await recalculateBill(nextBill[0].id);
     }
 
+    // B17: Cascade current electricity reading to next month's previous reading
+    if (nextBill.length > 0 && nextBill[0].prev_reading !== bill.curr_reading) {
+        await db.update(rentBills)
+            .set({ prev_reading: bill.curr_reading, updated_at: new Date() })
+            .where(eq(rentBills.id, nextBill[0].id));
+        await recalculateBill(nextBill[0].id);
+    }
+
     return (await getBillById(billId))!;
+};
+
+/**
+ * Reset a bill to its original generated state or delete it.
+ * This is used to "unlock" previous months by removing "future" records.
+ */
+export const resetBill = async (billId: number): Promise<void> => {
+    const db = getDb();
+    const bill = await getBillById(billId);
+    if (!bill) return;
+
+    // Delete associated expenses and payments
+    await db.delete(billExpenses).where(eq(billExpenses.bill_id, billId));
+    await db.delete(payments).where(eq(payments.bill_id, billId));
+
+    // Delete the bill itself
+    await db.delete(rentBills).where(eq(rentBills.id, billId));
 };
 
 // ===== EXPENSE OPERATIONS =====
