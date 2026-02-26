@@ -22,16 +22,21 @@ export default function SignatureModal({ visible, onClose, onSave, propertyId }:
 
     const handleSignatureSave = async (signature: string) => {
         try {
+            // Ensure RentVeloImages directory exists
+            const { ensureDirExists } = await import('../../services/imageService');
+            await ensureDirExists();
+
             // signature is a base64 data URI
             const filename = `signature_${propertyId}_${Date.now()}.png`;
-            const filepath = `${FileSystem.documentDirectory}${filename}`;
+            const filepath = `${FileSystem.documentDirectory}RentVeloImages/${filename}`;
             const base64Data = signature.replace('data:image/png;base64,', '');
 
             await FileSystem.writeAsStringAsync(filepath, base64Data, {
                 encoding: FileSystem.EncodingType.Base64
             });
 
-            onSave(filepath);
+            // Return just the filename so DB doesn't store absolute device paths
+            onSave(filename);
         } catch (error) {
             console.error('Error saving signature:', error);
             // Fallback or let parent handle error (could just pass null)

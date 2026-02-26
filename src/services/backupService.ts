@@ -51,12 +51,14 @@ const createBackupZip = async (): Promise<string | null> => {
         }
 
         // Create the zip
-        const createdZipPath = await zip(tempBackupDir, zipPath);
+        await zip(tempBackupDir, zipPath);
 
         // Clean up staging dir
         await FileSystem.deleteAsync(tempBackupDir, { idempotent: true });
 
-        return createdZipPath;
+        // react-native-zip-archive strips the 'file://' scheme on Android inside the returned path.
+        // Returning the original zipPath ensures we keep the scheme for Expo FileSystem functions.
+        return zipPath;
     } catch (error) {
         console.error('Error creating backup zip:', error);
         return null;

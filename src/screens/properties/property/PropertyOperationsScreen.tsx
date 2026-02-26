@@ -31,6 +31,7 @@ import {
 import Header from '../../../components/common/Header';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, deleteProperty } from '../../../db';
+import { getFullImageUri } from '../../../services/imageService';
 
 const { width } = Dimensions.get('window');
 
@@ -170,7 +171,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                 {/* Hero Section */}
                 <View style={styles.heroCard}>
                     {property?.image_uri ? (
-                        <Image source={{ uri: property.image_uri }} style={styles.heroImg} />
+                        <Image source={{ uri: getFullImageUri(property.image_uri) || property.image_uri }} style={styles.heroImg} />
                     ) : (
                         <View style={[styles.heroImg, styles.placeholderHero]}>
                             <FileText size={48} color={theme.colors.accent} />

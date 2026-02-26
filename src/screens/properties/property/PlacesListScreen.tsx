@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import { Plus, MapPin, Home, Building, Building2, ChevronRight, Store, Layers } from 'lucide-react-native';
 import { getPropertiesWithStats, Property } from '../../../db';
+import { getFullImageUri } from '../../../services/imageService';
 import { useFocusEffect } from '@react-navigation/native';
 
 export default function PlacesListScreen({ navigation }: any) {
@@ -74,7 +75,7 @@ export default function PlacesListScreen({ navigation }: any) {
         return (
             <Pressable style={styles.card} onPress={() => navigation.navigate('PropertyOperations', { propertyId: item.id })}>
                 {item.image_uri ? (
-                    <Image source={{ uri: item.image_uri }} style={styles.cardImage} />
+                    <Image source={{ uri: getFullImageUri(item.image_uri) || item.image_uri }} style={styles.cardImage} resizeMode="cover" />
                 ) : (
                     <View style={[styles.cardImage, styles.placeholderImage]}>
                         {getTypeIcon(item.type, 25)}
@@ -172,7 +173,8 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     cardImage: {
         width: 100,
-        height: 100,
+        minHeight: 100,
+        alignSelf: 'stretch',
     },
     placeholderImage: {
         backgroundColor: theme.colors.accentLight,

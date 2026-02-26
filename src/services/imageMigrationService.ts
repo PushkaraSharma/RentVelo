@@ -1,5 +1,5 @@
 import { getDb } from '../db/database';
-import { properties, tenants } from '../db/schema';
+import { properties, tenants, units, rentReceiptConfig } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { saveImageToPermanentStorage } from './imageService';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -65,6 +65,74 @@ export const migrateOldImagesToPermanentStorage = async () => {
                 await db.update(tenants)
                     .set(updates)
                     .where(eq(tenants.id, tenant.id));
+            }
+        }
+
+        // 3. Migrate Units (images array stringified)
+        const allUnits = await db.select().from(units);
+        for (const unit of allUnits) {
+            if (unit.images) {
+                try {
+                    const parsedImages: string[] = JSON.parse(unit.images);
+                    let needsUpdate = false;
+                    const finalImages = await Promise.all(
+                        parsedImages.map(async (uri) => {
+                            if (uri && uri.startsWith('file://')) {
+                                const info = await FileSystem.getInfoAsync(uri);
+                                if (info.exists) {
+                                    console.log(`Migrating unit image: ${unit.name}`);
+                                    const newFilename = await saveImageToPermanentStorage(uri);
+                                    if (newFilename) {
+                                        needsUpdate = true;
+                                        return newFilename;
+                                    }
+                                }
+                            }
+                            return uri;
+                        })
+                    );
+
+                    if (needsUpdate) {
+                        await db.update(units)
+                            .set({ images: JSON.stringify(finalImages) })
+                            .where(eq(units.id, unit.id));
+                    }
+                } catch (e) {
+                    console.error('Error parsing unit images for migration', e);
+                }
+            }
+        }
+
+        // 4. Migrate Receipt Configs
+        const allConfigs = await db.select().from(rentReceiptConfig);
+        for (const config of allConfigs) {
+            let updates: any = {};
+            let needsUpdate = false;
+
+            const fieldsToCheck = [
+                { key: 'logo_uri', val: config.logo_uri },
+                { key: 'payment_qr_uri', val: config.payment_qr_uri },
+                { key: 'signature_uri', val: config.signature_uri }
+            ];
+
+            for (const field of fieldsToCheck) {
+                if (field.val && field.val.startsWith('file://')) {
+                    const info = await FileSystem.getInfoAsync(field.val);
+                    if (info.exists) {
+                        console.log(`Migrating receipt config ${field.key} for property ${config.property_id}`);
+                        const newFilename = await saveImageToPermanentStorage(field.val);
+                        if (newFilename) {
+                            updates[field.key] = newFilename;
+                            needsUpdate = true;
+                        }
+                    }
+                }
+            }
+
+            if (needsUpdate) {
+                await db.update(rentReceiptConfig)
+                    .set(updates)
+                    .where(eq(rentReceiptConfig.id, config.id));
             }
         }
 

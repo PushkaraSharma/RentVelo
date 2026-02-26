@@ -34,6 +34,7 @@ import { getReceiptConfigByPropertyId, upsertReceiptConfig } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import SignatureModal from '../../../components/common/SignatureModal';
+import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 
 const WALLET_OPTIONS = [
     { label: 'Google Pay', value: 'google_pay' },
@@ -121,8 +122,20 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
     const handleSubmit = async () => {
         setLoading(true);
         try {
+            // Helper function to process images
+            const processImage = async (uri: string | null) => {
+                if (uri && uri.startsWith('file://')) {
+                    const permanentPath = await saveImageToPermanentStorage(uri);
+                    return permanentPath || uri;
+                }
+                return uri;
+            };
+
+            const finalLogoUri = await processImage(logoUri);
+            const finalPaymentQrUri = await processImage(paymentQrUri);
+
             await upsertReceiptConfig(propertyId, {
-                logo_uri: logoUri,
+                logo_uri: finalLogoUri,
                 bank_name: bankName || null,
                 bank_acc_number: bankAccNumber || null,
                 bank_ifsc: bankIfsc || null,
@@ -131,7 +144,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                 wallet_phone: walletPhone || null,
                 wallet_name: walletName || null,
                 upi_id: upiId || null,
-                payment_qr_uri: paymentQrUri,
+                payment_qr_uri: finalPaymentQrUri,
                 signature_uri: signatureUri,
             });
 
@@ -166,7 +179,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                     <View style={styles.section}>
                         {logoUri ? (
                             <View style={styles.imagePreviewContainer}>
-                                <Image source={{ uri: logoUri }} style={styles.logoPreview} />
+                                <Image source={{ uri: getFullImageUri(logoUri) || logoUri }} style={styles.logoPreview} />
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
@@ -281,7 +294,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                         </View>
                         {paymentQrUri ? (
                             <View style={styles.imagePreviewContainer}>
-                                <Image source={{ uri: paymentQrUri }} style={styles.qrPreview} />
+                                <Image source={{ uri: getFullImageUri(paymentQrUri) || paymentQrUri }} style={styles.qrPreview} />
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
@@ -316,7 +329,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                         </View>
                         {signatureUri ? (
                             <View style={styles.imagePreviewContainer}>
-                                <Image source={{ uri: signatureUri }} style={styles.signaturePreview} />
+                                <Image source={{ uri: getFullImageUri(signatureUri) || signatureUri }} style={styles.signaturePreview} />
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}

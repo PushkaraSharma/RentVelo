@@ -27,6 +27,7 @@ import { signOutGoogle } from '../../services/googleAuthService';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getDb } from '../../db';
 import { generateRealUsageData } from '../../../tests/seedDatabase';
+import { getFullImageUri } from '../../services/imageService';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -116,7 +117,7 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={styles.profileCard}>
                     <View style={styles.profileImageContainer}>
                         {user?.photoUrl ? (
-                            <Image source={{ uri: user.photoUrl }} style={styles.profileImage} />
+                            <Image source={{ uri: getFullImageUri(user.photoUrl) || user.photoUrl }} style={styles.profileImage} />
                         ) : (
                             <CircleUser size={60} color={theme.colors.accent} strokeWidth={1.5} />
                         )}

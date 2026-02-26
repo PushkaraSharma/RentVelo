@@ -12,6 +12,7 @@ import Header from '../../../components/common/Header';
 import { createUnit, updateUnit, getUnitById } from '../../../db';
 import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
+import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 
 export default function AddUnitScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -167,6 +168,17 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
         setLoading(true);
         try {
+            // Process images to permanent storage
+            const finalImages = await Promise.all(
+                images.map(async (uri) => {
+                    if (uri && uri.startsWith('file://')) {
+                        const permanentPath = await saveImageToPermanentStorage(uri);
+                        return permanentPath || uri;
+                    }
+                    return uri;
+                })
+            );
+
             const unitData: any = {
                 property_id: propertyId,
                 name: roomName,
@@ -178,7 +190,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 furnishing_type: furnishing,
                 size: roomSize ? parseFloat(roomSize) : null,
                 custom_amenities: customAmenities.length > 0 ? JSON.stringify(customAmenities) : null,
-                images: images.length > 0 ? JSON.stringify(images) : null,
+                images: finalImages.length > 0 ? JSON.stringify(finalImages) : null,
                 is_metered: (electricityEnabled && electricityType === 'Metered') || (waterEnabled && waterType === 'Metered'),
                 electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
                 electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
@@ -475,7 +487,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
                         {images.map((uri, index) => (
                             <View key={index} style={styles.photoWrapper}>
-                                <Image source={{ uri }} style={styles.bottomPhoto} />
+                                <Image source={{ uri: getFullImageUri(uri) || uri }} style={styles.bottomPhoto} />
                                 <Pressable style={styles.removePhotoBtn} onPress={() => removeImage(index)}>
                                     <Trash2 size={12} color="#FFF" />
                                 </Pressable>
