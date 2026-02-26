@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image, Linking } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
+import { getFullImageUri } from '../../services/imageService';
 import { X, Phone, Mail, MapPin, User, Calendar, Shield, ExternalLink, MessageCircle } from 'lucide-react-native';
 
 interface RoomInfoModalProps {
@@ -21,7 +22,7 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
     const formatDate = (d: any) => {
         if (!d) return '—';
         const date = new Date(d);
-        return `${date.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()]}, ${date.getFullYear().toString().slice(-2)}`;
+        return `${date.getDate().toString().padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()]}, ${date.getFullYear().toString().slice(-2)} `;
     };
 
     const leaseEnd = tenant.lease_end_date ? formatDate(tenant.lease_end_date) : '∞';
@@ -44,11 +45,13 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                             <Text style={styles.tenantName}>{tenant.name}</Text>
                             <Text style={styles.tenantAddress}>{tenant.work_address || 'No Address'}</Text>
                         </View>
-                        <View style={styles.avatar}>
+                        <View style={styles.avatarContainer}>
                             {tenant.photo_uri ? (
-                                <Image source={{ uri: tenant.photo_uri }} style={styles.avatarImage} />
+                                <Image source={{ uri: getFullImageUri(tenant.photo_uri) || tenant.photo_uri }} style={styles.avatarImage} />
                             ) : (
-                                <User size={28} color={theme.colors.textTertiary} />
+                                <View style={styles.avatarPlaceholder}>
+                                    <User size={28} color={theme.colors.textTertiary} />
+                                </View>
                             )}
                         </View>
                     </View>
@@ -74,7 +77,7 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                         <Text style={styles.sectionTitle}>Contact Details</Text>
                         {tenant.phone ? (
                             <View style={styles.contactRow}>
-                                <Pressable style={styles.callBtn} onPress={() => Linking.openURL(`tel:${tenant.phone}`)}>
+                                <Pressable style={styles.callBtn} onPress={() => Linking.openURL(`tel:${tenant.phone} `)}>
                                     <Phone size={16} color="#FFF" />
                                     <Text style={styles.callBtnText}>Call</Text>
                                 </Pressable>
@@ -83,28 +86,32 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                                     style={styles.whatsappBtn}
                                     onPress={() => {
                                         const phone = tenant.phone.replace(/[^0-9]/g, '');
-                                        const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
+                                        const whatsappPhone = phone.startsWith('91') ? phone : `91${phone} `;
                                         Linking.openURL(`whatsapp://send?phone=${whatsappPhone}`);
                                     }}
                                 >
                                     <Text style={styles.whatsappIcon}>💬</Text>
                                     <Text style={styles.whatsappText}>WhatsApp</Text>
+                                </Pressable >
+                            </View >
+                        ) : null}
+                        {
+                            tenant.email ? (
+                                <Pressable style={styles.contactRow} onPress={() => Linking.openURL(`mailto:${tenant.email}`)}>
+                                    <Mail size={16} color={theme.colors.accent} />
+                                    <Text style={styles.contactText}>{tenant.email}</Text>
                                 </Pressable>
-                            </View>
-                        ) : null}
-                        {tenant.email ? (
-                            <Pressable style={styles.contactRow} onPress={() => Linking.openURL(`mailto:${tenant.email}`)}>
-                                <Mail size={16} color={theme.colors.accent} />
-                                <Text style={styles.contactText}>{tenant.email}</Text>
-                            </Pressable>
-                        ) : null}
-                        {!tenant.phone && !tenant.email && (
-                            <Text style={styles.noContact}>No Contact Details Available</Text>
-                        )}
-                    </View>
+                            ) : null
+                        }
+                        {
+                            !tenant.phone && !tenant.email && (
+                                <Text style={styles.noContact}>No Contact Details Available</Text>
+                            )
+                        }
+                    </View >
 
                     {/* Open Room Info */}
-                    <Pressable
+                    < Pressable
                         style={styles.openRoomBtn}
                         onPress={() => {
                             onClose();
@@ -113,7 +120,7 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                     >
                         <Text style={styles.openRoomText}>Open Room Info</Text>
                         <ExternalLink size={16} color="#FFF" />
-                    </Pressable>
+                    </Pressable >
 
                     {/* Meter Info */}
                     {unit.is_metered && (
@@ -178,25 +185,44 @@ const getStyles = (theme: any) => StyleSheet.create({
         color: theme.colors.textPrimary,
     },
     tenantAddress: {
-        fontSize: 13,
+        fontSize: 14,
         color: theme.colors.textSecondary,
-        marginTop: 2,
+        marginTop: 4,
     },
-    avatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+    avatarContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarPlaceholder: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         backgroundColor: theme.colors.surface,
         justifyContent: 'center',
         alignItems: 'center',
-        ...theme.shadows.small,
     },
     avatarImage: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
     },
     statsRow: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.background,
+        borderRadius: 16,
+        padding: theme.spacing.m,
+        marginBottom: theme.spacing.l,
+    },
+    statBox: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statDivider: {
+        width: 1,
+        backgroundColor: theme.colors.border,
+        marginHorizontal: theme.spacing.m,
+    },
+    section: {
         flexDirection: 'row',
         backgroundColor: theme.colors.background,
         borderRadius: 16,

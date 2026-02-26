@@ -7,12 +7,12 @@ import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
 import { ArrowLeft, Camera, Building, Layers, User, Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
-import * as ImagePicker from 'expo-image-picker';
 import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import { createProperty, updateProperty, getPropertyById, createUnit, updateUnit } from '../../../db';
 import SuccessModal from '../../../components/common/SuccessModal';
 import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES, RENT_CYCLE_OPTIONS, METER_TYPES } from '../../../utils/Constants';
 import { Zap, Droplets } from 'lucide-react-native';
+import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
@@ -173,11 +173,22 @@ export default function AddPropertyScreen({ navigation, route }: any) {
 
         setLoading(true);
         try {
+            let finalImageUri = image;
+
+            // If the image is a brand new local cache URI from ImagePicker, we compress and save it
+            // before inserting. If it's already a relative path, we leave it.
+            if (image && image.startsWith('file://')) {
+                const permanentPath = await saveImageToPermanentStorage(image);
+                if (permanentPath) {
+                    finalImageUri = permanentPath;
+                }
+            }
+
             const propertyData: any = {
                 name: propertyName,
                 address: address,
                 type: propertyType as any,
-                image_uri: image || undefined,
+                image_uri: finalImageUri || undefined,
                 amenities: JSON.stringify(selectedAmenities),
                 is_multi_unit: isMultiUnit,
                 owner_name: ownerName || undefined,
@@ -252,7 +263,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     {/* Image Upload */}
                     <Pressable style={styles.imageUpload} onPress={pickImage}>
                         {image ? (
-                            <Image source={{ uri: image }} style={styles.uploadedImage} />
+                            <Image source={{ uri: getFullImageUri(image) || image }} style={styles.uploadedImage} />
                         ) : (
                             <View style={styles.imagePlaceholder}>
                                 <View style={styles.cameraIconBg}>

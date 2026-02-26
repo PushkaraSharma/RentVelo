@@ -12,6 +12,7 @@ import Input from '../../components/common/Input';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import { storage } from '../../utils/storage';
+import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
 
 export default function ProfileScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -55,7 +56,15 @@ export default function ProfileScreen({ navigation }: any) {
 
         setLoading(true);
         try {
-            const updatedUser = { name, email, photoUrl: photoUrl || undefined };
+            let finalPhotoUrl = photoUrl;
+            if (photoUrl && photoUrl.startsWith('file://')) {
+                const permanentPath = await saveImageToPermanentStorage(photoUrl);
+                if (permanentPath) {
+                    finalPhotoUrl = permanentPath;
+                }
+            }
+
+            const updatedUser = { name, email, photoUrl: finalPhotoUrl || undefined };
             dispatch(login(updatedUser)); // Update Redux
             storage.set('@user_profile', JSON.stringify({ phone, businessName })); // Save extra fields
             Alert.alert('Success', 'Profile updated successfully');
@@ -79,7 +88,7 @@ export default function ProfileScreen({ navigation }: any) {
                     <View style={styles.avatarSection}>
                         <Pressable style={styles.avatarPlaceholder} onPress={pickImage}>
                             {photoUrl ? (
-                                <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
+                                <Image source={{ uri: getFullImageUri(photoUrl) || photoUrl }} style={styles.avatarImage} />
                             ) : (
                                 <User size={50} color={theme.colors.accent} />
                             )}

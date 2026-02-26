@@ -12,6 +12,7 @@ import { getDashboardData, DashboardData, getUnreadNotificationCount } from '../
 import { useFocusEffect } from '@react-navigation/native';
 import { storage } from '../../utils/storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getFullImageUri } from '../../services/imageService';
 
 export default function DashboardScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -61,7 +62,7 @@ export default function DashboardScreen({ navigation }: any) {
                     <View style={styles.profileRow}>
                         <View style={styles.avatar}>
                             {user?.photoUrl ? (
-                                <Image source={{ uri: user.photoUrl }} style={styles.avatarImage} />
+                                <Image source={{ uri: getFullImageUri(user.photoUrl) || user.photoUrl }} style={styles.avatarImage} />
                             ) : (
                                 <Text style={styles.avatarText}>{user?.name?.[0] || 'U'}</Text>
                             )}

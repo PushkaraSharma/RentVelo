@@ -13,6 +13,7 @@ import { ThemeProvider } from './src/theme/ThemeContext';
 import * as Updates from 'expo-updates';
 import AppLockWrapper from './src/components/AppLockWrapper';
 import AutoBackupHandler from './src/components/AutoBackupHandler';
+import { migrateOldImagesToPermanentStorage } from './src/services/imageMigrationService';
 import { syncNotificationSchedules } from './src/services/pushNotificationService';
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from './src/navigation/RootNavigator';
@@ -62,6 +63,13 @@ export default function App() {
       subscription.remove();
     };
   }, []);
+
+  React.useEffect(() => {
+    if (success) {
+      // Run once on initial db success to fix any legacy temporary image URIs
+      migrateOldImagesToPermanentStorage();
+    }
+  }, [success]);
 
   if (!success && !error) {
     return (

@@ -6,6 +6,7 @@ import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide
 import { addPaymentToBill } from '../../db/billService';
 import { syncNotificationSchedules } from '../../services/pushNotificationService';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
+import { saveImageToPermanentStorage } from '../../services/imageService';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
@@ -46,12 +47,20 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
 
         setLoading(true);
         try {
+            let finalPhotoUri = photoUri;
+            if (photoUri && photoUri.startsWith('file://')) {
+                const permanentPath = await saveImageToPermanentStorage(photoUri);
+                if (permanentPath) {
+                    finalPhotoUri = permanentPath;
+                }
+            }
+
             await addPaymentToBill(bill.id, {
                 amount: amt,
                 payment_method: method as any,
                 payment_date: paymentDate,
                 notes: remarks || undefined,
-                photo_uri: photoUri || undefined,
+                photo_uri: finalPhotoUri || undefined,
                 property_id: bill.property_id,
                 tenant_id: bill.tenant_id,
                 unit_id: bill.unit_id,
@@ -81,7 +90,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
 
     const formatDate = (d: Date) => {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear().toString().slice(-2)}`;
+        return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear().toString().slice(-2)} `;
     };
 
     return (

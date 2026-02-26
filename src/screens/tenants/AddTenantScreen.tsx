@@ -15,6 +15,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, RENT_CYCLE_OPTIONS, FURNISHING_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
+import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
 
 export default function AddTenantScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -192,6 +193,20 @@ export default function AddTenantScreen({ navigation, route }: any) {
 
         setLoading(true);
         try {
+            // Helper function to process images
+            const processImage = async (uri: string | null) => {
+                if (uri && uri.startsWith('file://')) {
+                    const permanentPath = await saveImageToPermanentStorage(uri);
+                    return permanentPath || uri; // fallback to original if failed
+                }
+                return uri;
+            };
+
+            const finalPhotoUri = await processImage(photoUri);
+            const finalAadhaarFront = await processImage(aadhaarFrontUri);
+            const finalAadhaarBack = await processImage(aadhaarBackUri);
+            const finalPan = await processImage(panUri);
+
             const tenantData = {
                 property_id: isEditMode ? originalPropertyId : propertyId,
                 unit_id: isEditMode ? originalUnitId : (unitId || null),
@@ -212,10 +227,10 @@ export default function AddTenantScreen({ navigation, route }: any) {
                 status: isEditMode ? originalStatus : 'active' as any,
                 move_in_date: moveInDate,
                 rent_start_date: rentStartDate,
-                photo_uri: photoUri,
-                aadhaar_front_uri: aadhaarFrontUri,
-                aadhaar_back_uri: aadhaarBackUri,
-                pan_uri: panUri,
+                photo_uri: finalPhotoUri,
+                aadhaar_front_uri: finalAadhaarFront,
+                aadhaar_back_uri: finalAadhaarBack,
+                pan_uri: finalPan,
             };
 
             if (isEditMode) {
@@ -261,7 +276,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                         <View>
                             <Pressable style={styles.photoContainer} onPress={pickPhoto}>
                                 {photoUri ? (
-                                    <Image source={{ uri: photoUri }} style={styles.tenantPhoto} />
+                                    <Image source={{ uri: getFullImageUri(photoUri) || photoUri }} style={styles.tenantPhoto} />
                                 ) : (
                                     <View style={styles.photoPlaceholder}>
                                         <Camera size={32} color={theme.colors.textTertiary} />
@@ -516,7 +531,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                 <Text style={styles.docLabel}>AADHAAR FRONT</Text>
                                 <Pressable style={styles.uploadBox} onPress={() => pickDocument('aadhaar_front')}>
                                     {aadhaarFrontUri ? (
-                                        <Image source={{ uri: aadhaarFrontUri }} style={styles.docImg} />
+                                        <Image source={{ uri: getFullImageUri(aadhaarFrontUri) || aadhaarFrontUri }} style={styles.docImg} />
                                     ) : (
                                         <>
                                             <Upload size={20} color={theme.colors.accent} />
@@ -534,7 +549,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                 <Text style={styles.docLabel}>AADHAAR BACK</Text>
                                 <Pressable style={styles.uploadBox} onPress={() => pickDocument('aadhaar_back')}>
                                     {aadhaarBackUri ? (
-                                        <Image source={{ uri: aadhaarBackUri }} style={styles.docImg} />
+                                        <Image source={{ uri: getFullImageUri(aadhaarBackUri) || aadhaarBackUri }} style={styles.docImg} />
                                     ) : (
                                         <>
                                             <Upload size={20} color={theme.colors.accent} />
@@ -554,7 +569,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                 <Text style={styles.docLabel}>PAN CARD</Text>
                                 <Pressable style={styles.uploadBox} onPress={() => pickDocument('pan')}>
                                     {panUri ? (
-                                        <Image source={{ uri: panUri }} style={styles.docImg} />
+                                        <Image source={{ uri: getFullImageUri(panUri) || panUri }} style={styles.docImg} />
                                     ) : (
                                         <>
                                             <Upload size={20} color={theme.colors.accent} />

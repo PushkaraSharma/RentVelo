@@ -1,12 +1,68 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { getGoogleTokens, isSignedIn } from './googleAuthService';/**
+import { zip, unzip } from 'react-native-zip-archive';
+import { getGoogleTokens, isSignedIn } from './googleAuthService';
+
+/**
  * Note: Our sqlite database is named `rentvelo.db` and is located in the document directory.
  */
 const DB_NAME = 'rentvelo.db';
-const BACKUP_FILE_NAME = 'rentvelo_backup.db';
+const BACKUP_FILE_NAME = 'rentvelo_backup.zip';
+const IMAGES_DIR_NAME = 'RentVeloImages';
 
 const getDbPath = () => {
     return `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
+};
+
+const getImagesPath = () => {
+    return `${FileSystem.documentDirectory}${IMAGES_DIR_NAME}`;
+};
+
+/**
+ * Prepare a temporary directory containing the DB and images, then zip it.
+ * Returns the path to the newly created .zip file.
+ */
+const createBackupZip = async (): Promise<string | null> => {
+    try {
+        const dbPath = getDbPath();
+        const imagesPath = getImagesPath();
+        const tempBackupDir = `${FileSystem.cacheDirectory}BackupStaging/`;
+        const zipPath = `${FileSystem.cacheDirectory}${BACKUP_FILE_NAME}`;
+
+        // Ensure staging dir is empty
+        const stagingInfo = await FileSystem.getInfoAsync(tempBackupDir);
+        if (stagingInfo.exists) {
+            await FileSystem.deleteAsync(tempBackupDir, { idempotent: true });
+        }
+        await FileSystem.makeDirectoryAsync(tempBackupDir, { intermediates: true });
+
+        // Copy DB
+        const dbExists = await FileSystem.getInfoAsync(dbPath);
+        if (dbExists.exists) {
+            await FileSystem.copyAsync({ from: dbPath, to: `${tempBackupDir}${DB_NAME}` });
+        } else {
+            console.error('Database file not found for backup');
+            return null;
+        }
+
+        // Copy Images if they exist
+        const imgExists = await FileSystem.getInfoAsync(imagesPath);
+        if (imgExists.exists) {
+            await FileSystem.copyAsync({ from: imagesPath, to: `${tempBackupDir}${IMAGES_DIR_NAME}` });
+        }
+
+        // Create the zip
+        await zip(tempBackupDir, zipPath);
+
+        // Clean up staging dir
+        await FileSystem.deleteAsync(tempBackupDir, { idempotent: true });
+
+        // react-native-zip-archive strips the 'file://' scheme on Android inside the returned path.
+        // Returning the original zipPath ensures we keep the scheme for Expo FileSystem functions.
+        return zipPath;
+    } catch (error) {
+        console.error('Error creating backup zip:', error);
+        return null;
+    }
 };
 
 /**
@@ -14,22 +70,18 @@ const getDbPath = () => {
  */
 export const performLocalBackup = async (): Promise<string | null> => {
     try {
-        const dbPath = getDbPath();
-        const backupPath = `${FileSystem.documentDirectory}${BACKUP_FILE_NAME}`;
+        const zipPath = await createBackupZip();
+        if (!zipPath) return null;
 
-        const dbExists = await FileSystem.getInfoAsync(dbPath);
-        if (!dbExists.exists) {
-            console.error('Database file not found');
-            return null;
-        }
+        const finalBackupPath = `${FileSystem.documentDirectory}${BACKUP_FILE_NAME}`;
 
         await FileSystem.copyAsync({
-            from: dbPath,
-            to: backupPath,
+            from: zipPath,
+            to: finalBackupPath,
         });
 
-        console.log(`Local backup successful at ${backupPath}`);
-        return backupPath;
+        console.log(`Local backup successful at ${finalBackupPath}`);
+        return finalBackupPath;
     } catch (error) {
         console.error('Local backup failed:', error);
         return null;
@@ -77,14 +129,13 @@ export const backupToGoogleDrive = async (): Promise<boolean> => {
             return false;
         }
 
-        const dbPath = getDbPath();
-        const dbExists = await FileSystem.getInfoAsync(dbPath);
-        if (!dbExists.exists) {
-            console.error('No database file found to backup');
+        const zipPath = await createBackupZip();
+        if (!zipPath) {
+            console.error('Finished creating backup zip but got null');
             return false;
         }
 
-        const fileContentBase64 = await FileSystem.readAsStringAsync(dbPath, { encoding: FileSystem.EncodingType.Base64 });
+        const fileContentBase64 = await FileSystem.readAsStringAsync(zipPath, { encoding: FileSystem.EncodingType.Base64 });
         const existingFileId = await findExistingBackupFileId(tokens.accessToken);
 
         // We use a multipart upload to set metadata (name, parent folder) and content
@@ -109,7 +160,7 @@ export const backupToGoogleDrive = async (): Promise<boolean> => {
             `Content-Type: application/json; charset=UTF-8\n\n` +
             `${JSON.stringify(metadata)}\n` +
             `--${boundary}\n` +
-            `Content-Type: application/octet-stream\n` +
+            `Content-Type: application/zip\n` +
             `Content-Transfer-Encoding: base64\n\n` +
             `${fileContentBase64}\n` +
             `--${boundary}--`;
@@ -172,11 +223,12 @@ export const restoreFromGoogleDrive = async (): Promise<boolean> => {
         // We need an array buffer to write back as base64
         const blob = await response.blob();
 
-        const targetPath = `${FileSystem.documentDirectory}SQLite/${DB_NAME}_restored.db`;
+        const targetZipPath = `${FileSystem.cacheDirectory}${BACKUP_FILE_NAME}_restored.zip`;
+        const extractTargetPath = `${FileSystem.cacheDirectory}RestoreStaging/`;
 
         const downloadResult = await FileSystem.downloadAsync(
             url,
-            targetPath,
+            targetZipPath,
             { headers: { Authorization: `Bearer ${tokens.accessToken}` } }
         );
 
@@ -185,14 +237,55 @@ export const restoreFromGoogleDrive = async (): Promise<boolean> => {
             return false;
         }
 
-        // Now replace the active DB with the restored one
-        const dbPath = getDbPath();
-        await FileSystem.copyAsync({
-            from: targetPath,
-            to: dbPath,
-        });
+        // Clean staging area
+        const stagingInfo = await FileSystem.getInfoAsync(extractTargetPath);
+        if (stagingInfo.exists) {
+            await FileSystem.deleteAsync(extractTargetPath, { idempotent: true });
+        }
+        await FileSystem.makeDirectoryAsync(extractTargetPath, { intermediates: true });
 
-        await FileSystem.deleteAsync(targetPath);
+        // Unzip the downloaded file
+        await unzip(targetZipPath, extractTargetPath);
+
+        // Move the Database back into `SQLite/`
+        const dbPath = getDbPath();
+        const extractedDbPath = `${extractTargetPath}${DB_NAME}`;
+
+        const extractedDbInfo = await FileSystem.getInfoAsync(extractedDbPath);
+        if (extractedDbInfo.exists) {
+            const sqliteDir = `${FileSystem.documentDirectory}SQLite/`;
+            const sqliteInfo = await FileSystem.getInfoAsync(sqliteDir);
+            if (!sqliteInfo.exists) {
+                await FileSystem.makeDirectoryAsync(sqliteDir, { intermediates: true });
+            }
+
+            // Cannot overwrite the db directly while connection is open in advanced cases,
+            // but expo-sqlite handles simple overwrite correctly if connection isn't locked.
+            await FileSystem.copyAsync({
+                from: extractedDbPath,
+                to: dbPath,
+            });
+        }
+
+        // Move the Images back over the `RentVeloImages/` folder
+        const imagesPath = getImagesPath();
+        const extractedImgPath = `${extractTargetPath}${IMAGES_DIR_NAME}`;
+        const extractedImgInfo = await FileSystem.getInfoAsync(extractedImgPath);
+
+        if (extractedImgInfo.exists) {
+            const destImgInfo = await FileSystem.getInfoAsync(imagesPath);
+            if (destImgInfo.exists) {
+                await FileSystem.deleteAsync(imagesPath, { idempotent: true });
+            }
+            await FileSystem.copyAsync({
+                from: extractedImgPath,
+                to: imagesPath,
+            });
+        }
+
+        // Cleanup
+        await FileSystem.deleteAsync(targetZipPath, { idempotent: true });
+        await FileSystem.deleteAsync(extractTargetPath, { idempotent: true });
 
         return true;
     } catch (error) {
