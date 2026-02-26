@@ -68,4 +68,4 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 4;
+export const OTA_VERSION = 5;
