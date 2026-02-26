@@ -34,6 +34,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "favicon": "./assets/app-icon.png"
   },
   "plugins": [
+    [
+      "expo-notifications",
+      {
+        "icon": "./assets/app-icon.png",
+        "color": "#3B82F6"
+      }
+    ],
     "expo-sqlite",
     "expo-web-browser",
     "@react-native-firebase/app",

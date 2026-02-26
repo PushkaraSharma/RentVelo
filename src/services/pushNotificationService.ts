@@ -10,7 +10,6 @@ const ensureNotificationHandler = () => {
     isHandlerConfigured = true;
     Notifications.setNotificationHandler({
         handleNotification: async () => ({
-            shouldShowAlert: true,
             shouldPlaySound: true,
             shouldSetBadge: true,
             shouldShowBanner: true,
@@ -54,7 +53,8 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
 export const scheduleLocalNotification = async (
     title: string,
     body: string,
-    trigger: Notifications.NotificationTriggerInput
+    trigger: Notifications.NotificationTriggerInput,
+    data?: any
 ) => {
     try {
         const hasPermission = await requestNotificationPermissions();
@@ -65,6 +65,7 @@ export const scheduleLocalNotification = async (
                 title,
                 body,
                 sound: true,
+                data: data || {},
             },
             trigger,
         });
@@ -86,21 +87,144 @@ export const cancelAllScheduledNotifications = async () => {
     await Notifications.cancelAllScheduledNotificationsAsync();
 };
 
-// Specialized function for Rent Reminders
-export const scheduleMonthlyRentReminder = async (dayOfMonth: number): Promise<string | null> => {
-    await cancelAllScheduledNotifications(); // Assuming one primary reminder rule for now
+import { getDb } from '../db';
+import { rentBills, properties } from '../db/schema';
+import { eq, or } from 'drizzle-orm';
+import { storage } from '../utils/storage';
 
-    // In expo-notifications, MonthlyTriggerInput allows scheduling on a specific day of month
-    // However, it's safer to schedule it for the next occurrence and let background fetch or app open reschedule
-    // Or just use the 'monthly' trigger
-    return await scheduleLocalNotification(
-        'Rent Collection Due',
-        'It is time to collect rent for this month. Tap to view pending collections.',
-        {
-            repeats: true,
-            day: dayOfMonth,
-            hour: 9, // 9 AM
-            minute: 0,
-        } as any // Cast to any because TS types for trigger can be strict, but object works
-    );
+const PREFS_KEY = '@notification_prefs';
+
+export const syncNotificationSchedules = async () => {
+    try {
+        console.log('[PushNotifications] Starting schedule sync...');
+        // 1. Clear any existing scheduled notifications
+        await cancelAllScheduledNotifications();
+
+        // 2. Read Preferences
+        const stored = storage.getString(PREFS_KEY);
+        if (!stored) {
+            console.log('[PushNotifications] No preferences found, aborting sync.');
+            return;
+        }
+
+        const prefs = JSON.parse(stored);
+        if (!prefs.enableAll) {
+            console.log('[PushNotifications] Notifications globally disabled by user.');
+            return;
+        }
+
+        const prefTime = new Date(prefs.notificationTime || new Date().setHours(9, 0, 0, 0));
+        const targetHour = prefTime.getHours();
+        const targetMinute = prefTime.getMinutes();
+
+        // 3. Fetch Actionable Bills
+        const db = getDb();
+        const allPendingBills = await db.select({
+            id: rentBills.id,
+            property_id: rentBills.property_id,
+            propertyName: properties.name,
+            month: rentBills.month,
+            year: rentBills.year,
+            paid_amount: rentBills.paid_amount,
+            status: rentBills.status,
+        })
+            .from(rentBills)
+            .innerJoin(properties, eq(rentBills.property_id, properties.id))
+            .where(or(eq(rentBills.status, 'pending'), eq(rentBills.status, 'partial')));
+
+        const actionableBills = allPendingBills.filter(b => {
+            if (!prefs.notifyAllPending && (b.paid_amount || 0) > 0) return false;
+            return true;
+        });
+
+        console.log(`[PushNotifications] Found ${actionableBills.length} actionable bills pending/partial.`);
+        if (actionableBills.length === 0) return;
+
+        // 4. Determine Future Triggers
+        const now = new Date();
+        const schedules = new Map<string, { date: Date; propertyName: string; propertyId: number; due: boolean; overdue: boolean }>();
+
+        actionableBills.forEach(bill => {
+            // Rent is due on the 1st of the bill's month/year
+            const dueDate = new Date(bill.year, bill.month - 1, 1);
+            const pName = bill.propertyName || 'Property';
+
+            // Pre-notifications (Rent Due soon)
+            if (prefs.rentDueEnabled && prefs.rentDueDaysBefore > 0) {
+                for (let i = prefs.rentDueDaysBefore; i >= 1; i--) {
+                    const notifyDate = new Date(dueDate);
+                    notifyDate.setDate(dueDate.getDate() - i);
+                    notifyDate.setHours(targetHour, targetMinute, 0, 0);
+
+                    if (notifyDate > now) {
+                        const key = `${notifyDate.toISOString()}_${bill.property_id}`;
+                        if (!schedules.has(key)) schedules.set(key, { date: notifyDate, propertyName: pName, propertyId: bill.property_id, due: false, overdue: false });
+                        schedules.get(key)!.due = true;
+                    }
+                }
+            }
+
+            // Overdue notifications (After 1st)
+            if (prefs.overdueEnabled && prefs.overdueDaysAfter > 0) {
+                for (let i = 1; i <= prefs.overdueDaysAfter; i++) {
+                    const notifyDate = new Date(dueDate);
+                    notifyDate.setDate(dueDate.getDate() + i);
+                    notifyDate.setHours(targetHour, targetMinute, 0, 0);
+
+                    if (notifyDate > now) {
+                        const key = `${notifyDate.toISOString()}_${bill.property_id}`;
+                        if (!schedules.has(key)) schedules.set(key, { date: notifyDate, propertyName: pName, propertyId: bill.property_id, due: false, overdue: false });
+                        schedules.get(key)!.overdue = true;
+                    }
+                }
+            }
+        });
+
+        // 5. Schedule OS Notifications
+        let scheduledCount = 0;
+        // iOS limits to 64 local notifications, keep a buffer
+        for (const info of schedules.values()) {
+            if (scheduledCount >= 60) break;
+
+            if (info.due) {
+                await scheduleLocalNotification(
+                    'Upcoming Rent Collection',
+                    `Rent collection is coming up for ${info.propertyName}.`,
+                    { type: 'date', date: info.date } as any,
+                    { route: 'TakeRent', propertyId: info.propertyId }
+                );
+                scheduledCount++;
+            }
+
+            if (info.overdue && scheduledCount < 60) {
+                await scheduleLocalNotification(
+                    'Overdue Rent',
+                    `You have pending rent collections for ${info.propertyName}. Tap to collect.`,
+                    { type: 'date', date: info.date } as any,
+                    { route: 'TakeRent', propertyId: info.propertyId }
+                );
+                scheduledCount++;
+            }
+        }
+
+        console.log(`[PushNotifications] Successfully queued ${scheduledCount} local notifications.`);
+
+        // Debug: Print what the OS actually holds
+        // const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+        // console.log(`[PushNotifications] OS currently holds ${scheduled.length} scheduled notifications.`);
+        // if (scheduled.length > 0) {
+        //     console.log('[PushNotifications] Next few scheduled times:');
+        //     scheduled.slice(0, 3).forEach((n, i) => {
+        //         const trigger = n.trigger as any;
+        //         if (trigger?.date || trigger?.value) {
+        //             console.log(`  ${i + 1}: ${new Date(trigger.date || trigger.value).toLocaleString()}`);
+        //         } else {
+        //             console.log(`  ${i + 1}: ${JSON.stringify(trigger)}`);
+        //         }
+        //     });
+        // }
+
+    } catch (error) {
+        console.error('[PushNotifications] Failed to sync notification schedules', error);
+    }
 };

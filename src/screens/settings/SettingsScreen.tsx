@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch, useSelector } from 'react-redux';
@@ -25,6 +25,8 @@ import Constants from 'expo-constants';
 import { OTA_VERSION } from '../../utils/Constants';
 import { signOutGoogle } from '../../services/googleAuthService';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import { getDb } from '../../db';
+import { generateRealUsageData } from '../../../tests/seedDatabase';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -45,6 +47,38 @@ export default function SettingsScreen({ navigation }: any) {
             // Ignored if not signed in or error occurs
         }
         dispatch(logout());
+    };
+
+    const [isSeeding, setIsSeeding] = useState(false);
+
+    const handleSeedDatabase = () => {
+        Alert.alert(
+            'Seed Database',
+            'Are you sure you want to inject 1-year of test data into this environment?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Seed Data',
+                    style: 'destructive',
+                    onPress: () => {
+                        setIsSeeding(true);
+                        // Yield the JS thread for 100ms so the Modal overlay can render
+                        setTimeout(async () => {
+                            try {
+                                const db = getDb();
+                                await generateRealUsageData(db);
+                                Alert.alert('Success', 'Database seeded successfully.');
+                            } catch (error) {
+                                console.error('Error seeding DB:', error);
+                                Alert.alert('Error', 'Failed to seed database.');
+                            } finally {
+                                setIsSeeding(false);
+                            }
+                        }, 100);
+                    }
+                }
+            ]
+        );
     };
 
     const handleShare = async () => {
@@ -129,6 +163,12 @@ export default function SettingsScreen({ navigation }: any) {
                             color="#EC4899"
                             onPress={() => navigation.navigate('Backup')}
                         />
+                        <SettingItem
+                            icon={Database}
+                            label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
+                            color="#8B5CF6"
+                            onPress={handleSeedDatabase}
+                        />
                     </View>
                 </View>
 
@@ -187,6 +227,14 @@ export default function SettingsScreen({ navigation }: any) {
                 cancelText="Cancel"
                 variant="danger"
             />
+            <Modal visible={isSeeding} transparent={true} animationType="fade">
+                <View style={styles.loaderOverlay}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <Text style={styles.loaderText}>Generating 1 Year of Realistic App Data...</Text>
+                    <Text style={styles.loaderSubText}>This takes about 10-15 seconds.</Text>
+                </View>
+            </Modal>
+
         </SafeAreaView>
     );
 }
@@ -346,5 +394,25 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 12,
         fontWeight: theme.typography.medium,
     },
+    loaderOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    loaderText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginTop: 20,
+        textAlign: 'center',
+    },
+    loaderSubText: {
+        color: theme.colors.textSecondary,
+        fontSize: 14,
+        marginTop: 8,
+        textAlign: 'center',
+    }
 });
 

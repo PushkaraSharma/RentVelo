@@ -6,7 +6,7 @@ import { Bell, Calendar, AlertTriangle, Layers, Clock, CheckCircle } from 'lucid
 import Header from '../../components/common/Header';
 import Toggle from '../../components/common/Toggle';
 import { storage } from '../../utils/storage';
-import { scheduleLocalNotification } from '../../services/pushNotificationService';
+import { scheduleLocalNotification, syncNotificationSchedules } from '../../services/pushNotificationService';
 import Slider from '@react-native-community/slider';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
@@ -60,11 +60,13 @@ export default function NotificationsScreen({ navigation }: any) {
         }
     };
 
-    const updatePref = <K extends keyof NotificationPrefs>(key: K, value: NotificationPrefs[K]) => {
+    const updatePref = async <K extends keyof NotificationPrefs>(key: K, value: NotificationPrefs[K]) => {
         try {
             const newPrefs = { ...prefs, [key]: value };
             setPrefs(newPrefs);
             storage.set(PREFS_KEY, JSON.stringify(newPrefs));
+            // Sync schedules immediately when settings change 
+            await syncNotificationSchedules();
         } catch (e) {
             console.error('Failed to save notification pref:', e);
         }
@@ -78,9 +80,12 @@ export default function NotificationsScreen({ navigation }: any) {
     const handleTestNotification = async () => {
         try {
             const id = await scheduleLocalNotification(
-                'Test Notification',
-                'This is a test to verify your notification settings are working.',
-                null
+                'Upcoming Rent Collection',
+                'Rent collection is coming up for Apartment 101, Apartment 102.',
+                {
+                    type: 'timeInterval',
+                    repeats: false
+                } as any
             );
             if (id) {
                 Alert.alert('Success', 'Test notification triggered.');
