@@ -35,8 +35,8 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const [property, setProperty] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    const loadData = useCallback(async () => {
-        setLoading(true);
+    const loadData = useCallback(async (isSilent: boolean = false) => {
+        if (!isSilent) setLoading(true);
         try {
             const prop = await getPropertyById(propertyId);
             setProperty(prop);
@@ -48,7 +48,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
         } catch (error) {
             console.error('Error loading rent data:', error);
         } finally {
-            setLoading(false);
+            if (!isSilent) setLoading(false);
         }
     }, [propertyId, month, year]);
 

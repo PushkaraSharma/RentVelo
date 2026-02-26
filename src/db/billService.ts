@@ -547,29 +547,39 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         })
         .where(eq(rentBills.id, billId));
 
-    // B3: Cascade to next month — update its previous_balance if it changed
+    // B3 & B17: Cascade to next month — update its previous_balance and prev_reading in ONE batch
     const nextMonth = bill.month === 12 ? 1 : bill.month + 1;
     const nextYear = bill.month === 12 ? bill.year + 1 : bill.year;
-    const nextBill = await db.select().from(rentBills).where(
+    const nextBillResult = await db.select().from(rentBills).where(
         and(
             eq(rentBills.unit_id, bill.unit_id),
             eq(rentBills.month, nextMonth),
             eq(rentBills.year, nextYear)
         )
     ).limit(1);
-    if (nextBill.length > 0 && nextBill[0].previous_balance !== balance) {
-        await db.update(rentBills)
-            .set({ previous_balance: balance, updated_at: new Date() })
-            .where(eq(rentBills.id, nextBill[0].id));
-        await recalculateBill(nextBill[0].id);
-    }
 
-    // B17: Cascade current electricity reading to next month's previous reading
-    if (nextBill.length > 0 && nextBill[0].prev_reading !== bill.curr_reading) {
-        await db.update(rentBills)
-            .set({ prev_reading: bill.curr_reading, updated_at: new Date() })
-            .where(eq(rentBills.id, nextBill[0].id));
-        await recalculateBill(nextBill[0].id);
+    if (nextBillResult.length > 0) {
+        const nextBill = nextBillResult[0];
+        const updates: any = {};
+        let needsRecalculate = false;
+
+        if (nextBill.previous_balance !== balance) {
+            updates.previous_balance = balance;
+            needsRecalculate = true;
+        }
+
+        if (nextBill.prev_reading !== bill.curr_reading) {
+            updates.prev_reading = bill.curr_reading;
+            needsRecalculate = true;
+        }
+
+        if (needsRecalculate) {
+            updates.updated_at = new Date();
+            await db.update(rentBills)
+                .set(updates)
+                .where(eq(rentBills.id, nextBill.id));
+            await recalculateBill(nextBill.id);
+        }
     }
 
     return (await getBillById(billId))!;

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
@@ -39,7 +39,7 @@ interface RentBillCardProps {
         nextBillStatus?: { hasChanges: boolean; id: number | null };
     };
     period: { start: string; end: string; days: number };
-    onRefresh: () => void;
+    onRefresh: (isSilent?: boolean) => void;
     navigation: any;
     propertyId: number;
     viewingMonth: number;
@@ -60,6 +60,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [showExpenseActions, setShowExpenseActions] = useState(false);
     const [showExpenseList, setShowExpenseList] = useState(false);
     const [showEditElectricity, setShowEditElectricity] = useState(false);
+    const savingReading = useRef(false);
     const [meterReading, setMeterReading] = useState(bill?.curr_reading?.toString() || '');
     const [meterFocused, setMeterFocused] = useState(false);
     const [generatingReceipt, setGeneratingReceipt] = useState(false);
@@ -86,6 +87,17 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             setMeterReading('');
         }
     }, [bill?.curr_reading, meterFocused]);
+
+    // B17.1: Listen for keyboard hide to catch Android swipe-back (which doesn't fire onBlur reliably)
+    useEffect(() => {
+        const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+            if (meterFocused) {
+                setMeterFocused(false);
+                handleMeterReadingSave();
+            }
+        });
+        return () => hideSubscription.remove();
+    }, [meterFocused, meterReading, bill]);
 
     // Derived locking state
     const isLocked = useMemo(() => {
@@ -387,9 +399,14 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     };
 
     const handleMeterReadingSave = async () => {
-        if (!bill) return;
+        if (!bill || savingReading.current) return;
+
         const newReading = parseFloat(meterReading);
         if (isNaN(newReading)) return;
+
+        // Stale check: Don't save if it's the same as what we already have
+        if (newReading === bill.curr_reading) return;
+
         const prevReading = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
         if (newReading < prevReading) {
             setMeterReadingError(`Cannot be less than old reading (${prevReading})`);
@@ -397,23 +414,33 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         } else {
             setMeterReadingError('');
         }
-        let unitsUsed = Math.max(0, newReading - prevReading);
-        const defaultUnits = unit.electricity_default_units;
-        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
-            unitsUsed = defaultUnits;
+
+        savingReading.current = true;
+        try {
+            let unitsUsed = Math.max(0, newReading - prevReading);
+            const defaultUnits = unit.electricity_default_units;
+            if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+                unitsUsed = defaultUnits;
+            }
+            const rate = unit.electricity_rate ?? 0;
+            const electricityAmount = unitsUsed * rate;
+
+            const { hapticsLight } = require('../../utils/haptics');
+            hapticsLight();
+
+            const { updateBill, recalculateBill } = require('../../db');
+            await updateBill(bill.id, {
+                curr_reading: newReading,
+                prev_reading: prevReading,
+                electricity_amount: electricityAmount,
+            });
+            await recalculateBill(bill.id);
+            onRefresh(true); // Always silent for meter reading saves
+        } catch (error) {
+            console.error('Error saving meter reading:', error);
+        } finally {
+            savingReading.current = false;
         }
-        const rate = unit.electricity_rate ?? 0;
-        const electricityAmount = unitsUsed * rate;
-        const { hapticsLight } = require('../../utils/haptics');
-        hapticsLight();
-        const { updateBill, recalculateBill } = require('../../db');
-        await updateBill(bill.id, {
-            curr_reading: newReading,
-            prev_reading: prevReading,
-            electricity_amount: electricityAmount,
-        });
-        await recalculateBill(bill.id);
-        onRefresh();
     };
 
     const formattedDate = () => {
@@ -700,13 +727,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             />
             <ReceivePaymentModal
                 visible={showReceivePayment}
-                onClose={() => { setShowReceivePayment(false); onRefresh(); }}
+                onClose={() => { setShowReceivePayment(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
             />
             <PaidAmountModal
                 visible={showPaidAmount}
-                onClose={() => { setShowPaidAmount(false); onRefresh(); }}
+                onClose={() => { setShowPaidAmount(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
                 onAddPayment={() => {
@@ -716,26 +743,26 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             />
             <TransactionInfoModal
                 visible={showTransactionInfo}
-                onClose={() => { setShowTransactionInfo(false); onRefresh(); }}
+                onClose={() => { setShowTransactionInfo(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
                 period={period}
             />
             <ExpenseActionsModal
                 visible={showExpenseActions}
-                onClose={() => { setShowExpenseActions(false); onRefresh(); }}
+                onClose={() => { setShowExpenseActions(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
             />
             <ExpenseListModal
                 visible={showExpenseList}
-                onClose={() => { setShowExpenseList(false); onRefresh(); }}
+                onClose={() => { setShowExpenseList(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
             />
             <EditElectricityModal
                 visible={showEditElectricity}
-                onClose={() => { setShowEditElectricity(false); onRefresh(); }}
+                onClose={() => { setShowEditElectricity(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
             />
