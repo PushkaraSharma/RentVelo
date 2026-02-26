@@ -12,6 +12,9 @@ export const properties = sqliteTable('properties', {
     owner_name: text('owner_name'),
     owner_phone: text('owner_phone'),
     rent_payment_type: text('rent_payment_type', { enum: ['previous_month', 'current_month'] }).default('previous_month'),
+    penalty_grace_period_days: integer('penalty_grace_period_days'),
+    penalty_amount_per_day: real('penalty_amount_per_day'),
+    waive_penalty_on_partial_payment: integer('waive_penalty_on_partial_payment', { mode: 'boolean' }).default(false),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });
