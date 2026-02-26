@@ -461,7 +461,7 @@ export default function RentBillCard({ item, period, onRefresh, navigation, prop
                                     editable={!isLocked}
                                     returnKeyType="done"
                                 />
-                                <Text style={styles.electricityAmt}>{formatAmount(liveElectricityAmount)}</Text>
+                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveElectricityAmount)}</Text>
                             </View>
                         ) : (
                             <Pressable
@@ -816,10 +816,8 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         padding: theme.spacing.s,
     },
     meterRow: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
     },
     meterLabel: {
         fontSize: 12,
@@ -828,6 +826,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     meterArrow: {
         fontSize: 14,
         color: theme.colors.textTertiary,
+        marginHorizontal: theme.spacing.s,
     },
     meterInput: {
         backgroundColor: theme.colors.surface,

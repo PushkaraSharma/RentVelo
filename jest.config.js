@@ -7,7 +7,14 @@ module.exports = {
         '^react-native$': '<rootDir>/tests/__mocks__/react-native.ts',
     },
     transform: {
-        '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true }],
+        '^.+\\.[tj]sx?$': [
+            'ts-jest',
+            {
+                useESM: true,
+                isolatedModules: true,
+            },
+        ],
+        '^.+\\.sql$': '<rootDir>/tests/sqlTransformer.js',
     },
     transformIgnorePatterns: [
         'node_modules/(?!(react-native|@react-native|expo|@expo|drizzle-orm)/)',

@@ -61,7 +61,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
             setPhotoUri(null);
             setPaymentDate(new Date());
             onClose();
-        } catch (err) {
+        } catch (err: any) {
             hapticsError();
             console.error('Error adding payment:', err);
         } finally {

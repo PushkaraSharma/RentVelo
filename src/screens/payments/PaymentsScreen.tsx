@@ -6,6 +6,7 @@ import { ArrowUpRight, ArrowDownLeft, Filter, Calendar } from 'lucide-react-nati
 import Header from '../../components/common/Header';
 import { getGlobalTransactions, GlobalTransaction } from '../../db/paymentService';
 import { useFocusEffect } from '@react-navigation/native';
+import PaymentFilterModal, { PaymentFilters } from '../../components/modals/PaymentFilterModal';
 
 export default function PaymentsScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -13,6 +14,9 @@ export default function PaymentsScreen({ navigation }: any) {
     const [transactions, setTransactions] = useState<GlobalTransaction[]>([]);
     const [totalCollected, setTotalCollected] = useState(0);
     const [loading, setLoading] = useState(true);
+
+    const [showFilters, setShowFilters] = useState(false);
+    const [filters, setFilters] = useState<PaymentFilters>({ type: null, status: null, propertyId: null });
 
     const loadData = async () => {
         try {
@@ -25,6 +29,15 @@ export default function PaymentsScreen({ navigation }: any) {
             setLoading(false);
         }
     };
+
+    const filteredTransactions = React.useMemo(() => {
+        return transactions.filter(t => {
+            if (filters.type && t.rawPaymentType !== filters.type) return false;
+            if (filters.status && t.rawStatus !== filters.status) return false;
+            if (filters.propertyId && t.propertyId !== filters.propertyId) return false;
+            return true;
+        });
+    }, [transactions, filters]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -80,8 +93,11 @@ export default function PaymentsScreen({ navigation }: any) {
             <Header
                 title="Payments"
                 rightAction={
-                    <Pressable style={styles.filterBtn}>
-                        <Filter size={20} color={theme.colors.textPrimary} />
+                    <Pressable
+                        style={[styles.filterBtn, (filters.type || filters.status || filters.propertyId !== null) && styles.filterBtnActive]}
+                        onPress={() => setShowFilters(true)}
+                    >
+                        <Filter size={20} color={(filters.type || filters.status || filters.propertyId !== null) ? '#FFFFFF' : theme.colors.textPrimary} />
                     </Pressable>
                 }
             />
@@ -104,17 +120,17 @@ export default function PaymentsScreen({ navigation }: any) {
                         <Text style={styles.sectionTitle}>Recent Transactions</Text>
                     </View>
 
-                    {transactions.length === 0 ? (
+                    {filteredTransactions.length === 0 ? (
                         <View style={styles.emptyContainer}>
                             <View style={styles.emptyIconBox}>
                                 <Calendar size={32} color={theme.colors.textTertiary} />
                             </View>
-                            <Text style={styles.emptyTitle}>No Transactions Yet</Text>
-                            <Text style={styles.emptyText}>When you log rent or other payments, they will appear here.</Text>
+                            <Text style={styles.emptyTitle}>No Transactions Found</Text>
+                            <Text style={styles.emptyText}>Adjust your filters or log new payments.</Text>
                         </View>
                     ) : (
                         <FlatList
-                            data={transactions}
+                            data={filteredTransactions}
                             renderItem={renderItem}
                             keyExtractor={item => item.id}
                             contentContainerStyle={styles.listContent}
@@ -123,6 +139,13 @@ export default function PaymentsScreen({ navigation }: any) {
                     )}
                 </>
             )}
+
+            <PaymentFilterModal
+                visible={showFilters}
+                onClose={() => setShowFilters(false)}
+                filters={filters}
+                onApply={setFilters}
+            />
         </SafeAreaView>
     );
 }
@@ -143,6 +166,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderRadius: theme.borderRadius.m,
         borderWidth: 1,
         borderColor: theme.colors.border
+    },
+    filterBtnActive: {
+        backgroundColor: theme.colors.accent,
+        borderColor: theme.colors.accent
     },
     summaryContainer: {
         paddingHorizontal: theme.spacing.m,

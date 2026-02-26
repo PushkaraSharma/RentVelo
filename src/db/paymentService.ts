@@ -177,6 +177,9 @@ export interface GlobalTransaction {
     amount: number;
     type: 'credit' | 'debit';
     status: 'Success' | 'Pending';
+    propertyId?: number;
+    rawPaymentType?: string;
+    rawStatus?: string;
 }
 
 export const getGlobalTransactions = async (): Promise<{ transactions: GlobalTransaction[], totalCollected: number }> => {
@@ -187,10 +190,11 @@ export const getGlobalTransactions = async (): Promise<{ transactions: GlobalTra
         id: payments.id,
         amount: payments.amount,
         date: payments.payment_date,
-        type: payments.payment_type,
         status: payments.status,
         unitName: units.name,
-        propertyName: properties.name
+        propertyName: properties.name,
+        property_id: payments.property_id,
+        type: payments.payment_type,
     })
         .from(payments)
         .leftJoin(units, eq(payments.unit_id, units.id))
@@ -218,7 +222,10 @@ export const getGlobalTransactions = async (): Promise<{ transactions: GlobalTra
             date: p.date || new Date(),
             amount: p.amount,
             type: 'credit', // Currently rentvelo only tracks incoming payments
-            status: p.status === 'paid' ? 'Success' : 'Pending'
+            status: p.status === 'paid' ? 'Success' : 'Pending',
+            propertyId: p.property_id || undefined,
+            rawPaymentType: p.type || undefined,
+            rawStatus: p.status || undefined,
         };
     });
 

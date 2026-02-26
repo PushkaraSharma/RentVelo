@@ -32,6 +32,54 @@ class MockExpoDatabase {
         return stmt.get(...args);
     }
 
+    prepareSync(source: string) {
+        const stmt = this.db.prepare(source);
+        return {
+            executeSync: (args: any) => {
+                let params = args || [];
+                let changes = 0;
+                let lastInsertRowid = 0;
+                let results: any[] = [];
+
+                if (stmt.reader) {
+                    results = stmt.all(...params);
+                } else {
+                    const info = stmt.run(...params);
+                    changes = info.changes;
+                    lastInsertRowid = info.lastInsertRowid as number;
+                }
+
+                return {
+                    lastInsertRowId: lastInsertRowid,
+                    changes: changes,
+                    getFirstSync: () => results.length > 0 ? results[0] : null,
+                    getAllSync: () => results,
+                };
+            },
+            executeForRawResultSync: (args: any) => {
+                let params = args || [];
+                let changes = 0;
+                let lastInsertRowid = 0;
+                let results: any[] = [];
+
+                if (stmt.reader) {
+                    results = stmt.all(...params);
+                } else {
+                    const info = stmt.run(...params);
+                    changes = info.changes;
+                    lastInsertRowid = info.lastInsertRowid as number;
+                }
+
+                return {
+                    lastInsertRowId: lastInsertRowid,
+                    changes: changes,
+                    getFirstSync: () => (results.length > 0 ? Object.values(results[0] as object) : null),
+                    getAllSync: () => results.map(o => Object.values(o as object)),
+                };
+            }
+        };
+    }
+
     closeSync() {
         this.db.close();
     }

@@ -592,16 +592,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     infoKey: {
         fontSize: 14,
-        color: theme.colors.textSecondary,
-        flexShrink: 0,
-        marginRight: 8,
+        color: theme.colors.textSecondary
     },
     infoValue: {
         fontSize: 14,
         color: theme.colors.textPrimary,
-        fontWeight: theme.typography.medium,
-        flexShrink: 1,
-        textAlign: 'right',
+        fontWeight: theme.typography.medium
     },
     emptyTenantBox: {
         alignItems: 'center',

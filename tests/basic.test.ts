@@ -24,6 +24,7 @@ describe('Database Mapping Mock Test', () => {
         expect(res[0].id).toBeGreaterThan(0);
 
         const allProps = await getPropertiesWithStats();
+        console.log('allProps =>', JSON.stringify(allProps, null, 2));
         expect(allProps.length).toBe(1);
         expect(allProps[0].name).toBe('Test Setup Property');
     });
