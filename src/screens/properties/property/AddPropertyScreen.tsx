@@ -39,6 +39,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
     const [rentPaymentType, setRentPaymentType] = useState('previous_month');
     const [customAmenity, setCustomAmenity] = useState('');
+    const [penaltyGracePeriodDays, setPenaltyGracePeriodDays] = useState('');
+    const [penaltyAmountPerDay, setPenaltyAmountPerDay] = useState('');
+    const [waivePenaltyOnPartialPayment, setWaivePenaltyOnPartialPayment] = useState(false);
 
     // Single Unit Form State
     const [rentAmount, setRentAmount] = useState('');
@@ -47,6 +50,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [electricityType, setElectricityType] = useState('Metered');
     const [electricityValue, setElectricityValue] = useState('');
     const [initialElectricityReading, setInitialElectricityReading] = useState('');
+    const [electricityDefaultUnits, setElectricityDefaultUnits] = useState('');
     const [waterEnabled, setWaterEnabled] = useState(false);
     const [waterType, setWaterType] = useState('Fixed');
     const [waterValue, setWaterValue] = useState('');
@@ -74,6 +78,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 if (data.rent_payment_type) {
                     setRentPaymentType(data.rent_payment_type);
                 }
+                setPenaltyGracePeriodDays(data.penalty_grace_period_days?.toString() || '');
+                setPenaltyAmountPerDay(data.penalty_amount_per_day?.toString() || '');
+                setWaivePenaltyOnPartialPayment(data.waive_penalty_on_partial_payment ?? false);
 
                 // If it's a single unit and edit mode, load the unit details
                 if (data.is_multi_unit === false && isEditMode) {
@@ -92,6 +99,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                                 setElectricityType('Metered');
                                 setElectricityValue(unit.electricity_rate.toString());
                                 setInitialElectricityReading(unit.initial_electricity_reading?.toString() || '');
+                                setElectricityDefaultUnits(unit.electricity_default_units?.toString() || '');
                             } else if (unit.electricity_fixed_amount) {
                                 setElectricityType('Fixed');
                                 setElectricityValue(unit.electricity_fixed_amount.toString());
@@ -175,6 +183,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 owner_name: ownerName || undefined,
                 owner_phone: phone || undefined,
                 rent_payment_type: rentPaymentType,
+                penalty_grace_period_days: penaltyGracePeriodDays ? parseInt(penaltyGracePeriodDays) : null,
+                penalty_amount_per_day: penaltyAmountPerDay ? parseFloat(penaltyAmountPerDay) : null,
+                waive_penalty_on_partial_payment: waivePenaltyOnPartialPayment,
             };
 
             if (isEditMode) {
@@ -188,6 +199,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
                         electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
                         initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
+                        electricity_default_units: electricityEnabled && electricityType === 'Metered' && electricityDefaultUnits ? parseFloat(electricityDefaultUnits) : null,
                         water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
                         water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
                         initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
@@ -212,6 +224,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         electricity_rate: electricityEnabled && electricityType === 'Metered' ? parseFloat(electricityValue) : null,
                         electricity_fixed_amount: electricityEnabled && electricityType === 'Fixed' ? parseFloat(electricityValue) : null,
                         initial_electricity_reading: electricityEnabled && electricityType === 'Metered' ? parseFloat(initialElectricityReading) : null,
+                        electricity_default_units: electricityEnabled && electricityType === 'Metered' && electricityDefaultUnits ? parseFloat(electricityDefaultUnits) : null,
                         water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
                         water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
                         initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
@@ -434,13 +447,22 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                                                     keyboardType="numeric"
                                                 />
                                                 {electricityType === 'Metered' && (
-                                                    <Input
-                                                        label="Initial Meter Reading"
-                                                        placeholder="e.g. 1045.5"
-                                                        value={initialElectricityReading}
-                                                        onChangeText={setInitialElectricityReading}
-                                                        keyboardType="numeric"
-                                                    />
+                                                    <>
+                                                        <Input
+                                                            label="Initial Meter Reading"
+                                                            placeholder="e.g. 1045.5"
+                                                            value={initialElectricityReading}
+                                                            onChangeText={setInitialElectricityReading}
+                                                            keyboardType="numeric"
+                                                        />
+                                                        <Input
+                                                            label="Default Minimum Units (Optional)"
+                                                            placeholder="e.g. 5"
+                                                            value={electricityDefaultUnits}
+                                                            onChangeText={setElectricityDefaultUnits}
+                                                            keyboardType="numeric"
+                                                        />
+                                                    </>
                                                 )}
                                             </View>
                                         )}
@@ -529,6 +551,36 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                                 </Text>
                             </Pressable>
                         ))}
+                    </View>
+
+                    {/* Rent Penalties */}
+                    <Text style={styles.sectionTitle}>Rent Penalties (Optional)</Text>
+                    <View style={[styles.row, { alignItems: 'center', justifyContent: 'space-between' }]}>
+                        <View style={{ flex: 1, marginRight: isMultiUnit ? theme.spacing.m : 0 }}>
+                            <Input
+                                label="PENALTY AFTER DAYS"
+                                placeholder="e.g. 5 days"
+                                value={penaltyGracePeriodDays}
+                                onChangeText={setPenaltyGracePeriodDays}
+                                keyboardType="numeric"
+                            />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Input
+                                label="PENALTY AMOUNT"
+                                placeholder="e.g. ₹50 per day"
+                                value={penaltyAmountPerDay}
+                                onChangeText={setPenaltyAmountPerDay}
+                                keyboardType="numeric"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={[styles.utilityHeader, { marginBottom: theme.spacing.m }]}>
+                        <Text style={[{ flex: 1, color: theme.colors.textSecondary, fontSize: theme.typography.s, fontWeight: theme.typography.medium }]}>
+                            No penalty if partial payment done
+                        </Text>
+                        <Toggle value={waivePenaltyOnPartialPayment} onValueChange={setWaivePenaltyOnPartialPayment} />
                     </View>
 
                     {/* Owner Details */}

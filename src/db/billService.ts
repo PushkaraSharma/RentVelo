@@ -4,6 +4,7 @@ import {
     RentBill, NewRentBill, BillExpense, NewBillExpense, Payment, NewPayment
 } from './schema';
 import { eq, and, desc, sum, sql } from 'drizzle-orm';
+import { differenceInDays, isAfter, startOfDay } from 'date-fns';
 
 // Re-export types
 export { RentBill, BillExpense };
@@ -304,7 +305,17 @@ export const getBillsForPropertyMonth = async (
             )
             .limit(1);
 
-        const bill = bills.length > 0 ? bills[0] : null;
+        let bill = bills.length > 0 ? bills[0] : null;
+
+        if (bill) {
+            // Trigger penalty calculation lazily
+            await applyPenaltiesLazily(bill.id);
+            // Re-fetch the bill in case properties changed
+            const updatedBills = await db.select().from(rentBills).where(eq(rentBills.id, bill.id)).limit(1);
+            if (updatedBills.length > 0) {
+                bill = updatedBills[0];
+            }
+        }
 
         results.push({
             unit,
@@ -327,6 +338,111 @@ export const getBillById = async (id: number): Promise<RentBill | null> => {
 
 // ===== BILL UPDATE & RECALCULATION =====
 
+/**
+ * Automatically calculate and apply late payment penalties
+ * This is called lazily when a bill is recalculated or fetched
+ */
+export const applyPenaltiesLazily = async (billId: number): Promise<void> => {
+    const db = getDb();
+    const bill = await getBillById(billId);
+    if (!bill || bill.status === 'paid' || bill.status === 'overpaid') return;
+
+    // Get Property config
+    const propResult = await db.select().from(properties).where(eq(properties.id, bill.property_id)).limit(1);
+    const property = propResult[0];
+    if (!property || property.penalty_amount_per_day === null || property.penalty_grace_period_days === null) return;
+
+    // Get Tenant info to determine rent_start_date/cycle
+    const tenantResult = await db.select().from(tenants).where(eq(tenants.id, bill.tenant_id)).limit(1);
+    const tenant = tenantResult[0];
+    if (!tenant) return;
+
+    // Determine due date (usually 1st of the bill month, or relative to rent_start_date)
+    let dueDate = new Date(bill.year, bill.month - 1, 1);
+    const unitResult = await db.select().from(units).where(eq(units.id, bill.unit_id)).limit(1);
+    if (unitResult[0] && unitResult[0].rent_cycle === 'relative' && tenant.rent_start_date) {
+        const startDay = new Date(tenant.rent_start_date).getDate();
+        dueDate = new Date(bill.year, bill.month - 1, startDay);
+    }
+
+    // Calculate penalty start date (due date + grace period)
+    const penaltyStartDate = new Date(dueDate);
+    penaltyStartDate.setDate(penaltyStartDate.getDate() + property.penalty_grace_period_days);
+
+    const today = startOfDay(new Date());
+    const isOverdue = isAfter(today, penaltyStartDate);
+
+    let totalPenalty = 0;
+
+    if (isOverdue) {
+        // Waive if partial payment is made and setting is true
+        let shouldWaive = false;
+        if (property.waive_penalty_on_partial_payment) {
+            const payResult = await db.select({ total: sum(payments.amount) })
+                .from(payments)
+                .where(and(eq(payments.bill_id, billId), eq(payments.status, 'paid')));
+            if ((Number(payResult[0]?.total || 0)) > 0) {
+                shouldWaive = true;
+            }
+        }
+
+        if (!shouldWaive) {
+            const daysOverdue = differenceInDays(today, penaltyStartDate);
+            // Must be strictly greater than 0
+            if (daysOverdue > 0) {
+                totalPenalty = daysOverdue * property.penalty_amount_per_day;
+            }
+        }
+    }
+
+    // Check if a penalty expense row exists
+    const existingPenaltyRows = await db.select()
+        .from(billExpenses)
+        .where(
+            and(
+                eq(billExpenses.bill_id, billId),
+                eq(billExpenses.label, 'Late Payment Penalty')
+            )
+        )
+        .limit(1);
+
+    const existingRow = existingPenaltyRows[0];
+
+    let requiresRecalculate = false;
+
+    if (totalPenalty > 0) {
+        if (existingRow) {
+            if (existingRow.amount !== totalPenalty) {
+                await db.update(billExpenses)
+                    .set({ amount: totalPenalty })
+                    .where(eq(billExpenses.id, existingRow.id));
+                requiresRecalculate = true;
+            }
+        } else {
+            // Check if rent sum is > 0 to prevent penalizing 0 balance active rooms 
+            const balanceWithoutPenalty = (bill.rent_amount ?? 0) + (bill.electricity_amount ?? 0) + (bill.previous_balance ?? 0);
+            if (balanceWithoutPenalty > 0) {
+                await db.insert(billExpenses).values({
+                    bill_id: billId,
+                    label: 'Late Payment Penalty',
+                    amount: totalPenalty,
+                    is_recurring: false,
+                });
+                requiresRecalculate = true;
+            }
+        }
+    } else if (existingRow) {
+        // Total penalty dropped to 0 (e.g. settings changed or payment made), remove existing row
+        await db.delete(billExpenses).where(eq(billExpenses.id, existingRow.id));
+        requiresRecalculate = true;
+    }
+
+    // Call recalculateBill avoiding infinite deep loops
+    if (requiresRecalculate) {
+        await recalculateBill(billId, true);
+    }
+};
+
 export const updateBill = async (id: number, data: Partial<NewRentBill>): Promise<void> => {
     const db = getDb();
     await db.update(rentBills)
@@ -337,10 +453,15 @@ export const updateBill = async (id: number, data: Partial<NewRentBill>): Promis
 /**
  * Recalculate totals, balance, and status for a bill.
  */
-export const recalculateBill = async (billId: number): Promise<RentBill> => {
+export const recalculateBill = async (billId: number, skipPenaltyCheck = false): Promise<RentBill> => {
     const db = getDb();
     const bill = await getBillById(billId);
     if (!bill) throw new Error('Bill not found');
+
+    // Only apply penalties if we aren't recursively calling from applyPenaltiesLazily
+    if (!skipPenaltyCheck) {
+        await applyPenaltiesLazily(billId);
+    }
 
     // Sum expenses
     const expResult = await db.select({ total: sum(billExpenses.amount) })

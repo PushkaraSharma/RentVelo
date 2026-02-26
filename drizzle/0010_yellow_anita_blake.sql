@@ -1,0 +1,1 @@
+ALTER TABLE `units` ADD `electricity_default_units` real;

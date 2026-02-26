@@ -71,6 +71,20 @@
       "when": 1771771422599,
       "tag": "0009_third_landau",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1772030976691,
+      "tag": "0010_yellow_anita_blake",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1772034292110,
+      "tag": "0011_sharp_morbius",
+      "breakpoints": true
     }
   ]
 }

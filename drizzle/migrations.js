@@ -11,6 +11,8 @@ import m0006 from './0006_woozy_multiple_man.sql';
 import m0007 from './0007_little_doctor_doom.sql';
 import m0008 from './0008_nice_shape.sql';
 import m0009 from './0009_third_landau.sql';
+import m0010 from './0010_yellow_anita_blake.sql';
+import m0011 from './0011_sharp_morbius.sql';
 
   export default {
     journal,
@@ -24,7 +26,9 @@ m0005,
 m0006,
 m0007,
 m0008,
-m0009
+m0009,
+m0010,
+m0011
     }
   }
   
