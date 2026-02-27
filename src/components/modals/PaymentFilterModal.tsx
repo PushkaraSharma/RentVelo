@@ -99,7 +99,11 @@ export default function PaymentFilterModal({
                                 onSelect(opt.value === -1 ? null : opt.value);
                             }}
                         >
-                            <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                            <Text
+                                style={[styles.chipText, isSelected && styles.chipTextSelected]}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                            >
                                 {opt.label}
                             </Text>
                         </Pressable>
@@ -196,10 +200,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         padding: 4,
     },
     scroll: {
-        paddingHorizontal: theme.spacing.m,
+        // Horizontal padding moved to scrollContent to prevent clipping
     },
     scrollContent: {
         paddingVertical: theme.spacing.l,
+        paddingHorizontal: theme.spacing.m,
     },
     groupContainer: {
         marginBottom: theme.spacing.xl,
@@ -215,6 +220,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: theme.spacing.s,
+        alignItems: 'center', // Ensure consistent height alignment
     },
     chip: {
         paddingHorizontal: theme.spacing.m,
@@ -223,6 +229,8 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
         backgroundColor: theme.colors.surface,
+        maxWidth: '100%', // Prevent overflow
+        overflow: 'hidden', // Contain text and border
     },
     chipSelected: {
         borderColor: theme.colors.accent,
@@ -231,6 +239,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     chipText: {
         fontSize: 14,
         color: theme.colors.textPrimary,
+        textAlign: 'center',
     },
     chipTextSelected: {
         color: theme.colors.accent,

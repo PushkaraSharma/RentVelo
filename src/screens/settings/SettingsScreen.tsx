@@ -192,7 +192,7 @@ export default function SettingsScreen({ navigation }: any) {
                             icon={HelpCircle}
                             label="Help Center"
                             color="#06B6D4"
-                            onPress={() => Alert.alert('Help Center', 'Please contact support@rentvelo.com for assistance.')}
+                            onPress={() => Alert.alert('Help Center', 'Please contact rentvelo@indieroots.in for assistance.')}
                         />
                         <SettingItem
                             icon={Share2}
