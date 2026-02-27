@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Shield, Lock, Eye, EyeOff, FileText } from 'lucide-react-native';
@@ -64,6 +64,20 @@ export default function PrivacyScreen({ navigation }: any) {
         storage.set('@privacy_mode_enabled', String(value));
     };
 
+    const openLink = (url: string) => async () => {
+        try {
+            const supported = await Linking.canOpenURL(url);
+            if (supported) {
+                await Linking.openURL(url);
+            } else {
+                Alert.alert('Error', `Don't know how to open this URL: ${url}`);
+            }
+        } catch (error) {
+            console.error('An error occurred opening the link:', error);
+            Alert.alert('Error', 'An unexpected error occurred while trying to open the link.');
+        }
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <Header title="Security & Privacy" />
@@ -99,7 +113,7 @@ export default function PrivacyScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Data Privacy</Text>
                     <View style={styles.card}>
-                        <Pressable style={styles.item}>
+                        <Pressable style={styles.item} onPress={openLink('https://rentvelo.indieroots.in/privacy-policy/')}>
                             <View style={styles.itemLeft}>
                                 <Shield size={20} color="#10B981" />
                                 <View>
@@ -109,7 +123,7 @@ export default function PrivacyScreen({ navigation }: any) {
                             </View>
                         </Pressable>
                         <View style={styles.divider} />
-                        <Pressable style={styles.item}>
+                        <Pressable style={styles.item} onPress={openLink('https://rentvelo.indieroots.in/terms/')}>
                             <View style={styles.itemLeft}>
                                 <FileText size={20} color="#F59E0B" />
                                 <View>

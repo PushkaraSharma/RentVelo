@@ -274,12 +274,6 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 const unitInFloor = i % unitsPerFloor === 0 ? unitsPerFloor : i % unitsPerFloor;
 
                 let name = `Room ${i}`;
-                if (propertyType === 'pg') {
-                    name = `Bed ${i}`;
-                } else if (floors > 1 || count > 5) {
-                    // e.g. Flat 101, 102, 201...
-                    name = `Flat ${floorNum}${unitInFloor.toString().padStart(2, '0')}`;
-                }
 
                 setCurrentBulkRoomName(name);
                 setBulkProgress(i / count);

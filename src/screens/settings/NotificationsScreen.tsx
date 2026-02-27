@@ -6,7 +6,7 @@ import { Bell, Calendar, AlertTriangle, Layers, Clock, CheckCircle } from 'lucid
 import Header from '../../components/common/Header';
 import Toggle from '../../components/common/Toggle';
 import { storage } from '../../utils/storage';
-import { scheduleLocalNotification, syncNotificationSchedules } from '../../services/pushNotificationService';
+import { scheduleLocalNotification, syncNotificationSchedules, requestNotificationPermissions } from '../../services/pushNotificationService';
 import Slider from '@react-native-community/slider';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
@@ -62,6 +62,19 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const updatePref = async <K extends keyof NotificationPrefs>(key: K, value: NotificationPrefs[K]) => {
         try {
+            // If enabling notifications, request permission immediately
+            if (key === 'enableAll' && value === true) {
+                const granted = await requestNotificationPermissions();
+                if (!granted) {
+                    Alert.alert(
+                        'Permission Required',
+                        'Please enable notifications in your device settings to receive alerts.',
+                        [{ text: 'OK' }]
+                    );
+                    return;
+                }
+            }
+
             const newPrefs = { ...prefs, [key]: value };
             setPrefs(newPrefs);
             storage.set(PREFS_KEY, JSON.stringify(newPrefs));
@@ -148,7 +161,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                             value={prefs.rentDueDaysBefore}
                                             onSlidingComplete={(v) => updatePref('rentDueDaysBefore', v)}
                                             minimumTrackTintColor={theme.colors.accent}
-                                            maximumTrackTintColor={theme.colors.primary}
+                                            maximumTrackTintColor={Platform.OS === 'ios' ? 'lightgray' : theme.colors.primary}
                                             thumbTintColor={theme.colors.accent}
                                         />
                                     </View>
@@ -177,7 +190,7 @@ export default function NotificationsScreen({ navigation }: any) {
                                             value={prefs.overdueDaysAfter}
                                             onSlidingComplete={(v) => updatePref('overdueDaysAfter', v)}
                                             minimumTrackTintColor={theme.colors.danger}
-                                            maximumTrackTintColor={theme.colors.primary}
+                                            maximumTrackTintColor={Platform.OS === 'ios' ? 'lightgray' : theme.colors.primary}
                                             thumbTintColor={theme.colors.danger}
                                         />
                                     </View>

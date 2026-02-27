@@ -76,6 +76,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
             useFrameworks: "static",
             podfileProperties: {
               use_modular_headers: "true",
+              "ios.deploymentTarget": "15.5",
             },
             forceStaticLinking: [
               "RNFBApp",

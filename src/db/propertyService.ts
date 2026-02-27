@@ -86,7 +86,7 @@ export const createUnit = async (unit: NewUnit): Promise<number> => {
 // Get Units by Property ID with Tenant info
 export const getUnitsByPropertyId = async (propertyId: number): Promise<any[]> => {
     const db = getDb();
-    const propUnits = await db.select().from(units).where(eq(units.property_id, propertyId)).orderBy(desc(units.created_at));
+    const propUnits = await db.select().from(units).where(eq(units.property_id, propertyId)).orderBy(units.name);
 
     return await Promise.all(propUnits.map(async (unit) => {
         const activeTenant = await db.select()
@@ -106,7 +106,7 @@ export const getUnitsByPropertyId = async (propertyId: number): Promise<any[]> =
 // Get All Units
 export const getAllUnits = async (): Promise<Unit[]> => {
     const db = getDb();
-    return await db.select().from(units).orderBy(desc(units.created_at));
+    return await db.select().from(units).orderBy(units.name);
 };
 
 // Get Unit by ID

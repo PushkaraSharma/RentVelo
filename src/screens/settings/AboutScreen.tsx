@@ -33,21 +33,25 @@ export default function AboutScreen({ navigation }: any) {
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Follow Us</Text>
-                    <View style={styles.linkRow}>
-                        <Pressable style={styles.linkItem} onPress={() => Linking.openURL('https://rentvelo.com')}>
-                            <Globe size={24} color={theme.colors.accent} />
-                            <Text style={styles.linkLabel}>Website</Text>
-                        </Pressable>
-                        <Pressable style={styles.linkItem} onPress={() => Linking.openURL('https://github.com')}>
-                            <Github size={24} color={theme.colors.textPrimary} />
-                            <Text style={styles.linkLabel}>GitHub</Text>
-                        </Pressable>
-                        <Pressable style={styles.linkItem} onPress={() => Linking.openURL('https://twitter.com')}>
-                            <Twitter size={24} color="#1DA1F2" />
-                            <Text style={styles.linkLabel}>Twitter</Text>
-                        </Pressable>
-                    </View>
+                    <Text style={[styles.sectionTitle, { textAlign: 'left', marginLeft: theme.spacing.s }]}>Connect With Us</Text>
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.websiteCard,
+                            pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+                        ]}
+                        onPress={() => Linking.openURL('https://rentvelo.indieroots.in/')}
+                    >
+                        <View style={styles.websiteIconContainer}>
+                            <Globe size={28} color={theme.colors.primary} />
+                        </View>
+                        <View style={styles.websiteInfo}>
+                            <Text style={styles.websiteTitle}>Visit Our Website</Text>
+                            <Text style={styles.websiteSubTitle}>rentvelo.indieroots.in</Text>
+                        </View>
+                        <View style={[styles.arrowContainer, { backgroundColor: theme.colors.primary + '15' }]}>
+                            <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>→</Text>
+                        </View>
+                    </Pressable>
                 </View>
 
                 <View style={styles.footer}>
@@ -158,6 +162,45 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 12,
         fontWeight: theme.typography.medium,
         color: theme.colors.textSecondary,
+    },
+    websiteCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        borderRadius: 20,
+        padding: theme.spacing.l,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        ...theme.shadows.small,
+    },
+    websiteIconContainer: {
+        width: 50,
+        height: 50,
+        borderRadius: 15,
+        backgroundColor: theme.colors.primary + '10',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: theme.spacing.m,
+    },
+    websiteInfo: {
+        flex: 1,
+    },
+    websiteTitle: {
+        fontSize: 16,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+    },
+    websiteSubTitle: {
+        fontSize: 13,
+        color: theme.colors.textTertiary,
+        marginTop: 2,
+    },
+    arrowContainer: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     footer: {
         alignItems: 'center',
