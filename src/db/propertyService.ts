@@ -29,18 +29,21 @@ export const getPropertiesWithStats = async (): Promise<any[]> => {
         const propUnits = await db.select().from(units).where(eq(units.property_id, prop.id));
         const totalRooms = propUnits.length;
 
-        // Count occupied rooms (units that have at least one active tenant)
-        const activeTenants = await db.select()
+        // Count occupied rooms (units that have at least one active tenant AND the unit still exists)
+        const validActiveTenants = await db.select({
+            unit_id: tenants.unit_id
+        })
             .from(tenants)
+            .innerJoin(units, eq(tenants.unit_id, units.id))
             .where(and(eq(tenants.property_id, prop.id), eq(tenants.status, 'active')));
 
         let occupiedCount = 0;
         if (prop.is_multi_unit) {
             // For multi-unit, count unique unit_ids that have active tenants
-            occupiedCount = new Set(activeTenants.map(t => t.unit_id).filter(id => id !== null)).size;
+            occupiedCount = new Set(validActiveTenants.map(t => t.unit_id).filter(id => id !== null)).size;
         } else {
             // For single-unit, it's either occupied (1) or vacant (0)
-            occupiedCount = activeTenants.length > 0 ? 1 : 0;
+            occupiedCount = validActiveTenants.length > 0 ? 1 : 0;
         }
 
         return {

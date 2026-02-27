@@ -3,7 +3,7 @@ import {
     rentBills, billExpenses, payments, units, tenants, properties,
     RentBill, NewRentBill, BillExpense, NewBillExpense, Payment, NewPayment
 } from './schema';
-import { eq, and, desc, sum, sql, inArray } from 'drizzle-orm';
+import { eq, and, or, desc, sum, sql, inArray } from 'drizzle-orm';
 import { differenceInDays, isAfter, startOfDay } from 'date-fns';
 
 // Re-export types
@@ -135,10 +135,22 @@ export const generateBillsForProperty = async (
             prevReading = prevBill[0].curr_reading;
         }
 
+        // Initialize water readings
+        let waterPrevReading = unit.initial_water_reading ?? 0;
+        if (prevBill.length > 0 && prevBill[0].water_curr_reading !== null && prevBill[0].water_curr_reading !== undefined) {
+            waterPrevReading = prevBill[0].water_curr_reading;
+        }
+
         // Get electricity amount (for fixed cost units)
         let electricityAmount = 0;
         if (!unit.is_metered && unit.electricity_fixed_amount) {
             electricityAmount = unit.electricity_fixed_amount;
+        }
+
+        // Get water amount (for fixed cost units)
+        let waterAmount = 0;
+        if (unit.water_fixed_amount) {
+            waterAmount = unit.water_fixed_amount;
         }
 
         // B10: Generate unique bill number using MAX id
@@ -149,7 +161,7 @@ export const generateBillsForProperty = async (
 
         // Calculate total
         const rentAmount = unit.rent_amount;
-        const totalAmount = rentAmount + electricityAmount + previousBalance;
+        const totalAmount = rentAmount + electricityAmount + waterAmount + previousBalance;
 
         // Create the bill
         const result = await db.insert(rentBills).values({
@@ -160,8 +172,10 @@ export const generateBillsForProperty = async (
             year,
             rent_amount: rentAmount,
             electricity_amount: electricityAmount,
+            water_amount: waterAmount,
             previous_balance: previousBalance,
             prev_reading: prevReading,
+            water_prev_reading: waterPrevReading,
             total_expenses: 0,
             total_amount: totalAmount,
             paid_amount: 0,
@@ -523,8 +537,93 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         .where(and(eq(payments.bill_id, billId), eq(payments.status, 'paid')));
     const paidAmount = Number(payResult[0]?.total || 0);
 
+    // B17: Sync readings with unit initial values if no current reading is set yet
+    // This fixes the bug where updating initial reading doesn't reflect in existing bills
+    const unitResult = await db.select().from(units).where(eq(units.id, bill.unit_id)).limit(1);
+    const unit = unitResult[0];
+    let electricityAmount = bill.electricity_amount ?? 0;
+    let waterAmount = bill.water_amount ?? 0;
+    let prevReading = bill.prev_reading;
+    let waterPrevReading = bill.water_prev_reading;
+    let needsUpdate = false;
+
+    if (unit) {
+        // Sync electricity if first bill and no reading entered
+        if (bill.curr_reading === null || bill.curr_reading === undefined) {
+            // Find if there's a previous bill to determine if this is "start of chain"
+            const prevBill = await db.select().from(rentBills).where(
+                and(
+                    eq(rentBills.unit_id, bill.unit_id),
+                    sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
+                )
+            ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
+
+            if (prevBill.length === 0) {
+                // No previous bill, sync with initial_electricity_reading
+                if (prevReading !== unit.initial_electricity_reading) {
+                    prevReading = unit.initial_electricity_reading;
+                    needsUpdate = true;
+                }
+            } else if (prevBill[0].curr_reading !== null && prevBill[0].curr_reading !== prevReading) {
+                // Sync with previous bill's current reading
+                prevReading = prevBill[0].curr_reading;
+                needsUpdate = true;
+            }
+        }
+
+        // Sync water if first bill and no reading entered
+        if (bill.water_curr_reading === null || bill.water_curr_reading === undefined) {
+            const prevBill = await db.select().from(rentBills).where(
+                and(
+                    eq(rentBills.unit_id, bill.unit_id),
+                    sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
+                )
+            ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
+
+            if (prevBill.length === 0) {
+                if (waterPrevReading !== unit.initial_water_reading) {
+                    waterPrevReading = unit.initial_water_reading;
+                    needsUpdate = true;
+                }
+            } else if (prevBill[0].water_curr_reading !== null && prevBill[0].water_curr_reading !== waterPrevReading) {
+                waterPrevReading = prevBill[0].water_curr_reading;
+                needsUpdate = true;
+            }
+        }
+
+        // Calculate utility amounts (Electricity) if metered
+        if (unit.electricity_rate !== null && bill.curr_reading !== null) {
+            const prev = prevReading ?? unit.initial_electricity_reading ?? 0;
+            let unitsUsed = Math.max(0, bill.curr_reading - prev);
+            const defaultUnits = unit.electricity_default_units;
+            if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+                unitsUsed = defaultUnits;
+            }
+            const targetElecAmt = unitsUsed * unit.electricity_rate;
+            if (electricityAmount !== targetElecAmt) {
+                electricityAmount = targetElecAmt;
+                needsUpdate = true;
+            }
+        }
+
+        // Calculate utility amounts (Water) if metered
+        if (unit.water_rate !== null && bill.water_curr_reading !== null) {
+            const prev = waterPrevReading ?? unit.initial_water_reading ?? 0;
+            let unitsUsed = Math.max(0, bill.water_curr_reading - prev);
+            const defaultUnits = unit.water_default_units;
+            if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+                unitsUsed = defaultUnits;
+            }
+            const targetWaterAmt = unitsUsed * unit.water_rate;
+            if (waterAmount !== targetWaterAmt) {
+                waterAmount = targetWaterAmt;
+                needsUpdate = true;
+            }
+        }
+    }
+
     // Calculate totals
-    const totalAmount = (bill.rent_amount ?? 0) + (bill.electricity_amount ?? 0) + totalExpenses + (bill.previous_balance ?? 0);
+    const totalAmount = (bill.rent_amount ?? 0) + electricityAmount + waterAmount + totalExpenses + (bill.previous_balance ?? 0);
     const balance = totalAmount - paidAmount;
 
     // Determine status
@@ -538,6 +637,10 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     // Update bill
     await db.update(rentBills)
         .set({
+            prev_reading: prevReading,
+            water_prev_reading: waterPrevReading,
+            electricity_amount: electricityAmount,
+            water_amount: waterAmount,
             total_expenses: totalExpenses,
             total_amount: totalAmount,
             paid_amount: paidAmount,
@@ -570,6 +673,11 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
 
         if (nextBill.prev_reading !== bill.curr_reading) {
             updates.prev_reading = bill.curr_reading;
+            needsRecalculate = true;
+        }
+
+        if (nextBill.water_prev_reading !== bill.water_curr_reading) {
+            updates.water_prev_reading = bill.water_curr_reading;
             needsRecalculate = true;
         }
 
@@ -676,4 +784,50 @@ export const getBillPayments = async (billId: number): Promise<Payment[]> => {
     return await db.select().from(payments)
         .where(and(eq(payments.bill_id, billId), eq(payments.status, 'paid')))
         .orderBy(desc(payments.payment_date));
+};
+
+/**
+ * Synchronize all pending bills for a unit with the current unit settings.
+ * This is called when room settings are updated to ensure changes reflect in existing bills.
+ */
+export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<void> => {
+    const db = getDb();
+    const unit = (await db.select().from(units).where(eq(units.id, unitId)).limit(1))[0];
+    if (!unit) return;
+
+    // Find all non-paid bills for this unit
+    const pendingBills = await db.select()
+        .from(rentBills)
+        .where(
+            and(
+                eq(rentBills.unit_id, unitId),
+                or(eq(rentBills.status, 'pending'), eq(rentBills.status, 'partial'))
+            )
+        );
+
+    for (const bill of pendingBills) {
+        let updateData: any = { updated_at: new Date() };
+
+        // Sync fixed amounts
+        if (unit.electricity_rate === null) {
+            updateData.electricity_amount = unit.electricity_fixed_amount ?? 0;
+        }
+        if (unit.water_rate === null) {
+            updateData.water_amount = unit.water_fixed_amount ?? 0;
+        }
+
+        // Update rent amount too if it changed
+        if (bill.rent_amount !== unit.rent_amount) {
+            updateData.rent_amount = unit.rent_amount;
+        }
+
+        if (Object.keys(updateData).length > 1) { // more than just updated_at
+            await db.update(rentBills)
+                .set(updateData)
+                .where(eq(rentBills.id, bill.id));
+        }
+
+        // Trigger full recalculation (this will also handle metered rate changes)
+        await recalculateBill(bill.id);
+    }
 };

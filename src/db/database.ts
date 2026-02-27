@@ -6,6 +6,8 @@ const DATABASE_NAME = 'rentvelo.db';
 
 // Use openDatabaseSync for synchronous initialization
 const expoDb = SQLite.openDatabaseSync(DATABASE_NAME);
+// Enable foreign keys
+expoDb.execSync('PRAGMA foreign_keys = ON;');
 export const db = drizzle(expoDb);
 
 export const initDatabase = async (): Promise<void> => {

@@ -5,27 +5,35 @@ import { CURRENCY } from '../../utils/Constants';
 import { updateBill, recalculateBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
 
-interface EditElectricityModalProps {
+interface EditUtilityModalProps {
     visible: boolean;
     onClose: () => void;
     bill: any;
     unit: any;
+    type: 'electricity' | 'water';
 }
 
-export default function EditElectricityModal({ visible, onClose, bill, unit }: EditElectricityModalProps) {
+export default function EditUtilityModal({ visible, onClose, bill, unit, type }: EditUtilityModalProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const [amount, setAmount] = useState('');
 
+    const isElec = type === 'electricity';
+    const label = isElec ? 'Electricity' : 'Water';
+
     useEffect(() => {
         if (visible && bill) {
-            setAmount(bill.electricity_amount?.toString() || unit?.electricity_fixed_amount?.toString() || '0');
+            const currentAmt = isElec ? bill.electricity_amount : bill.water_amount;
+            const unitFixedAmt = isElec ? unit?.electricity_fixed_amount : unit?.water_fixed_amount;
+            setAmount(currentAmt?.toString() || unitFixedAmt?.toString() || '0');
         }
-    }, [visible, bill]);
+    }, [visible, bill, type]);
 
     const handleSave = async () => {
         const amt = parseFloat(amount) || 0;
-        await updateBill(bill.id, { electricity_amount: amt });
+        const updateData = isElec ? { electricity_amount: amt } : { water_amount: amt };
+
+        await updateBill(bill.id, updateData);
         await recalculateBill(bill.id);
         onClose();
     };
@@ -34,14 +42,14 @@ export default function EditElectricityModal({ visible, onClose, bill, unit }: E
         <RentModalSheet
             visible={visible}
             onClose={onClose}
-            title="Update Electricity Amount"
+            title={`Update ${label} Amount`}
             subtitle={`Room: ${unit?.name}`}
             actionLabel="Okay"
             onAction={handleSave}
             scrollable={false}
         >
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Electricity Amount for this Month</Text>
+                <Text style={styles.inputLabel}>{label} Amount for this Month</Text>
                 <View style={styles.inputRow}>
                     <Text style={styles.currency}>{CURRENCY}</Text>
                     <TextInput

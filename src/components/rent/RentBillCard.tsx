@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { User, UserPlus, Zap, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
+import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
 import {
     updateBill, recalculateBill,
     getBillExpenses, getBillPayments,
@@ -25,7 +25,7 @@ import PaidAmountModal from './PaidAmountModal';
 import TransactionInfoModal from './TransactionInfoModal';
 import ExpenseActionsModal from './ExpenseActionsModal';
 import ExpenseListModal from './ExpenseListModal';
-import EditElectricityModal from './EditElectricityModal';
+import EditUtilityModal from './EditUtilityModal';
 import ConfirmationModal from '../common/ConfirmationModal';
 
 interface RentBillCardProps {
@@ -59,10 +59,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [showTransactionInfo, setShowTransactionInfo] = useState(false);
     const [showExpenseActions, setShowExpenseActions] = useState(false);
     const [showExpenseList, setShowExpenseList] = useState(false);
-    const [showEditElectricity, setShowEditElectricity] = useState(false);
+    const [showEditUtility, setShowEditUtility] = useState<{ visible: boolean; type: 'electricity' | 'water' }>({ visible: false, type: 'electricity' });
     const savingReading = useRef(false);
     const [meterReading, setMeterReading] = useState(bill?.curr_reading?.toString() || '');
     const [meterFocused, setMeterFocused] = useState(false);
+    const [waterReading, setWaterReading] = useState(bill?.water_curr_reading?.toString() || '');
+    const [waterFocused, setWaterFocused] = useState(false);
     const [generatingReceipt, setGeneratingReceipt] = useState(false);
     const [sendingReminder, setSendingReminder] = useState(false);
     const [shareFormatPickerVisible, setShareFormatPickerVisible] = useState(false);
@@ -71,6 +73,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [showResetModal, setShowResetModal] = useState(false);
     const [isReseting, setIsReseting] = useState(false);
     const [meterReadingError, setMeterReadingError] = useState('');
+    const [waterReadingError, setWaterReadingError] = useState('');
 
     const swipeAnim = useRef(new Animated.Value(0)).current;
     const viewShotRef = useRef<any>(null);
@@ -79,25 +82,35 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const SWIPE_THRESHOLD = useMemo(() => Dimensions.get('window').width * 0.35, []);
     const TRACK_WIDTH = useMemo(() => Dimensions.get('window').width - 72, []);
 
-    // Effect for electricity reading continuity (B17)
+    // Effect for reading continuity
     useEffect(() => {
         if (!meterFocused && bill?.curr_reading !== undefined && bill?.curr_reading !== null) {
             setMeterReading(bill.curr_reading.toString());
         } else if (!meterFocused && bill?.curr_reading === null) {
             setMeterReading('');
         }
-    }, [bill?.curr_reading, meterFocused]);
+
+        if (!waterFocused && bill?.water_curr_reading !== undefined && bill?.water_curr_reading !== null) {
+            setWaterReading(bill.water_curr_reading.toString());
+        } else if (!waterFocused && bill?.water_curr_reading === null) {
+            setWaterReading('');
+        }
+    }, [bill?.curr_reading, bill?.water_curr_reading, meterFocused, waterFocused]);
 
     // B17.1: Listen for keyboard hide to catch Android swipe-back (which doesn't fire onBlur reliably)
     useEffect(() => {
         const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
             if (meterFocused) {
                 setMeterFocused(false);
-                handleMeterReadingSave();
+                handleMeterReadingSave('electricity');
+            }
+            if (waterFocused) {
+                setWaterFocused(false);
+                handleMeterReadingSave('water');
             }
         });
         return () => hideSubscription.remove();
-    }, [meterFocused, meterReading, bill]);
+    }, [meterFocused, waterFocused, meterReading, waterReading, bill]);
 
     // Derived locking state
     const isLocked = useMemo(() => {
@@ -120,6 +133,20 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
         return unitsUsed * (unit.electricity_rate ?? 0);
     }, [meterReading, bill, unit]);
+
+    const liveWaterAmount = useMemo(() => {
+        if (!unit?.water_rate || !bill) return 0;
+        const val = parseFloat(waterReading);
+        if (isNaN(val)) return bill.water_amount ?? 0;
+        const prev = bill.water_prev_reading ?? unit.initial_water_reading ?? 0;
+        if (val < prev) return 0;
+        let unitsUsed = Math.max(0, val - prev);
+        const defaultUnits = unit.water_default_units;
+        if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+            unitsUsed = defaultUnits;
+        }
+        return unitsUsed * (unit.water_rate ?? 0);
+    }, [waterReading, bill, unit]);
 
     // B12: Fix image loading in WebView by converting local files to base64
     const getBase64Image = async (uri: string) => {
@@ -361,7 +388,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const isPartial = bill.status === 'partial';
     const statusColor = isPaid ? theme.colors.success : theme.colors.danger;
     const hasElectricity = unit.is_metered || (unit.electricity_fixed_amount && unit.electricity_fixed_amount > 0);
+    const hasWater = unit.water_rate || (unit.water_fixed_amount && unit.water_fixed_amount > 0);
     const isMetered = unit.is_metered;
+    const isWaterMetered = !!unit.water_rate;
 
     // B16: Lock historical bills (older than last month) to prevent invalidating balances
     const isHistoricalLocked = (() => {
@@ -398,44 +427,60 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    const handleMeterReadingSave = async () => {
+    const handleMeterReadingSave = async (type: 'electricity' | 'water') => {
         if (!bill || savingReading.current) return;
 
-        const newReading = parseFloat(meterReading);
+        const isElec = type === 'electricity';
+        const currentVal = isElec ? meterReading : waterReading;
+        const newReading = parseFloat(currentVal);
         if (isNaN(newReading)) return;
 
-        // Stale check: Don't save if it's the same as what we already have
-        if (newReading === bill.curr_reading) return;
+        // Stale check
+        const existingVal = isElec ? bill.curr_reading : bill.water_curr_reading;
+        if (newReading === existingVal) return;
 
-        const prevReading = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
+        const prevReading = isElec
+            ? (bill.prev_reading ?? unit.initial_electricity_reading ?? 0)
+            : (bill.water_prev_reading ?? unit.initial_water_reading ?? 0);
+
         if (newReading < prevReading) {
-            setMeterReadingError(`Cannot be less than old reading (${prevReading})`);
+            if (isElec) setMeterReadingError(`Cannot be less than old reading (${prevReading})`);
+            else setWaterReadingError(`Cannot be less than old reading (${prevReading})`);
             return;
         } else {
-            setMeterReadingError('');
+            if (isElec) setMeterReadingError('');
+            else setWaterReadingError('');
         }
 
         savingReading.current = true;
         try {
             let unitsUsed = Math.max(0, newReading - prevReading);
-            const defaultUnits = unit.electricity_default_units;
+            const defaultUnits = isElec ? unit.electricity_default_units : unit.water_default_units;
             if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
                 unitsUsed = defaultUnits;
             }
-            const rate = unit.electricity_rate ?? 0;
-            const electricityAmount = unitsUsed * rate;
+            const rate = isElec ? (unit.electricity_rate ?? 0) : (unit.water_rate ?? 0);
+            const amt = unitsUsed * rate;
 
             const { hapticsLight } = require('../../utils/haptics');
             hapticsLight();
 
             const { updateBill, recalculateBill } = require('../../db');
-            await updateBill(bill.id, {
-                curr_reading: newReading,
-                prev_reading: prevReading,
-                electricity_amount: electricityAmount,
-            });
+            if (isElec) {
+                await updateBill(bill.id, {
+                    curr_reading: newReading,
+                    prev_reading: prevReading,
+                    electricity_amount: amt,
+                });
+            } else {
+                await updateBill(bill.id, {
+                    water_curr_reading: newReading,
+                    water_prev_reading: prevReading,
+                    water_amount: amt,
+                });
+            }
             await recalculateBill(bill.id);
-            onRefresh(true); // Always silent for meter reading saves
+            onRefresh(true);
         } catch (error) {
             console.error('Error saving meter reading:', error);
         } finally {
@@ -522,8 +567,8 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     value={meterReading}
                                     onChangeText={setMeterReading}
                                     onFocus={() => setMeterFocused(true)}
-                                    onBlur={() => { setMeterFocused(false); handleMeterReadingSave(); }}
-                                    onSubmitEditing={() => { setMeterFocused(false); handleMeterReadingSave(); }}
+                                    onBlur={() => { setMeterFocused(false); handleMeterReadingSave('electricity'); }}
+                                    onSubmitEditing={() => { setMeterFocused(false); handleMeterReadingSave('electricity'); }}
                                     keyboardType="numeric"
                                     placeholder="New"
                                     placeholderTextColor={theme.colors.textTertiary}
@@ -535,7 +580,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditElectricity(true)}
+                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditUtility({ visible: true, type: 'electricity' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
@@ -545,6 +590,49 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     </View>
                     {isMetered && !!meterReadingError && (
                         <Text style={styles.meterErrorText}>{meterReadingError}</Text>
+                    )}
+                </View>
+            )}
+
+            {/* === WATER SECTION (if applicable) === */}
+            {hasWater && (
+                <View style={styles.electricityRowMetered}>
+                    <View style={styles.electricityRow}>
+                        <Droplets size={16} color={theme.colors.primary} />
+                        {isWaterMetered ? (
+                            <View style={styles.meterRow}>
+                                <Text style={styles.meterLabel}>
+                                    Old: {bill.water_prev_reading ?? unit.initial_water_reading ?? 0}
+                                </Text>
+                                <Text style={styles.meterArrow}>→</Text>
+                                <TextInput
+                                    style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
+                                    value={waterReading}
+                                    onChangeText={setWaterReading}
+                                    onFocus={() => setWaterFocused(true)}
+                                    onBlur={() => { setWaterFocused(false); handleMeterReadingSave('water'); }}
+                                    onSubmitEditing={() => { setWaterFocused(false); handleMeterReadingSave('water'); }}
+                                    keyboardType="numeric"
+                                    placeholder="New"
+                                    placeholderTextColor={theme.colors.textTertiary}
+                                    editable={!isLocked}
+                                    returnKeyType="done"
+                                />
+                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveWaterAmount)}</Text>
+                            </View>
+                        ) : (
+                            <Pressable
+                                style={styles.fixedElecRow}
+                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditUtility({ visible: true, type: 'water' })}
+                            >
+                                <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
+                                <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
+                                {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
+                            </Pressable>
+                        )}
+                    </View>
+                    {isWaterMetered && !!waterReadingError && (
+                        <Text style={styles.meterErrorText}>{waterReadingError}</Text>
                     )}
                 </View>
             )}
@@ -760,11 +848,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 bill={bill}
                 unit={unit}
             />
-            <EditElectricityModal
-                visible={showEditElectricity}
-                onClose={() => { setShowEditElectricity(false); onRefresh(true); }}
+            <EditUtilityModal
+                visible={showEditUtility.visible}
+                onClose={() => { setShowEditUtility({ ...showEditUtility, visible: false }); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                type={showEditUtility.type}
             />
             <ConfirmationModal
                 visible={showResetModal}

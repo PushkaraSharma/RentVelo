@@ -41,6 +41,7 @@ export const units = sqliteTable('units', {
     water_rate: real('water_rate'),
     water_fixed_amount: real('water_fixed_amount'),
     initial_water_reading: real('initial_water_reading'),
+    water_default_units: real('water_default_units'),
     furnishing_type: text('furnishing_type', { enum: ['full', 'semi', 'none'] }),
     size: real('size'), // Sq. Ft.
     custom_amenities: text('custom_amenities'), // JSON string
@@ -192,6 +193,9 @@ export const rentBills = sqliteTable('rent_bills', {
     electricity_amount: real('electricity_amount').default(0),
     prev_reading: real('prev_reading'),
     curr_reading: real('curr_reading'),
+    water_amount: real('water_amount').default(0),
+    water_prev_reading: real('water_prev_reading'),
+    water_curr_reading: real('water_curr_reading'),
     previous_balance: real('previous_balance').default(0),
     total_expenses: real('total_expenses').default(0),
     total_amount: real('total_amount').default(0),

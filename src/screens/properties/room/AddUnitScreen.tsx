@@ -9,7 +9,7 @@ import SuccessModal from '../../../components/common/SuccessModal';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
-import { createUnit, updateUnit, getUnitById } from '../../../db';
+import { createUnit, updateUnit, getUnitById, syncPendingBillsWithUnitSettings } from '../../../db';
 import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
@@ -44,6 +44,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [waterType, setWaterType] = useState('Fixed');
     const [waterValue, setWaterValue] = useState(''); // Rate or Fixed Amount
     const [initialWaterReading, setInitialWaterReading] = useState('');
+    const [waterDefaultUnits, setWaterDefaultUnits] = useState('');
 
     // Facilities & Additional Info
     const [floor, setFloor] = useState('');
@@ -101,6 +102,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                         setWaterType('Metered');
                         setWaterValue(data.water_rate.toString());
                         setInitialWaterReading(data.initial_water_reading?.toString() || '');
+                        setWaterDefaultUnits(data.water_default_units?.toString() || '');
                     } else if (data.water_fixed_amount) {
                         setWaterType('Fixed');
                         setWaterValue(data.water_fixed_amount.toString());
@@ -199,10 +201,12 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 water_rate: waterEnabled && waterType === 'Metered' ? parseFloat(waterValue) : null,
                 water_fixed_amount: waterEnabled && waterType === 'Fixed' ? parseFloat(waterValue) : null,
                 initial_water_reading: waterEnabled && waterType === 'Metered' ? parseFloat(initialWaterReading) : null,
+                water_default_units: waterEnabled && waterType === 'Metered' && waterDefaultUnits ? parseFloat(waterDefaultUnits) : null,
             };
 
             if (isEditMode) {
                 await updateUnit(unitId, unitData);
+                await syncPendingBillsWithUnitSettings(unitId);
                 Alert.alert('Success', 'Room details updated successfully', [
                     { text: 'OK', onPress: () => navigation.goBack() }
                 ]);
@@ -403,13 +407,22 @@ export default function AddUnitScreen({ navigation, route }: any) {
                                             keyboardType="numeric"
                                         />
                                         {waterType === 'Metered' && (
-                                            <Input
-                                                label="Initial Meter Reading"
-                                                placeholder="e.g. 520.0"
-                                                value={initialWaterReading}
-                                                onChangeText={setInitialWaterReading}
-                                                keyboardType="numeric"
-                                            />
+                                            <>
+                                                <Input
+                                                    label="Initial Meter Reading"
+                                                    placeholder="e.g. 520.0"
+                                                    value={initialWaterReading}
+                                                    onChangeText={setInitialWaterReading}
+                                                    keyboardType="numeric"
+                                                />
+                                                <Input
+                                                    label="Default Minimum Units (Optional)"
+                                                    placeholder="e.g. 3"
+                                                    value={waterDefaultUnits}
+                                                    onChangeText={setWaterDefaultUnits}
+                                                    keyboardType="numeric"
+                                                />
+                                            </>
                                         )}
                                     </View>
                                 )}
@@ -556,6 +569,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                             setElectricityDefaultUnits('');
                             setWaterValue('');
                             setInitialWaterReading('');
+                            setWaterDefaultUnits('');
                             setElectricityType('Metered');
                             setWaterType('Fixed');
                             setElectricityEnabled(true);

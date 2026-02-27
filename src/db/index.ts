@@ -73,6 +73,7 @@ export {
     removePaymentFromBill,
     getBillPayments,
     resetBill,
+    syncPendingBillsWithUnitSettings,
 } from './billService';
 
 // Notification operations

@@ -30,7 +30,9 @@ import {
     Trash2,
     Check,
     X,
-    FileText
+    FileText,
+    Zap,
+    Droplets
 } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
 import {
@@ -361,17 +363,71 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                 <Text style={styles.infoKey}>Monthly Rent</Text>
                                 <Text style={[styles.infoValue, { color: theme.colors.accent, fontWeight: 'bold' }]}>₹ {unit?.rent_amount}</Text>
                             </View>
-                            {unit?.is_metered && (
-                                <>
-                                    <View style={styles.infoRow}>
-                                        <Text style={styles.infoKey}>Electricity Rate</Text>
-                                        <Text style={styles.infoValue}>₹ {unit?.electricity_rate}/unit</Text>
+
+                            {/* Electricity Section */}
+                            {(unit?.electricity_rate !== null || unit?.electricity_fixed_amount !== null) && (
+                                <View style={styles.utilitySection}>
+                                    <View style={styles.utilityHeaderSmall}>
+                                        <Zap size={14} color="#EAB308" />
+                                        <Text style={styles.utilityTitleSmall}>Electricity</Text>
                                     </View>
-                                    <View style={styles.infoRow}>
-                                        <Text style={styles.infoKey}>Initial Elec. Reading</Text>
-                                        <Text style={styles.infoValue}>{unit?.initial_electricity_reading ?? 0}</Text>
+                                    {unit?.electricity_rate !== null ? (
+                                        <>
+                                            <View style={styles.infoRow}>
+                                                <Text style={styles.infoKey}>Rate</Text>
+                                                <Text style={styles.infoValue}>₹ {unit?.electricity_rate}/unit</Text>
+                                            </View>
+                                            <View style={styles.infoRow}>
+                                                <Text style={styles.infoKey}>Initial Reading</Text>
+                                                <Text style={styles.infoValue}>{unit?.initial_electricity_reading ?? 0}</Text>
+                                            </View>
+                                            {unit?.electricity_default_units > 0 && (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoKey}>Min Units</Text>
+                                                    <Text style={styles.infoValue}>{unit?.electricity_default_units}</Text>
+                                                </View>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <View style={styles.infoRow}>
+                                            <Text style={styles.infoKey}>Fixed Amount</Text>
+                                            <Text style={styles.infoValue}>₹ {unit?.electricity_fixed_amount}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
+                            {/* Water Section */}
+                            {(unit?.water_rate !== null || unit?.water_fixed_amount !== null) && (
+                                <View style={styles.utilitySection}>
+                                    <View style={styles.utilityHeaderSmall}>
+                                        <Droplets size={14} color="#0284C7" />
+                                        <Text style={styles.utilityTitleSmall}>Water</Text>
                                     </View>
-                                </>
+                                    {unit?.water_rate !== null ? (
+                                        <>
+                                            <View style={styles.infoRow}>
+                                                <Text style={styles.infoKey}>Rate</Text>
+                                                <Text style={styles.infoValue}>₹ {unit?.water_rate}/unit</Text>
+                                            </View>
+                                            <View style={styles.infoRow}>
+                                                <Text style={styles.infoKey}>Initial Reading</Text>
+                                                <Text style={styles.infoValue}>{unit?.initial_water_reading ?? 0}</Text>
+                                            </View>
+                                            {unit?.water_default_units > 0 && (
+                                                <View style={styles.infoRow}>
+                                                    <Text style={styles.infoKey}>Min Units</Text>
+                                                    <Text style={styles.infoValue}>{unit?.water_default_units}</Text>
+                                                </View>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <View style={styles.infoRow}>
+                                            <Text style={styles.infoKey}>Fixed Amount</Text>
+                                            <Text style={styles.infoValue}>₹ {unit?.water_fixed_amount}</Text>
+                                        </View>
+                                    )}
+                                </View>
                             )}
                         </View>
 
@@ -602,6 +658,25 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         color: theme.colors.textPrimary,
         fontWeight: theme.typography.medium,
         textAlign: 'right',
+    },
+    utilitySection: {
+        marginTop: theme.spacing.m,
+        paddingTop: theme.spacing.s,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border + '40',
+    },
+    utilityHeaderSmall: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: theme.spacing.s,
+    },
+    utilityTitleSmall: {
+        fontSize: 12,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     emptyTenantBox: {
         alignItems: 'center',
