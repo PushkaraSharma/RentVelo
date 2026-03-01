@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Alert, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
@@ -17,6 +17,7 @@ import { WebView } from 'react-native-webview';
 import ViewShot from 'react-native-view-shot';
 import { hapticsLight, hapticsMedium, hapticsHeavy } from '../../utils/haptics';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
+import { useToast } from '../../hooks/useToast';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -50,6 +51,7 @@ interface RentBillCardProps {
 const RentBillCard = React.memo(({ item, period, onRefresh, navigation, propertyId, viewingMonth, viewingYear }: RentBillCardProps) => {
     const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired } = item;
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
     const nextBillStatus = item.nextBillStatus || { hasChanges: false, id: null };
 
@@ -205,7 +207,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         UTI: 'com.adobe.pdf',
                     });
                 } else {
-                    Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+                    showToast({ type: 'info', title: 'Sharing not available', message: 'PDF saved but sharing is not available on this device.' });
                 }
                 setGeneratingReceipt(false);
             } else {
@@ -213,7 +215,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         } catch (error) {
             console.error('Receipt generation error:', error);
-            Alert.alert('Error', 'Failed to generate receipt. Please try again.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to generate receipt. Please try again.' });
             setGeneratingReceipt(false);
         }
     };
@@ -258,7 +260,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         UTI: 'com.adobe.pdf',
                     });
                 } else {
-                    Alert.alert('Sharing not available', 'PDF saved but sharing is not available on this device.');
+                    showToast({ type: 'info', title: 'Sharing not available', message: 'PDF saved but sharing is not available on this device.' });
                 }
                 setSendingReminder(false);
             } else {
@@ -266,7 +268,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         } catch (error) {
             console.error('Reminder generation error:', error);
-            Alert.alert('Error', 'Failed to generate reminder. Please try again.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to generate reminder. Please try again.' });
             setSendingReminder(false);
         }
     };
@@ -296,7 +298,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         }
                     } catch (e) {
                         console.error('Image capture error:', e);
-                        Alert.alert('Error', 'Failed to capture image.');
+                        showToast({ type: 'error', title: 'Error', message: 'Failed to capture image.' });
                     } finally {
                         setShareHtml(null);
                         setGeneratingReceipt(false);
@@ -424,7 +426,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             onRefresh();
         } catch (e) {
             console.error('Error resetting bill:', e);
-            Alert.alert('Error', 'Failed to reset bill');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to reset bill' });
         } finally {
             setIsReseting(false);
             setShowResetModal(false);
@@ -545,7 +547,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         } else if (!isLocked) {
                             setShowReceivePayment(true);
                         } else {
-                            Alert.alert('Locked', 'Historical records cannot be edited.');
+                            showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' });
                         }
                     }}
                 >
@@ -585,7 +587,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditUtility({ visible: true, type: 'electricity' })}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'electricity' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
@@ -628,7 +630,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowEditUtility({ visible: true, type: 'water' })}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'water' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
@@ -645,7 +647,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             {/* === RENT + PREVIOUS BALANCE (tappable) === */}
             <Pressable
                 style={styles.rentSection}
-                onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowTransactionInfo(true)}
+                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowTransactionInfo(true)}
             >
                 <View style={styles.rentRow}>
                     <View>
@@ -672,7 +674,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             <View style={styles.actionsRow}>
                 <Pressable
                     style={[styles.addRemoveBtn, isLocked && { opacity: 0.5 }]}
-                    onPress={() => isLocked ? Alert.alert('Locked', 'Historical records cannot be edited.') : setShowExpenseActions(true)}
+                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowExpenseActions(true)}
                 >
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>

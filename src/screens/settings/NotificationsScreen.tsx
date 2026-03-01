@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Bell, Calendar, AlertTriangle, Layers, Clock, CheckCircle } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import { storage } from '../../utils/storage';
 import { scheduleLocalNotification, syncNotificationSchedules, requestNotificationPermissions } from '../../services/pushNotificationService';
 import Slider from '@react-native-community/slider';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { useToast } from '../../hooks/useToast';
 
 export const PREFS_KEY = '@notification_prefs';
 
@@ -36,6 +37,7 @@ const DEFAULT_PREFS: NotificationPrefs = {
 
 export default function NotificationsScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
     const [showTimePicker, setShowTimePicker] = useState(false);
@@ -66,11 +68,11 @@ export default function NotificationsScreen({ navigation }: any) {
             if (key === 'enableAll' && value === true) {
                 const granted = await requestNotificationPermissions();
                 if (!granted) {
-                    Alert.alert(
-                        'Permission Required',
-                        'Please enable notifications in your device settings to receive alerts.',
-                        [{ text: 'OK' }]
-                    );
+                    showToast({
+                        type: 'warning',
+                        title: 'Permission Required',
+                        message: 'Please enable notifications in device settings.'
+                    });
                     return;
                 }
             }
@@ -101,12 +103,12 @@ export default function NotificationsScreen({ navigation }: any) {
                 } as any
             );
             if (id) {
-                Alert.alert('Success', 'Test notification triggered.');
+                showToast({ type: 'success', title: 'Success', message: 'Test notification triggered.' });
             } else {
-                Alert.alert('Permission Denied', 'Please enable notifications in your device settings.');
+                showToast({ type: 'error', title: 'Permission Denied', message: 'Please enable notifications in settings.' });
             }
         } catch (e) {
-            Alert.alert('Error', 'Failed to schedule test notification.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to schedule test notification.' });
         }
     };
 

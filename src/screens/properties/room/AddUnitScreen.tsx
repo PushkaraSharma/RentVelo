@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import Input from '../../../components/common/Input';
@@ -10,12 +10,16 @@ import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
 import { createUnit, updateUnit, getUnitById, syncPendingBillsWithUnitSettings } from '../../../db';
-import { handleImageSelection } from '../../../utils/ImagePickerUtil';
+import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
+import { useToast } from '../../../hooks/useToast';
+import ImagePickerModal from '../../../components/common/ImagePickerModal';
+import PromptModal from '../../../components/common/PromptModal';
 
 export default function AddUnitScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const unitId = route?.params?.unitId;
@@ -57,6 +61,10 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
     // Photos
     const [images, setImages] = useState<string[]>([]);
+
+    // Custom UI Modals State
+    const [showImagePicker, setShowImagePicker] = useState(false);
+    const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
 
     React.useEffect(() => {
         if (isEditMode) {
@@ -116,12 +124,28 @@ export default function AddUnitScreen({ navigation, route }: any) {
         }
     };
 
+    const handleSelectCamera = async () => {
+        const hasPermission = await requestCameraPermission();
+        if (!hasPermission) {
+            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need camera permissions to make this work!' });
+            return;
+        }
+        const uri = await launchCamera({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+        if (uri) setImages(prev => [...prev, uri]);
+    };
+
+    const handleSelectGallery = async () => {
+        const hasPermission = await requestLibraryPermission();
+        if (!hasPermission) {
+            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need gallery permissions to make this work!' });
+            return;
+        }
+        const uri = await launchLibrary({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
+        if (uri) setImages(prev => [...prev, uri]);
+    };
+
     const pickImage = () => {
-        handleImageSelection((uri) => setImages(prevImages => [...prevImages, uri]), {
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.8,
-        });
+        setShowImagePicker(true);
     };
 
     const removeImage = (index: number) => {
@@ -131,21 +155,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
     };
 
     const addCustomAmenity = () => {
-        Alert.prompt(
-            'Add Amenity',
-            'Enter amenity name (e.g. Attached Balcony)',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Add',
-                    onPress: (text?: string) => {
-                        if (text && text.trim()) {
-                            setCustomAmenities([...customAmenities, text.trim()]);
-                        }
-                    }
-                }
-            ]
-        );
+        setShowAmenityPrompt(true);
     };
 
     const removeAmenity = (index: number) => {
@@ -160,11 +170,11 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
     const handleSubmit = async () => {
         if (!roomName.trim()) {
-            Alert.alert('Error', 'Please enter room name');
+            showToast({ type: 'error', title: 'Error', message: 'Please enter room name' });
             return;
         }
         if (!rentAmount || parseFloat(rentAmount) <= 0) {
-            Alert.alert('Error', 'Please enter valid rent amount');
+            showToast({ type: 'error', title: 'Error', message: 'Please enter valid rent amount' });
             return;
         }
 
@@ -207,9 +217,8 @@ export default function AddUnitScreen({ navigation, route }: any) {
             if (isEditMode) {
                 await updateUnit(unitId, unitData);
                 await syncPendingBillsWithUnitSettings(unitId);
-                Alert.alert('Success', 'Room details updated successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
+                showToast({ type: 'success', title: 'Success', message: 'Room details updated successfully' });
+                navigation.goBack();
             } else {
                 const newId = await createUnit(unitData);
                 setCreatedUnitId(newId);
@@ -217,7 +226,11 @@ export default function AddUnitScreen({ navigation, route }: any) {
             }
         } catch (error) {
             console.error('Error saving room:', error);
-            Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} room. Please try again.`);
+            showToast({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to ${isEditMode ? 'update' : 'create'} room. Please try again.`
+            });
         } finally {
             setLoading(false);
         }
@@ -582,6 +595,26 @@ export default function AddUnitScreen({ navigation, route }: any) {
                         }
                     }
                 ]}
+            />
+
+            <ImagePickerModal
+                visible={showImagePicker}
+                onClose={() => setShowImagePicker(false)}
+                onSelectCamera={handleSelectCamera}
+                onSelectGallery={handleSelectGallery}
+            />
+
+            <PromptModal
+                visible={showAmenityPrompt}
+                onClose={() => setShowAmenityPrompt(false)}
+                onSubmit={(text) => {
+                    if (text && text.trim()) {
+                        setCustomAmenities([...customAmenities, text.trim()]);
+                    }
+                }}
+                title="Add Amenity"
+                message="Enter amenity name (e.g. Attached Balcony)"
+                placeholder="e.g. Attached Balcony"
             />
         </SafeAreaView>
     );

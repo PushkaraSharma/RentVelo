@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Database, Cloud, HardDrive, RotateCcw, CloudUpload, CheckCircle2 } from 'lucide-react-native';
@@ -15,9 +15,11 @@ import { storage } from '../../utils/storage';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
+import { useToast } from '../../hooks/useToast';
 
 export default function BackupScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const insets = useSafeAreaInsets();
     const dispatch = useDispatch();
@@ -57,15 +59,19 @@ export default function BackupScreen({ navigation }: any) {
         if (result) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
             updateLastSync();
-            Alert.alert('Success', `Local backup saved to:\n${result}`);
+            showToast({ type: 'success', title: 'Success', message: 'Local backup saved successfully' });
         } else {
-            Alert.alert('Error', 'Failed to create local backup.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to create local backup.' });
         }
     };
 
     const toggleAutoBackup = (value: boolean) => {
         if (!isGoogleLinked && value) {
-            Alert.alert('Google Account Required', 'Please link your Google account to enable auto backup.');
+            showToast({
+                type: 'info',
+                title: 'Link Required',
+                message: 'Please link your Google account to enable auto backup.'
+            });
             return;
         }
         setIsAutoBackupEnabled(value);
@@ -81,10 +87,10 @@ export default function BackupScreen({ navigation }: any) {
                 const user = await signInWithGoogle();
                 if (user) {
                     dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                    Alert.alert('Success', 'Google account linked successfully!');
+                    showToast({ type: 'success', title: 'Success', message: 'Google account linked successfully!' });
                 }
             } catch (error) {
-                Alert.alert('Sign-In Error', 'Could not link Google account.');
+                showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
             }
         }
     };
@@ -99,7 +105,7 @@ export default function BackupScreen({ navigation }: any) {
                     return; // User cancelled or failed
                 }
             } catch (error) {
-                Alert.alert('Sign-In Error', 'Could not link Google account.');
+                showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
                 return;
             }
         }
@@ -109,15 +115,19 @@ export default function BackupScreen({ navigation }: any) {
         if (success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
             updateLastSync();
-            Alert.alert('Success', 'Backup uploaded to Google Drive.');
+            showToast({ type: 'success', title: 'Success', message: 'Backup uploaded to Google Drive.' });
         } else {
-            Alert.alert('Error', 'Failed to upload backup to Drive.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to upload backup to Drive.' });
         }
     };
 
     const handleRestore = async () => {
         if (!isGoogleLinked) {
-            Alert.alert('Not Linked', 'Please connect your Google account to restore from Drive.');
+            showToast({
+                type: 'info',
+                title: 'Not Linked',
+                message: 'Please connect your Google account to restore from Drive.'
+            });
             return;
         }
         setShowRestoreModal(true);
@@ -136,9 +146,13 @@ export default function BackupScreen({ navigation }: any) {
         setRestoring(false);
         if (success) {
             trackEvent(AnalyticsEvents.BACKUP_RESTORED);
-            Alert.alert('Success', 'Data restored successfully. Please restart the app for changes to take effect.');
+            showToast({
+                type: 'success',
+                title: 'Success',
+                message: 'Data restored successfully. Please restart the app for changes.'
+            });
         } else {
-            Alert.alert('Restore Failed', 'Could not restore data from Google Drive.');
+            showToast({ type: 'error', title: 'Restore Failed', message: 'Could not restore data from Google Drive.' });
         }
     };
 

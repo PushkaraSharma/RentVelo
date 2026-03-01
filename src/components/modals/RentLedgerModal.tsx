@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { X, Check, ChevronDown, ChevronUp, Share2 } from 'lucide-react-native';
 import Button from '../common/Button';
@@ -7,6 +7,7 @@ import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import { generateRentLedgerHTML } from '../../utils/rentLedgerTemplate';
 import { getReceiptConfigByPropertyId, getPropertyById } from '../../db';
+import { useToast } from '../../hooks/useToast';
 
 interface RentLedgerModalProps {
     visible: boolean;
@@ -26,6 +27,7 @@ export default function RentLedgerModal({
     payments = [],
 }: RentLedgerModalProps) {
     const { theme } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme);
     // Options state
     const [includeIdProof, setIncludeIdProof] = useState(true);
@@ -96,7 +98,7 @@ export default function RentLedgerModal({
             onClose();
         } catch (error) {
             console.error('Error generating PDF:', error);
-            Alert.alert('Error', 'Failed to generate rent ledger PDF');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to generate rent ledger PDF' });
         } finally {
             setGenerating(false);
         }

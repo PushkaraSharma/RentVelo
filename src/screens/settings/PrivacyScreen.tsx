@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Shield, Lock, Eye, EyeOff, FileText } from 'lucide-react-native';
@@ -7,9 +7,11 @@ import Header from '../../components/common/Header';
 import Toggle from '../../components/common/Toggle';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { storage } from '../../utils/storage';
+import { useToast } from '../../hooks/useToast';
 
 export default function PrivacyScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const [appLockEnabled, setAppLockEnabled] = useState(false);
     const [privacyModeEnabled, setPrivacyModeEnabled] = useState(false);
@@ -36,7 +38,11 @@ export default function PrivacyScreen({ navigation }: any) {
                 const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
                 if (!hasHardware || !isEnrolled) {
-                    Alert.alert('Unsupported', 'Biometric authentication is not supported or not set up on this device.');
+                    showToast({
+                        type: 'error',
+                        title: 'Unsupported',
+                        message: 'Biometric authentication is not supported or not set up.'
+                    });
                     return;
                 }
 
@@ -70,11 +76,11 @@ export default function PrivacyScreen({ navigation }: any) {
             if (supported) {
                 await Linking.openURL(url);
             } else {
-                Alert.alert('Error', `Don't know how to open this URL: ${url}`);
+                showToast({ type: 'error', title: 'Error', message: `Don't know how to open this URL: ${url}` });
             }
         } catch (error) {
             console.error('An error occurred opening the link:', error);
-            Alert.alert('Error', 'An unexpected error occurred while trying to open the link.');
+            showToast({ type: 'error', title: 'Error', message: 'An unexpected error occurred opening the link.' });
         }
     };
 

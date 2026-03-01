@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, KeyboardAvoidingView, Platform, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform, TextInput, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import Input from '../../components/common/Input';
@@ -17,9 +17,11 @@ import * as Contacts from 'expo-contacts';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
+import { useToast } from '../../hooks/useToast';
 
 export default function AddTenantScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const unitId = route?.params?.unitId;
     const propertyId = route?.params?.propertyId;
@@ -153,7 +155,11 @@ export default function AddTenantScreen({ navigation, route }: any) {
         if (status === 'granted') {
             setShowContactPicker(true);
         } else {
-            Alert.alert('Permission Denied', 'Please allow contact access to use this feature.');
+            showToast({
+                type: 'error',
+                title: 'Permission Denied',
+                message: 'Please allow contact access to use this feature.'
+            });
         }
     };
 
@@ -184,11 +190,11 @@ export default function AddTenantScreen({ navigation, route }: any) {
 
     const handleSubmit = async () => {
         if (!fullName.trim()) {
-            Alert.alert('Error', 'Please enter tenant name');
+            showToast({ type: 'error', title: 'Error', message: 'Please enter tenant name' });
             return;
         }
         if (!primaryPhone.trim()) {
-            Alert.alert('Error', 'Please enter phone number');
+            showToast({ type: 'error', title: 'Error', message: 'Please enter phone number' });
             return;
         }
 
@@ -236,9 +242,8 @@ export default function AddTenantScreen({ navigation, route }: any) {
 
             if (isEditMode) {
                 await updateTenant(tenantId, tenantData);
-                Alert.alert('Success', 'Tenant updated successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
+                showToast({ type: 'success', title: 'Success', message: 'Tenant updated successfully' });
+                navigation.goBack();
             } else {
                 const id = await createTenant(tenantData);
                 setNewlyCreatedId(id);
@@ -247,7 +252,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
             }
         } catch (error) {
             console.error('Error saving tenant:', error);
-            Alert.alert('Error', 'Failed to save tenant. Please try again.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to save tenant. Please try again.' });
         } finally {
             setLoading(false);
         }

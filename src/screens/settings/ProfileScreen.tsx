@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { User, Mail, Phone, MapPin, Camera, Check } from 'lucide-react-native';
@@ -10,12 +10,15 @@ import { login } from '../../redux/authSlice';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { handleImageSelection } from '../../utils/ImagePickerUtil';
+import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../utils/ImagePickerUtil';
+import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { storage } from '../../utils/storage';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
+import { useToast } from '../../hooks/useToast';
 
 export default function ProfileScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const insets = useSafeAreaInsets();
     const dispatch = useDispatch();
@@ -26,6 +29,7 @@ export default function ProfileScreen({ navigation }: any) {
     const [businessName, setBusinessName] = useState('');
     const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || null);
     const [loading, setLoading] = useState(false);
+    const [showImagePicker, setShowImagePicker] = useState(false);
 
     useEffect(() => {
         loadProfileData();
@@ -40,17 +44,33 @@ export default function ProfileScreen({ navigation }: any) {
         }
     };
 
+    const handleSelectCamera = async () => {
+        const hasPermission = await requestCameraPermission();
+        if (!hasPermission) {
+            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need camera permissions to make this work!' });
+            return;
+        }
+        const uri = await launchCamera({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+        if (uri) setPhotoUrl(uri);
+    };
+
+    const handleSelectGallery = async () => {
+        const hasPermission = await requestLibraryPermission();
+        if (!hasPermission) {
+            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need gallery permissions to make this work!' });
+            return;
+        }
+        const uri = await launchLibrary({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+        if (uri) setPhotoUrl(uri);
+    };
+
     const pickImage = () => {
-        handleImageSelection((uri) => setPhotoUrl(uri), {
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.5,
-        });
+        setShowImagePicker(true);
     };
 
     const handleSave = async () => {
         if (!name || !email) {
-            Alert.alert('Error', 'Name and Email are required.');
+            showToast({ type: 'error', title: 'Error', message: 'Name and Email are required.' });
             return;
         }
 
@@ -67,10 +87,10 @@ export default function ProfileScreen({ navigation }: any) {
             const updatedUser = { name, email, photoUrl: finalPhotoUrl || undefined };
             dispatch(login(updatedUser)); // Update Redux
             storage.set('@user_profile', JSON.stringify({ phone, businessName })); // Save extra fields
-            Alert.alert('Success', 'Profile updated successfully');
+            showToast({ type: 'success', title: 'Success', message: 'Profile updated successfully' });
             navigation.goBack();
         } catch (error) {
-            Alert.alert('Error', 'Failed to update profile.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to update profile.' });
         } finally {
             setLoading(false);
         }
@@ -142,6 +162,12 @@ export default function ProfileScreen({ navigation }: any) {
                     />
                 </View>
             </KeyboardAvoidingView>
+            <ImagePickerModal
+                visible={showImagePicker}
+                onClose={() => setShowImagePicker(false)}
+                onSelectCamera={handleSelectCamera}
+                onSelectGallery={handleSelectGallery}
+            />
         </SafeAreaView>
     );
 }

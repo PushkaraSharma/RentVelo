@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
@@ -8,10 +8,12 @@ import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthServi
 import { requestNotificationPermissions } from '../../services/pushNotificationService';
 import { FontAwesome } from '@expo/vector-icons';
 import { AnalyticsEvents, trackEvent, setAnalyticsUser } from '../../services/analyticsService';
+import { useToast } from '../../hooks/useToast';
 
 export default function WelcomeScreen() {
     const dispatch = useDispatch();
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const [loading, setLoading] = React.useState(false);
 
@@ -43,10 +45,11 @@ export default function WelcomeScreen() {
             console.error('Failed to sign in with Google:', error);
             // Don't show alert for user-cancelled sign-in
             if (error?.code !== '12501' && error?.code !== 'SIGN_IN_CANCELLED') {
-                Alert.alert(
-                    'Sign In Failed',
-                    'Could not sign in with Google. Please check your internet connection and try again.'
-                );
+                showToast({
+                    type: 'error',
+                    title: 'Sign In Failed',
+                    message: 'Could not sign in with Google. Please check your internet connection and try again.'
+                });
             }
         } finally {
             setLoading(false);

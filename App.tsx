@@ -13,6 +13,8 @@ import { ThemeProvider } from './src/theme/ThemeContext';
 import * as Updates from 'expo-updates';
 import AppLockWrapper from './src/components/AppLockWrapper';
 import AutoBackupHandler from './src/components/AutoBackupHandler';
+import { ToastProvider } from './src/components/common/ToastProvider';
+import UpdateToast from './src/components/common/UpdateToast';
 import { migrateOldImagesToPermanentStorage } from './src/services/imageMigrationService';
 import { syncNotificationSchedules } from './src/services/pushNotificationService';
 import * as Notifications from 'expo-notifications';
@@ -80,17 +82,8 @@ export default function App() {
     );
   }
 
-  if (isUpdating) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 20, color: theme.colors.textPrimary, fontSize: 18, fontWeight: 'bold' }}>Updating App...</Text>
-        <Text style={{ marginTop: 10, color: theme.colors.textSecondary, textAlign: 'center', paddingHorizontal: 20 }}>
-          Please wait while we download the latest features and improvements.
-        </Text>
-      </View>
-    );
-  }
+  // Removed full-screen isUpdating blocker to allow non-intrusive bottom toast
+
   if (error) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background, padding: 20 }}>
@@ -106,11 +99,14 @@ export default function App() {
     <Provider store={store}>
       <ThemeProvider>
         <SafeAreaProvider>
-          <AutoBackupHandler />
-          <AppLockWrapper>
-            <RootNavigator />
-          </AppLockWrapper>
-          <StatusBar style="auto" />
+          <ToastProvider>
+            <AutoBackupHandler />
+            <AppLockWrapper>
+              <RootNavigator />
+            </AppLockWrapper>
+            <UpdateToast visible={isUpdating} />
+            <StatusBar style="auto" />
+          </ToastProvider>
         </SafeAreaProvider>
       </ThemeProvider>
     </Provider>

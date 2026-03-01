@@ -6,7 +6,6 @@ import {
     ScrollView,
     Pressable,
     Image,
-    Alert,
     Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,11 +31,13 @@ import Header from '../../../components/common/Header';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { getPropertyById, getUnitsByPropertyId, getActiveTenantByPropertyId, deleteProperty } from '../../../db';
 import { getFullImageUri } from '../../../services/imageService';
+import { useToast } from '../../../hooks/useToast';
 
 const { width } = Dimensions.get('window');
 
 export default function PropertyOperationsScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const [property, setProperty] = useState<any>(null);
@@ -93,11 +94,15 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
         try {
             await deleteProperty(propertyId);
             setShowDeleteModal(false);
+            showToast({ type: 'success', title: 'Success', message: 'Property deleted successfully' });
             navigation.goBack();
-            Alert.alert('Success', 'Property deleted successfully');
         } catch (error) {
             console.error('Error deleting property:', error);
-            Alert.alert('Error', 'Failed to delete property. Make sure it has no active rooms/tenants.');
+            showToast({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to delete property. Make sure it has no active rooms/tenants.'
+            });
         } finally {
             setIsDeleting(false);
         }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Modal, Image, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Modal, Image, SafeAreaView } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Plus, Banknote, Trash2, Image as ImageIcon, X } from 'lucide-react-native';
@@ -7,6 +7,8 @@ import { getBillPayments, removePaymentFromBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
 import { getFullImageUri } from '../../services/imageService';
 import { syncNotificationSchedules } from '../../services/pushNotificationService';
+import { useToast } from '../../hooks/useToast';
+import ConfirmationModal from '../common/ConfirmationModal';
 
 interface PaidAmountModalProps {
     visible: boolean;
@@ -18,9 +20,11 @@ interface PaidAmountModalProps {
 
 export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPayment }: PaidAmountModalProps) {
     const { theme } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme);
     const [payments, setPayments] = useState<any[]>([]);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [paymentToDelete, setPaymentToDelete] = useState<number | null>(null);
 
     useEffect(() => {
         if (visible && bill?.id) loadPayments();
@@ -32,27 +36,22 @@ export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPay
     };
 
     const handleDelete = (paymentId: number) => {
-        Alert.alert(
-            'Delete Payment',
-            'Are you sure you want to remove this payment? The bill balance will be recalculated.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await removePaymentFromBill(paymentId);
-                            await syncNotificationSchedules();
-                            await loadPayments();
-                        } catch (err) {
-                            console.error('Error deleting payment:', err);
-                            Alert.alert('Error', 'Failed to delete payment.');
-                        }
-                    }
-                }
-            ]
-        );
+        setPaymentToDelete(paymentId);
+    };
+
+    const confirmDelete = async () => {
+        if (!paymentToDelete) return;
+        try {
+            await removePaymentFromBill(paymentToDelete);
+            await syncNotificationSchedules();
+            await loadPayments();
+            showToast({ type: 'success', title: 'Deleted', message: 'Payment removed successfully.' });
+        } catch (err) {
+            console.error('Error deleting payment:', err);
+            showToast({ type: 'error', title: 'Error', message: 'Failed to delete payment.' });
+        } finally {
+            setPaymentToDelete(null);
+        }
     };
 
     const formatDate = (d: any) => {
@@ -150,6 +149,16 @@ export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPay
                         )}
                     </SafeAreaView>
                 </Modal>
+                <ConfirmationModal
+                    visible={!!paymentToDelete}
+                    onClose={() => setPaymentToDelete(null)}
+                    onConfirm={confirmDelete}
+                    title="Delete Payment"
+                    message="Are you sure you want to remove this payment? The bill balance will be recalculated."
+                    confirmText="Delete"
+                    cancelText="Cancel"
+                    variant="danger"
+                />
             </RentModalSheet>
         </>
     );

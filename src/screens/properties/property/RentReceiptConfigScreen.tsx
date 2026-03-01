@@ -6,7 +6,6 @@ import {
     ScrollView,
     Pressable,
     Image,
-    Alert,
     KeyboardAvoidingView,
     Platform,
     Modal
@@ -35,6 +34,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { handleImageSelection } from '../../../utils/ImagePickerUtil';
 import SignatureModal from '../../../components/common/SignatureModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
+import { useToast } from '../../../hooks/useToast';
 
 const WALLET_OPTIONS = [
     { label: 'Google Pay', value: 'google_pay' },
@@ -46,6 +46,7 @@ const WALLET_OPTIONS = [
 
 export default function RentReceiptConfigScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const [loading, setLoading] = useState(false);
@@ -148,12 +149,15 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                 signature_uri: signatureUri,
             });
 
-            Alert.alert('Success', `Receipt details ${isEditMode ? 'updated' : 'saved'} successfully!`, [
-                { text: 'OK', onPress: () => navigation.goBack() }
-            ]);
+            showToast({
+                type: 'success',
+                title: 'Success',
+                message: `Receipt details ${isEditMode ? 'updated' : 'saved'} successfully!`
+            });
+            navigation.goBack();
         } catch (error) {
             console.error('Error saving receipt config:', error);
-            Alert.alert('Error', 'Failed to save receipt configuration');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to save receipt configuration' });
         } finally {
             setLoading(false);
         }

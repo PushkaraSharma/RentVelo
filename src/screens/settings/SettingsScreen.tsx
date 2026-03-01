@@ -30,15 +30,18 @@ import { generateRealUsageData } from '../../../tests/seedDatabase';
 import { getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents, setAnalyticsUser } from '../../services/analyticsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useToast } from '../../hooks/useToast';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
     const insets = useSafeAreaInsets();
     const { user } = useSelector((state: RootState) => state.auth);
     const { theme, isDark, setMode } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
 
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showSeedModal, setShowSeedModal] = useState(false);
 
     const handleLogout = () => {
         setShowLogoutModal(true);
@@ -58,33 +61,25 @@ export default function SettingsScreen({ navigation }: any) {
     const [isSeeding, setIsSeeding] = useState(false);
 
     const handleSeedDatabase = () => {
-        Alert.alert(
-            'Seed Database',
-            'Are you sure you want to inject 1-year of test data into this environment?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Seed Data',
-                    style: 'destructive',
-                    onPress: () => {
-                        setIsSeeding(true);
-                        // Yield the JS thread for 100ms so the Modal overlay can render
-                        setTimeout(async () => {
-                            try {
-                                const db = getDb();
-                                await generateRealUsageData(db);
-                                Alert.alert('Success', 'Database seeded successfully.');
-                            } catch (error) {
-                                console.error('Error seeding DB:', error);
-                                Alert.alert('Error', 'Failed to seed database.');
-                            } finally {
-                                setIsSeeding(false);
-                            }
-                        }, 100);
-                    }
-                }
-            ]
-        );
+        setShowSeedModal(true);
+    };
+
+    const confirmSeed = () => {
+        setShowSeedModal(false);
+        setIsSeeding(true);
+        // Yield the JS thread for 100ms so the Modal overlay can render
+        setTimeout(async () => {
+            try {
+                const db = getDb();
+                await generateRealUsageData(db);
+                showToast({ type: 'success', title: 'Success', message: 'Database seeded successfully.' });
+            } catch (error) {
+                console.error('Error seeding DB:', error);
+                showToast({ type: 'error', title: 'Error', message: 'Failed to seed database.' });
+            } finally {
+                setIsSeeding(false);
+            }
+        }, 100);
     };
 
     const handleShare = async () => {
@@ -197,7 +192,11 @@ export default function SettingsScreen({ navigation }: any) {
                             icon={HelpCircle}
                             label="Help Center"
                             color="#06B6D4"
-                            onPress={() => Alert.alert('Help Center', 'Please contact rentvelo@indieroots.in for assistance.')}
+                            onPress={() => showToast({
+                                type: 'info',
+                                title: 'Help Center',
+                                message: 'Contact rentvelo@indieroots.in for assistance.'
+                            })}
                         />
                         <SettingItem
                             icon={Share2}
@@ -230,6 +229,16 @@ export default function SettingsScreen({ navigation }: any) {
                 title="Logout"
                 message="Are you sure you want to logout?"
                 confirmText="Logout"
+                cancelText="Cancel"
+                variant="danger"
+            />
+            <ConfirmationModal
+                visible={showSeedModal}
+                onClose={() => setShowSeedModal(false)}
+                onConfirm={confirmSeed}
+                title="Seed Database"
+                message="Are you sure you want to inject 1-year of test data into this environment?"
+                confirmText="Seed Data"
                 cancelText="Cancel"
                 variant="danger"
             />

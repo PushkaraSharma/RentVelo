@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, Alert, KeyboardAvoidingView, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, KeyboardAvoidingView, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import Input from '../../../components/common/Input';
@@ -7,17 +7,21 @@ import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
 import { ArrowLeft, Camera, Building, Layers, User, Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
-import { handleImageSelection } from '../../../utils/ImagePickerUtil';
+import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
 import { createProperty, updateProperty, getPropertyById, createUnit, updateUnit } from '../../../db';
 import SuccessModal from '../../../components/common/SuccessModal';
 import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES, RENT_CYCLE_OPTIONS, METER_TYPES } from '../../../utils/Constants';
 import { Zap, Droplets } from 'lucide-react-native';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { trackEvent, AnalyticsEvents } from '../../../services/analyticsService';
+import { useToast } from '../../../hooks/useToast';
+import ImagePickerModal from '../../../components/common/ImagePickerModal';
+import PromptModal from '../../../components/common/PromptModal';
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const isEditMode = !!propertyId;
@@ -62,6 +66,10 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [waterValue, setWaterValue] = useState('');
     const [initialWaterReading, setInitialWaterReading] = useState('');
     const [defaultUnitId, setDefaultUnitId] = useState<number | null>(null);
+
+    // Custom UI Modals State
+    const [showImagePicker, setShowImagePicker] = useState(false);
+    const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
 
     React.useEffect(() => {
         if (isEditMode) {
@@ -136,12 +144,28 @@ export default function AddPropertyScreen({ navigation, route }: any) {
         }
     };
 
+    const handleSelectCamera = async () => {
+        const hasPermission = await requestCameraPermission();
+        if (!hasPermission) {
+            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need camera permissions to make this work!' });
+            return;
+        }
+        const uri = await launchCamera({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
+        if (uri) setImage(uri);
+    };
+
+    const handleSelectGallery = async () => {
+        const hasPermission = await requestLibraryPermission();
+        if (!hasPermission) {
+            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need gallery permissions to make this work!' });
+            return;
+        }
+        const uri = await launchLibrary({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
+        if (uri) setImage(uri);
+    };
+
     const pickImage = () => {
-        handleImageSelection((uri) => setImage(uri), {
-            allowsEditing: true,
-            aspect: [16, 9],
-            quality: 0.8,
-        });
+        setShowImagePicker(true);
     };
 
     const toggleAmenity = (id: string) => {
@@ -162,17 +186,17 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const handleSubmit = async () => {
         // Validation
         if (!propertyName.trim()) {
-            Alert.alert('Error', 'Please enter property name');
+            showToast({ type: 'error', title: 'Error', message: 'Please enter property name' });
             return;
         }
         if (!address.trim()) {
-            Alert.alert('Error', 'Please enter property address');
+            showToast({ type: 'error', title: 'Error', message: 'Please enter property address' });
             return;
         }
 
         if (!isMultiUnit) {
             if (!rentAmount || parseFloat(rentAmount) <= 0) {
-                Alert.alert('Error', 'Please enter valid rent amount for single room property');
+                showToast({ type: 'error', title: 'Error', message: 'Please enter valid rent amount' });
                 return;
             }
         }
@@ -224,9 +248,8 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     await updateUnit(defaultUnitId, unitData);
                 }
 
-                Alert.alert('Success', 'Property updated successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
+                showToast({ type: 'success', title: 'Success', message: 'Property updated successfully' });
+                navigation.goBack();
             } else {
                 const newId = await createProperty(propertyData);
 
@@ -255,7 +278,11 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             }
         } catch (error) {
             console.error('Error saving property:', error);
-            Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`);
+            showToast({
+                type: 'error',
+                title: 'Error',
+                message: `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`
+            });
         } finally {
             setLoading(false);
         }
@@ -295,11 +322,12 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
 
-            Alert.alert('Success', `Successfully created ${count} rooms!`);
+
+            showToast({ type: 'success', title: 'Success', message: `Successfully created ${count} rooms!` });
             navigation.goBack();
         } catch (error) {
             console.error('Bulk creation failed:', error);
-            Alert.alert('Error', 'Failed to create all rooms. Some rooms may have been created.');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to create all rooms. Some rooms may have been created.' });
         } finally {
             setBulkCreating(false);
         }
@@ -672,17 +700,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     {/* Amenities */}
                     <View style={styles.amenitiesHeader}>
                         <Text style={styles.sectionTitle}>Amenities</Text>
-                        <Pressable onPress={() => {
-                            Alert.prompt(
-                                'Add Custom Amenity',
-                                'Enter amenity name',
-                                (text) => {
-                                    if (text && text.trim()) {
-                                        setSelectedAmenities([...selectedAmenities, text.trim()]);
-                                    }
-                                }
-                            );
-                        }}>
+                        <Pressable onPress={() => setShowAmenityPrompt(true)}>
                             <Text style={styles.addCustom}>+ ADD CUSTOM</Text>
                         </Pressable>
                     </View>
@@ -786,6 +804,26 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     </View>
                 </View>
             </Modal>
+
+            <ImagePickerModal
+                visible={showImagePicker}
+                onClose={() => setShowImagePicker(false)}
+                onSelectCamera={handleSelectCamera}
+                onSelectGallery={handleSelectGallery}
+            />
+
+            <PromptModal
+                visible={showAmenityPrompt}
+                onClose={() => setShowAmenityPrompt(false)}
+                onSubmit={(text) => {
+                    if (text && text.trim()) {
+                        setSelectedAmenities([...selectedAmenities, text.trim()]);
+                    }
+                }}
+                title="Add Custom Amenity"
+                message="Enter amenity name"
+                placeholder="e.g. Swimming Pool"
+            />
         </SafeAreaView>
     );
 }

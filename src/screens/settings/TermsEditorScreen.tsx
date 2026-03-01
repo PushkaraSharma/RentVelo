@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { RotateCcw, Check } from 'lucide-react-native';
@@ -7,6 +7,8 @@ import Header from '../../components/common/Header';
 import Button from '../../components/common/Button';
 import { DEFAULT_TERMS_AND_CONDITIONS } from '../../utils/defaultTerms';
 import { storage } from '../../utils/storage';
+import { useToast } from '../../hooks/useToast';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 const TERMS_KEY = 'custom_terms_and_conditions';
 
@@ -20,9 +22,11 @@ export const saveTermsAndConditions = (terms: string): void => {
 
 export default function TermsEditorScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const [terms, setTerms] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showResetModal, setShowResetModal] = useState(false);
 
     useEffect(() => {
         setTerms(getTermsAndConditions());
@@ -30,27 +34,19 @@ export default function TermsEditorScreen({ navigation }: any) {
 
     const handleSave = () => {
         saveTermsAndConditions(terms);
-        Alert.alert('Saved', 'Terms & Conditions updated successfully.', [
-            { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+        showToast({ type: 'success', title: 'Saved', message: 'Terms & Conditions updated successfully.' });
+        navigation.goBack();
     };
 
     const handleReset = () => {
-        Alert.alert(
-            'Reset to Default',
-            'This will replace your custom T&C with the default template. Are you sure?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Reset',
-                    style: 'destructive',
-                    onPress: () => {
-                        setTerms(DEFAULT_TERMS_AND_CONDITIONS);
-                        saveTermsAndConditions(DEFAULT_TERMS_AND_CONDITIONS);
-                    }
-                }
-            ]
-        );
+        setShowResetModal(true);
+    };
+
+    const confirmReset = () => {
+        setTerms(DEFAULT_TERMS_AND_CONDITIONS);
+        saveTermsAndConditions(DEFAULT_TERMS_AND_CONDITIONS);
+        setShowResetModal(false);
+        showToast({ type: 'success', title: 'Reset', message: 'Terms restored to default template.' });
     };
 
     return (
@@ -93,6 +89,16 @@ export default function TermsEditorScreen({ navigation }: any) {
                         icon={<Check size={20} color="#FFF" />}
                     />
                 </View>
+                <ConfirmationModal
+                    visible={showResetModal}
+                    onClose={() => setShowResetModal(false)}
+                    onConfirm={confirmReset}
+                    title="Reset to Default"
+                    message="This will replace your custom T&C with the default template. Are you sure?"
+                    confirmText="Reset"
+                    cancelText="Cancel"
+                    variant="danger"
+                />
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

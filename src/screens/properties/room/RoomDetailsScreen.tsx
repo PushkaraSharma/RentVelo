@@ -6,7 +6,6 @@ import {
     ScrollView,
     Pressable,
     Image,
-    Alert,
     FlatList,
     RefreshControl,
     Modal,
@@ -54,9 +53,11 @@ import MoveTenantModal from '../../../components/modals/MoveTenantModal';
 import RentLedgerModal from '../../../components/modals/RentLedgerModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { getFullImageUri } from '../../../services/imageService';
+import { useToast } from '../../../hooks/useToast';
 
 export default function RoomDetailsScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const { propertyId, unitId, initialTab } = route.params;
     const [property, setProperty] = useState<any>(null);
@@ -125,7 +126,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
             });
             setShowRemoveModal(false);
             loadData();
-            Alert.alert('Success', 'Tenant moved out successfully.');
+            showToast({ type: 'success', title: 'Success', message: 'Tenant moved out successfully.' });
         } catch (error) {
             console.error('Error removing tenant:', error);
         }
@@ -133,7 +134,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
 
     const handleMoveTenant = async () => {
         if (!selectedTenant || !targetUnitId || !targetPropertyId) {
-            Alert.alert('Error', 'Please select a destination room');
+            showToast({ type: 'error', title: 'Error', message: 'Please select a destination room' });
             return;
         }
 
@@ -186,11 +187,11 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
             } as any);
 
             setShowMoveModal(false);
+            showToast({ type: 'success', title: 'Success', message: 'Tenant moved successfully.' });
             navigation.goBack();
-            Alert.alert('Success', 'Tenant moved successfully and history preserved.');
         } catch (error) {
             console.error('Error moving tenant:', error);
-            Alert.alert('Error', 'Failed to move tenant');
+            showToast({ type: 'error', title: 'Error', message: 'Failed to move tenant' });
         }
     };
 
@@ -214,11 +215,15 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
         try {
             await deleteUnit(unitId);
             setShowDeleteModal(false);
+            showToast({ type: 'success', title: 'Success', message: 'Room deleted successfully' });
             navigation.goBack();
-            Alert.alert('Success', 'Room deleted successfully');
         } catch (error) {
             console.error('Error deleting room:', error);
-            Alert.alert('Error', 'Failed to delete room. Make sure it has no active tenants.');
+            showToast({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to delete room. Make sure it has no active tenants.'
+            });
         } finally {
             setIsDeleting(false);
         }
