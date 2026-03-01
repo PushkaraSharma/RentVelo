@@ -23,6 +23,8 @@ import PropertyOperationsScreen from '../screens/properties/property/PropertyOpe
 import RoomsListScreen from '../screens/properties/room/RoomsListScreen';
 import RoomDetailsScreen from '../screens/properties/room/RoomDetailsScreen';
 import RentReceiptConfigScreen from '../screens/properties/property/RentReceiptConfigScreen';
+import PropertySettingsScreen from '../screens/properties/property/PropertySettingsScreen';
+import ExpensesScreen from '../screens/properties/property/ExpensesScreen';
 import TermsEditorScreen from '../screens/settings/TermsEditorScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
 import PrivacyScreen from '../screens/settings/PrivacyScreen';
@@ -77,6 +79,8 @@ export default function RootNavigator() {
                         <Stack.Screen name="Notifications" component={NotificationsScreen} />
                         <Stack.Screen name="NotificationsCenter" component={NotificationsCenterScreen} />
                         <Stack.Screen name="TakeRent" component={TakeRentScreen} />
+                        <Stack.Screen name="PropertySettings" component={PropertySettingsScreen} />
+                        <Stack.Screen name="Expenses" component={ExpensesScreen} />
                     </>
                 )}
             </Stack.Navigator>

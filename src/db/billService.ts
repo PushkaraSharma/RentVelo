@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import {
-    rentBills, billExpenses, payments, units, tenants, properties,
+    rentBills, billExpenses, payments, units, tenants, properties, propertyExpenses,
     RentBill, NewRentBill, BillExpense, NewBillExpense, Payment, NewPayment
 } from './schema';
 import { eq, and, or, desc, sum, sql, inArray } from 'drizzle-orm';
@@ -56,6 +56,37 @@ export const generateBillsForProperty = async (
 
         for (const t of activeTenantsNoUnit) {
             await db.update(tenants).set({ unit_id: newUnitId }).where(eq(tenants.id, t.id));
+        }
+    }
+
+    // ── Auto-Increment Rent ──
+    if (property?.auto_increment_rent_enabled && property.auto_increment_percent) {
+        const percent = property.auto_increment_percent;
+        const freq = property.auto_increment_frequency;
+        const lastInc = property.last_increment_date ? new Date(property.last_increment_date) : null;
+        let monthsRequired = freq === 'half_yearly' ? 6 : 12;
+
+        let shouldIncrement = false;
+        if (!lastInc) {
+            // First time: increment if property was created > monthsRequired ago
+            shouldIncrement = false; // Don't auto-increment on first bill
+        } else {
+            const monthsSinceLastInc = (year - lastInc.getFullYear()) * 12 + (month - (lastInc.getMonth() + 1));
+            shouldIncrement = monthsSinceLastInc >= monthsRequired;
+        }
+
+        if (shouldIncrement) {
+            // Increase rent on all units
+            for (const unit of propertyUnits) {
+                const newRent = Math.round(unit.rent_amount * (1 + percent / 100));
+                await db.update(units).set({ rent_amount: newRent }).where(eq(units.id, unit.id));
+            }
+            // Update last_increment_date
+            await db.update(properties)
+                .set({ last_increment_date: new Date() } as any)
+                .where(eq(properties.id, propertyId));
+            // Refresh units
+            propertyUnits = await db.select().from(units).where(eq(units.property_id, propertyId));
         }
     }
 
@@ -214,6 +245,58 @@ export const generateBillsForProperty = async (
                 await db.update(rentBills)
                     .set({
                         total_expenses: totalExp,
+                        total_amount: newTotal,
+                        balance: newTotal,
+                        updated_at: new Date(),
+                    })
+                    .where(eq(rentBills.id, newBillId));
+            }
+        }
+
+        // ── Distribute Property Expenses to this unit's bill ──
+        const propExpenses = await db.select().from(propertyExpenses)
+            .where(
+                and(
+                    eq(propertyExpenses.property_id, propertyId),
+                    eq(propertyExpenses.distribute_type, 'rooms'),
+                    or(
+                        and(eq(propertyExpenses.month, month), eq(propertyExpenses.year, year)),
+                        eq(propertyExpenses.frequency, 'monthly')
+                    )
+                )
+            );
+
+        let distributedTotal = 0;
+        for (const propExp of propExpenses) {
+            // Check if this unit is in the distribution list
+            if (propExp.distributed_unit_ids) {
+                try {
+                    const unitIds: number[] = JSON.parse(propExp.distributed_unit_ids);
+                    if (unitIds.includes(unit.id)) {
+                        const splitAmount = Math.round((propExp.amount / unitIds.length) * 100) / 100;
+                        await db.insert(billExpenses).values({
+                            bill_id: newBillId,
+                            label: `Property: ${propExp.expense_type}`,
+                            amount: splitAmount,
+                            is_recurring: propExp.frequency === 'monthly',
+                        });
+                        distributedTotal += splitAmount;
+                    }
+                } catch (e) {
+                    // Invalid JSON, skip
+                }
+            }
+        }
+
+        // Update totals if property expenses were distributed
+        if (distributedTotal > 0) {
+            const currentBill = await getBillById(newBillId);
+            if (currentBill) {
+                const newTotalExp = (currentBill.total_expenses ?? 0) + distributedTotal;
+                const newTotal = (currentBill.rent_amount ?? 0) + (currentBill.electricity_amount ?? 0) + (currentBill.water_amount ?? 0) + newTotalExp + (currentBill.previous_balance ?? 0);
+                await db.update(rentBills)
+                    .set({
+                        total_expenses: newTotalExp,
                         total_amount: newTotal,
                         balance: newTotal,
                         updated_at: new Date(),

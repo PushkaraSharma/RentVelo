@@ -25,7 +25,9 @@ import {
     FileText,
     MapPin,
     Trash2,
-    Receipt
+    Receipt,
+    Pencil,
+    CreditCard
 } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
@@ -139,20 +141,28 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             }
         },
         {
-            id: 'settings',
-            label: 'Update Property',
-            icon: Settings,
-            color: theme.colors.textSecondary,
-            bg: isDark ? '#6B728020' : '#F3F4F6',
-            onPress: () => navigation.navigate('AddProperty', { propertyId })
-        },
-        {
             id: 'receipt',
             label: 'Rent Receipt',
             icon: Receipt,
             color: '#8B5CF6',
             bg: isDark ? '#8B5CF620' : '#F3E8FF',
             onPress: () => navigation.navigate('RentReceiptConfig', { propertyId })
+        },
+        {
+            id: 'settings',
+            label: 'Property Settings',
+            icon: Settings,
+            color: theme.colors.textSecondary,
+            bg: isDark ? '#6B728020' : '#F3F4F6',
+            onPress: () => navigation.navigate('PropertySettings', { propertyId })
+        },
+        {
+            id: 'expenses',
+            label: 'Expenses',
+            icon: CreditCard,
+            color: '#F59E0B',
+            bg: isDark ? '#F59E0B20' : '#FFFBEB',
+            onPress: () => navigation.navigate('Expenses', { propertyId })
         }
     ];
 
@@ -174,7 +184,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 {/* Hero Section */}
-                <View style={styles.heroCard}>
+                <Pressable style={styles.heroCard} onPress={() => navigation.navigate('AddProperty', { propertyId })}>
                     {property?.image_uri ? (
                         <Image source={{ uri: getFullImageUri(property.image_uri) || property.image_uri }} style={styles.heroImg} />
                     ) : (
@@ -189,7 +199,11 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                             <Text style={styles.propAddress} numberOfLines={1}>{property?.address}</Text>
                         </View>
                     </View>
-                </View>
+                    {/* Edit indicator */}
+                    <View style={styles.editBadge}>
+                        <Pencil size={14} color="#FFF" />
+                    </View>
+                </Pressable>
 
                 {/* Status Summary Banner */}
                 <View style={[
@@ -309,6 +323,17 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginBottom: theme.spacing.l,
         position: 'relative',
         ...theme.shadows.medium
+    },
+    editBadge: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     heroImg: {
         width: '100%',

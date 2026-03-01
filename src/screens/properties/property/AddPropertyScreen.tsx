@@ -643,36 +643,6 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         ))}
                     </View>
 
-                    {/* Rent Penalties */}
-                    <Text style={styles.sectionTitle}>Rent Penalties (Optional)</Text>
-                    <View style={[styles.row, { alignItems: 'center', justifyContent: 'space-between' }]}>
-                        <View style={{ flex: 1, marginRight: isMultiUnit ? theme.spacing.m : 0 }}>
-                            <Input
-                                label="PENALTY AFTER DAYS"
-                                placeholder="e.g. 5 days"
-                                value={penaltyGracePeriodDays}
-                                onChangeText={setPenaltyGracePeriodDays}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Input
-                                label="PENALTY AMOUNT"
-                                placeholder="e.g. ₹50 per day"
-                                value={penaltyAmountPerDay}
-                                onChangeText={setPenaltyAmountPerDay}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                    </View>
-
-                    <View style={[styles.utilityHeader, { marginBottom: theme.spacing.m }]}>
-                        <Text style={[{ flex: 1, color: theme.colors.textSecondary, fontSize: theme.typography.s, fontWeight: theme.typography.medium }]}>
-                            No penalty if partial payment done
-                        </Text>
-                        <Toggle value={waivePenaltyOnPartialPayment} onValueChange={setWaivePenaltyOnPartialPayment} />
-                    </View>
-
                     {/* Owner Details */}
                     <Text style={styles.sectionTitle}>Owner Details</Text>
                     <Input

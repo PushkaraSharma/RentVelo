@@ -86,3 +86,13 @@ export {
     generateRentReminders
 } from './notificationService';
 export type { Notification } from './notificationService';
+
+// Expense operations
+export {
+    createExpense,
+    getExpensesByProperty,
+    getExpensesByPropertyMonth,
+    deleteExpense,
+    getExpenseSummary,
+    getRecurringExpenses,
+} from './expenseService';
