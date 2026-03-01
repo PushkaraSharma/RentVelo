@@ -10,6 +10,7 @@ import { saveImageToPermanentStorage } from '../../services/imageService';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
+import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 
 interface ReceivePaymentModalProps {
     visible: boolean;
@@ -66,6 +67,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 unit_id: bill.unit_id,
             });
 
+            trackEvent(AnalyticsEvents.RENT_COLLECTED, { amount: amt, method: method });
             await syncNotificationSchedules();
             hapticsMedium();
             setAmount('');

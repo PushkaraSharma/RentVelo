@@ -13,6 +13,7 @@ import SuccessModal from '../../../components/common/SuccessModal';
 import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES, RENT_CYCLE_OPTIONS, METER_TYPES } from '../../../utils/Constants';
 import { Zap, Droplets } from 'lucide-react-native';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
+import { trackEvent, AnalyticsEvents } from '../../../services/analyticsService';
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
@@ -249,6 +250,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 }
 
                 setCreatedPropertyId(newId);
+                trackEvent(AnalyticsEvents.PROPERTY_ADDED, { type: propertyType, is_multi_unit: isMultiUnit.toString() });
                 setShowSuccessModal(true);
             }
         } catch (error) {

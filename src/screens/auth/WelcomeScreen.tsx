@@ -1,12 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
-import { login, linkGoogleAccount } from '../../redux/authSlice';
+import { login } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
 import { requestNotificationPermissions } from '../../services/pushNotificationService';
 import { FontAwesome } from '@expo/vector-icons';
+import { AnalyticsEvents, trackEvent, setAnalyticsUser } from '../../services/analyticsService';
 
 export default function WelcomeScreen() {
     const dispatch = useDispatch();
@@ -24,31 +25,35 @@ export default function WelcomeScreen() {
             const user = await signInWithGoogle();
             if (user) {
                 dispatch(login({
-                    name: user.name || 'Google User',
+                    name: user.name || 'User',
                     email: user.email,
                     photoUrl: user.photo || undefined
                 }));
-                dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+
+                trackEvent(AnalyticsEvents.SIGN_IN, { method: 'google' });
+                await setAnalyticsUser({
+                    email: user.email,
+                    name: user.name || 'User'
+                });
 
                 // Request permissions after login
                 setTimeout(() => requestNotificationPermissions(), 1000);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to sign in with Google:', error);
+            // Don't show alert for user-cancelled sign-in
+            if (error?.code !== '12501' && error?.code !== 'SIGN_IN_CANCELLED') {
+                Alert.alert(
+                    'Sign In Failed',
+                    'Could not sign in with Google. Please check your internet connection and try again.'
+                );
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSkip = () => {
-        dispatch(login({
-            name: 'Guest User',
-            email: 'guest@example.com'
-        }));
 
-        // Request permissions after skip
-        setTimeout(() => requestNotificationPermissions(), 1000);
-    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -92,19 +97,9 @@ export default function WelcomeScreen() {
                         </Text>
                     </Pressable>
 
-                    <Pressable
-                        style={({ pressed }) => [
-                            styles.skipButton,
-                            pressed && { opacity: 0.7 }
-                        ]}
-                        onPress={handleSkip}
-                    >
-                        <Text style={styles.skipButtonText}>Continue as Guest</Text>
-                    </Pressable>
-
                     <View style={styles.footer}>
                         <Text style={styles.securityNote}>
-                            Securely store encrypted backups in your own Google Drive.
+                            Sign in to securely backup your data to Google Drive.
                         </Text>
                     </View>
                 </View>
@@ -231,16 +226,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
     },
-    skipButton: {
-        paddingVertical: theme.spacing.m,
-        width: '100%',
-        alignItems: 'center',
-    },
-    skipButtonText: {
-        fontSize: 15,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.textSecondary,
-    },
+
     footer: {
         marginTop: theme.spacing.l,
     },

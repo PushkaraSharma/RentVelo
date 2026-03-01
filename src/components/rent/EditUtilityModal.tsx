@@ -4,6 +4,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { updateBill, recalculateBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
+import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 
 interface EditUtilityModalProps {
     visible: boolean;
@@ -35,6 +36,7 @@ export default function EditUtilityModal({ visible, onClose, bill, unit, type }:
 
         await updateBill(bill.id, updateData);
         await recalculateBill(bill.id);
+        trackEvent(AnalyticsEvents.METER_READING_SAVED, { type, mode: 'fixed' });
         onClose();
     };
 

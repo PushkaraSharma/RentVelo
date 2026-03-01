@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSelector } from 'react-redux';
+import { trackScreenView, trackEvent, AnalyticsEvents } from '../services/analyticsService';
 
 export const navigationRef = createNavigationContainerRef<any>();
 import { RootState } from '../redux/store';
@@ -36,8 +37,20 @@ const Stack = createNativeStackNavigator();
 export default function RootNavigator() {
     const { isAuthenticated, isOnboarded } = useSelector((state: RootState) => state.auth);
 
+    React.useEffect(() => {
+        trackEvent(AnalyticsEvents.APP_OPENED);
+    }, []);
+
     return (
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer
+            ref={navigationRef}
+            onStateChange={() => {
+                const currentScreenName = navigationRef.getCurrentRoute()?.name;
+                if (currentScreenName) {
+                    trackScreenView(currentScreenName);
+                }
+            }}
+        >
             <Stack.Navigator screenOptions={{ headerShown: false }}>
                 {!isOnboarded ? (
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />

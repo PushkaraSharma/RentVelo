@@ -15,7 +15,8 @@ import { generateRentReceiptHTML } from '../../utils/rentReceiptTemplate';
 import { generateRentReminderHTML } from '../../utils/rentReminderTemplate';
 import { WebView } from 'react-native-webview';
 import ViewShot from 'react-native-view-shot';
-import { hapticsLight, hapticsMedium } from '../../utils/haptics';
+import { hapticsLight, hapticsMedium, hapticsHeavy } from '../../utils/haptics';
+import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -194,6 +195,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             });
 
             if (format === 'PDF') {
+                trackEvent(AnalyticsEvents.RENT_RECEIPT_GENERATED, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
 
                 if (await Sharing.isAvailableAsync()) {
@@ -246,6 +248,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             });
 
             if (format === 'PDF') {
+                trackEvent(AnalyticsEvents.RENT_REMINDER_SENT, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
                 if (await Sharing.isAvailableAsync()) {
@@ -285,6 +288,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     try {
                         const uri = await viewShotRef.current.capture();
                         if (await Sharing.isAvailableAsync()) {
+                            trackEvent(shareHtml?.action === 'receipt' ? AnalyticsEvents.RENT_RECEIPT_GENERATED : AnalyticsEvents.RENT_REMINDER_SENT, { format: 'Image', unit: unit.name });
                             await Sharing.shareAsync(uri, {
                                 mimeType: 'image/png',
                                 dialogTitle: `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`,
@@ -480,6 +484,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 });
             }
             await recalculateBill(bill.id);
+            trackEvent(AnalyticsEvents.METER_READING_SAVED, { type, mode: 'metered' });
             onRefresh(true);
         } catch (error) {
             console.error('Error saving meter reading:', error);

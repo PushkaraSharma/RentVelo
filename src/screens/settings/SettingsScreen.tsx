@@ -28,9 +28,12 @@ import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getDb } from '../../db';
 import { generateRealUsageData } from '../../../tests/seedDatabase';
 import { getFullImageUri } from '../../services/imageService';
+import { trackEvent, AnalyticsEvents, setAnalyticsUser } from '../../services/analyticsService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
+    const insets = useSafeAreaInsets();
     const { user } = useSelector((state: RootState) => state.auth);
     const { theme, isDark, setMode } = useAppTheme();
     const styles = getStyles(theme, isDark);
@@ -47,6 +50,8 @@ export default function SettingsScreen({ navigation }: any) {
         } catch (e) {
             // Ignored if not signed in or error occurs
         }
+        trackEvent(AnalyticsEvents.SIGN_OUT);
+        await setAnalyticsUser(null);
         dispatch(logout());
     };
 
@@ -107,7 +112,7 @@ export default function SettingsScreen({ navigation }: any) {
     );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Settings</Text>
             </View>
@@ -164,12 +169,12 @@ export default function SettingsScreen({ navigation }: any) {
                             color="#EC4899"
                             onPress={() => navigation.navigate('Backup')}
                         />
-                        <SettingItem
+                        {/* <SettingItem
                             icon={Database}
                             label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
                             color="#8B5CF6"
                             onPress={handleSeedDatabase}
-                        />
+                        /> */}
                     </View>
                 </View>
 
@@ -236,7 +241,7 @@ export default function SettingsScreen({ navigation }: any) {
                 </View>
             </Modal>
 
-        </SafeAreaView>
+        </View>
     );
 }
 

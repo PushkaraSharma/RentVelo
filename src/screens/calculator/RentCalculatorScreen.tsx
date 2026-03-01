@@ -5,6 +5,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import Toggle from '../../components/common/Toggle';
 import { MoreHorizontal, Share, Wifi, Wrench, Droplet, ChevronUp } from 'lucide-react-native';
 import Header from '../../components/common/Header';
+import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 
 // Mock Data
 const var_borderRadius_s = 4; // Local helper
@@ -174,7 +175,10 @@ export default function RentCalculatorScreen({ navigation }: any) {
                     <Text style={styles.decimal}>.00</Text>
                 </View>
 
-                <Pressable style={styles.confirmBtn}>
+                <Pressable
+                    style={styles.confirmBtn}
+                    onPress={() => trackEvent(AnalyticsEvents.RENT_CALCULATOR_USED, { total: liveTotal.toString() })}
+                >
                     <Text style={styles.confirmBtnText}>Confirm & Share Receipt</Text>
                     <Share size={18} color={isDark ? "#000" : "#FFF"} />
                 </Pressable>

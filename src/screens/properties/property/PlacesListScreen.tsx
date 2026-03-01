@@ -6,9 +6,11 @@ import { Plus, MapPin, Home, Building, Building2, ChevronRight, Store, Layers } 
 import { getPropertiesWithStats, Property } from '../../../db';
 import { getFullImageUri } from '../../../services/imageService';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PlacesListScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const insets = useSafeAreaInsets();
     const styles = getStyles(theme, isDark);
     const [properties, setProperties] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
@@ -109,7 +111,7 @@ export default function PlacesListScreen({ navigation }: any) {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Properties</Text>
             </View>
@@ -138,7 +140,7 @@ export default function PlacesListScreen({ navigation }: any) {
             >
                 <Plus size={32} color="#FFFFFF" />
             </Pressable>
-        </SafeAreaView>
+        </View>
     );
 }
 

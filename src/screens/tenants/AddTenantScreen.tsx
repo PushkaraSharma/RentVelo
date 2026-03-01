@@ -16,6 +16,7 @@ import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_
 import * as Contacts from 'expo-contacts';
 import { handleImageSelection } from '../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
+import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 
 export default function AddTenantScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -241,6 +242,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
             } else {
                 const id = await createTenant(tenantData);
                 setNewlyCreatedId(id);
+                trackEvent(AnalyticsEvents.TENANT_ADDED, { lease_type: leaseType });
                 setShowSuccessModal(true);
             }
         } catch (error) {

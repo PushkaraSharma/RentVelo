@@ -13,9 +13,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { storage } from '../../utils/storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getFullImageUri } from '../../services/imageService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setPortfolioStats } from '../../services/analyticsService';
 
 export default function DashboardScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
+    const insets = useSafeAreaInsets();
     const styles = getStyles(theme, isDark);
     const user = useSelector((state: RootState) => state.auth.user);
     const [data, setData] = useState<DashboardData | null>(null);
@@ -32,6 +35,12 @@ export default function DashboardScreen({ navigation }: any) {
             ]);
             setData(result);
             setUnreadCount(unreadCnt);
+
+            // Sync portfolio stats for analytics segmentation
+            setPortfolioStats({
+                propertyCount: result.propertyCount,
+                tenantCount: result.occupiedCount // Active tenants
+            });
         } catch (error) {
             console.error('Error loading dashboard data:', error);
         } finally {
@@ -55,7 +64,7 @@ export default function DashboardScreen({ navigation }: any) {
         ? Math.round((data.occupiedCount / data.totalRooms) * 100) : 0;
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 {/* Header */}
                 <View style={styles.header}>
@@ -151,7 +160,7 @@ export default function DashboardScreen({ navigation }: any) {
                     navigation.navigate('TakeRent', { propertyId, initialFilter: 'pending' });
                 }}
             />
-        </SafeAreaView>
+        </View>
     );
 }
 

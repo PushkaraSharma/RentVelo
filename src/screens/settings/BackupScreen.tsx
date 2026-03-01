@@ -14,6 +14,7 @@ import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive } from 
 import { storage } from '../../utils/storage';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
+import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 
 export default function BackupScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -54,6 +55,7 @@ export default function BackupScreen({ navigation }: any) {
         const result = await performLocalBackup();
         setBackingUp(false);
         if (result) {
+            trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
             updateLastSync();
             Alert.alert('Success', `Local backup saved to:\n${result}`);
         } else {
@@ -67,6 +69,7 @@ export default function BackupScreen({ navigation }: any) {
             return;
         }
         setIsAutoBackupEnabled(value);
+        trackEvent(AnalyticsEvents.AUTO_BACKUP_TOGGLED, { enabled: value });
         storage.set('@auto_backup_enabled', String(value));
     };
 
@@ -104,6 +107,7 @@ export default function BackupScreen({ navigation }: any) {
         const success = await backupToGoogleDrive();
         setBackingUp(false);
         if (success) {
+            trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
             updateLastSync();
             Alert.alert('Success', 'Backup uploaded to Google Drive.');
         } else {
@@ -131,6 +135,7 @@ export default function BackupScreen({ navigation }: any) {
         const success = await restoreFromGoogleDrive();
         setRestoring(false);
         if (success) {
+            trackEvent(AnalyticsEvents.BACKUP_RESTORED);
             Alert.alert('Success', 'Data restored successfully. Please restart the app for changes to take effect.');
         } else {
             Alert.alert('Restore Failed', 'Could not restore data from Google Drive.');

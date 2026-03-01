@@ -100,6 +100,7 @@ export interface DashboardData {
     occupiedCount: number;
     vacantCount: number;
     totalRooms: number;
+    propertyCount: number;
     pendingProperties: { id: number; name: string; pendingCount: number }[];
     trends: { month: number; year: number; label: string; expected: number; collected: number }[];
 }
@@ -165,6 +166,7 @@ export const getDashboardData = async (): Promise<DashboardData> => {
         expected, collected, pending,
         pendingTenantCount,
         occupiedCount, vacantCount, totalRooms,
+        propertyCount: allProps.length,
         pendingProperties,
         trends,
     };

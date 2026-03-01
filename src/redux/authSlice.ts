@@ -58,6 +58,9 @@ const authSlice = createSlice({
         login: (state, action: PayloadAction<{ name: string; email: string; photoUrl?: string }>) => {
             state.isAuthenticated = true;
             state.user = action.payload;
+            // Since login is now always via Google Sign-In, auto-link Google
+            state.isGoogleLinked = true;
+            state.googleEmail = action.payload.email;
             saveAuthState(state);
         },
         logout: (state) => {
@@ -74,16 +77,6 @@ const authSlice = createSlice({
         linkGoogleAccount: (state, action: PayloadAction<{ email: string, name?: string | null, photoUrl?: string | null }>) => {
             state.isGoogleLinked = true;
             state.googleEmail = action.payload.email;
-
-            // If the user currently just "Guest User", upgrade their profile with Google info
-            if (state.user?.name === 'Guest User' || !state.user) {
-                state.user = {
-                    name: action.payload.name || 'User',
-                    email: action.payload.email,
-                    photoUrl: action.payload.photoUrl || undefined
-                };
-            }
-
             saveAuthState(state);
         },
         unlinkGoogleAccount: (state) => {
