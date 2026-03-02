@@ -164,12 +164,14 @@ export default function SettingsScreen({ navigation }: any) {
                             color="#EC4899"
                             onPress={() => navigation.navigate('Backup')}
                         />
-                        <SettingItem
-                            icon={Database}
-                            label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
-                            color="#8B5CF6"
-                            onPress={handleSeedDatabase}
-                        />
+                        {__DEV__ && (
+                            <SettingItem
+                                icon={Database}
+                                label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
+                                color="#8B5CF6"
+                                onPress={handleSeedDatabase}
+                            />
+                        )}
                     </View>
                 </View>
 
