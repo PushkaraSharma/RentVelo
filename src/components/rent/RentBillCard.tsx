@@ -127,7 +127,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         if (!unit?.is_metered || !bill) return 0;
         const val = parseFloat(meterReading);
         if (isNaN(val)) return bill.electricity_amount ?? 0;
-        const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
+        const prev = (bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0);
         if (val < prev) return 0;
         let unitsUsed = Math.max(0, val - prev);
         const defaultUnits = unit.electricity_default_units;
@@ -141,7 +141,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         if (!unit?.water_rate || !bill) return 0;
         const val = parseFloat(waterReading);
         if (isNaN(val)) return bill.water_amount ?? 0;
-        const prev = bill.water_prev_reading ?? unit.initial_water_reading ?? 0;
+        const prev = (bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0);
         if (val < prev) return 0;
         let unitsUsed = Math.max(0, val - prev);
         const defaultUnits = unit.water_default_units;
@@ -155,12 +155,19 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const getBase64Image = async (uri: string) => {
         if (!uri) return '';
         if (uri.startsWith('data:') || uri.startsWith('http')) return uri;
+
         try {
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            const extension = uri.split('.').pop() || 'png';
+            // Ensure we are working with an absolute path by using imageService
+            const { getFullImageUri } = require('../../services/imageService');
+            // Sometimes stored URIs have a leading slash, trim it so getFullImageUri doesn't break
+            const cleanUri = uri.startsWith('/') ? uri.slice(1) : uri;
+            const fullUri = getFullImageUri(cleanUri) || cleanUri;
+
+            const base64 = await FileSystem.readAsStringAsync(fullUri, { encoding: 'base64' });
+            const extension = fullUri.split('.').pop() || 'png';
             return `data:image/${extension};base64,${base64}`;
         } catch (e) {
-            console.error('Error converting image to base64:', e);
+            console.error('Error converting image to base64 for', uri, ':', e);
             return uri;
         }
     };
@@ -182,6 +189,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 }
                 if (receiptConfig.payment_qr_uri) {
                     receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+                if (receiptConfig.signature_uri) {
+                    receiptConfig.signature_uri = await getBase64Image(receiptConfig.signature_uri);
                 }
             }
 
@@ -236,6 +246,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 }
                 if (receiptConfig.payment_qr_uri) {
                     receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+                if (receiptConfig.signature_uri) {
+                    receiptConfig.signature_uri = await getBase64Image(receiptConfig.signature_uri);
                 }
             }
 
@@ -566,7 +579,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         {isMetered ? (
                             <View style={styles.meterRow}>
                                 <Text style={styles.meterLabel}>
-                                    Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}
+                                    Old: {(bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0)}
                                 </Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
@@ -609,7 +622,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         {isWaterMetered ? (
                             <View style={styles.meterRow}>
                                 <Text style={styles.meterLabel}>
-                                    Old: {bill.water_prev_reading ?? unit.initial_water_reading ?? 0}
+                                    Old: {(bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0)}
                                 </Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput

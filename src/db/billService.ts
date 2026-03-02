@@ -273,7 +273,7 @@ export const generateBillsForProperty = async (
                 try {
                     const unitIds: number[] = JSON.parse(propExp.distributed_unit_ids);
                     if (unitIds.includes(unit.id)) {
-                        const splitAmount = Math.round((propExp.amount / unitIds.length) * 100) / 100;
+                        const splitAmount = Math.round(propExp.amount / unitIds.length);
                         await db.insert(billExpenses).values({
                             bill_id: newBillId,
                             label: `Property: ${propExp.expense_type}`,
@@ -360,6 +360,19 @@ export const getBillsForPropertyMonth = async (
     const unitIds = propertyUnits.map(u => u.id);
 
     if (unitIds.length === 0) return [];
+
+    // P1: Hoist property expenses query — same for all units
+    const hoistedPropExpenses = await db.select().from(propertyExpenses)
+        .where(
+            and(
+                eq(propertyExpenses.property_id, propertyId),
+                eq(propertyExpenses.distribute_type, 'rooms'),
+                or(
+                    and(eq(propertyExpenses.month, month), eq(propertyExpenses.year, year)),
+                    eq(propertyExpenses.frequency, 'monthly')
+                )
+            )
+        );
 
     // Fetch property config once for all units
     const propResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
@@ -457,7 +470,11 @@ export const getBillsForPropertyMonth = async (
             // Trigger penalty calculation lazily
             // Pass prefetched data to avoid redundant queries
             await applyPenaltiesLazily(bill.id, { property, tenant, unit });
-            // Re-fetch the bill in case properties changed
+            // E1: Only sync expenses on non-paid bills to avoid disturbing settled bills
+            if (bill.status !== 'paid' && bill.status !== 'overpaid') {
+                await syncPropertyExpensesLazily(bill.id, unit.id, month, year, hoistedPropExpenses);
+            }
+            // Re-fetch the bill in case syncs changed it
             const updatedBills = await db.select().from(rentBills).where(eq(rentBills.id, bill.id)).limit(1);
             if (updatedBills.length > 0) {
                 bill = updatedBills[0];
@@ -631,47 +648,36 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     let needsUpdate = false;
 
     if (unit) {
-        // Sync electricity if first bill and no reading entered
-        if (bill.curr_reading === null || bill.curr_reading === undefined) {
-            // Find if there's a previous bill to determine if this is "start of chain"
-            const prevBill = await db.select().from(rentBills).where(
-                and(
-                    eq(rentBills.unit_id, bill.unit_id),
-                    sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
-                )
-            ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
+        // P2: Single prev-bill query for both electricity and water sync
+        const prevBillArr = await db.select().from(rentBills).where(
+            and(
+                eq(rentBills.unit_id, bill.unit_id),
+                sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
+            )
+        ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
 
-            if (prevBill.length === 0) {
-                // No previous bill, sync with initial_electricity_reading
-                if (prevReading !== unit.initial_electricity_reading) {
-                    prevReading = unit.initial_electricity_reading;
-                    needsUpdate = true;
-                }
-            } else if (prevBill[0].curr_reading !== null && prevBill[0].curr_reading !== prevReading) {
-                // Sync with previous bill's current reading
-                prevReading = prevBill[0].curr_reading;
+        const prevBill = prevBillArr[0] || null;
+
+        // Sync electricity
+        if (!prevBill) {
+            if (prevReading !== unit.initial_electricity_reading) {
+                prevReading = unit.initial_electricity_reading;
                 needsUpdate = true;
             }
+        } else if (prevBill.curr_reading !== null && prevBill.curr_reading !== prevReading) {
+            prevReading = prevBill.curr_reading;
+            needsUpdate = true;
         }
 
-        // Sync water if first bill and no reading entered
-        if (bill.water_curr_reading === null || bill.water_curr_reading === undefined) {
-            const prevBill = await db.select().from(rentBills).where(
-                and(
-                    eq(rentBills.unit_id, bill.unit_id),
-                    sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
-                )
-            ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
-
-            if (prevBill.length === 0) {
-                if (waterPrevReading !== unit.initial_water_reading) {
-                    waterPrevReading = unit.initial_water_reading;
-                    needsUpdate = true;
-                }
-            } else if (prevBill[0].water_curr_reading !== null && prevBill[0].water_curr_reading !== waterPrevReading) {
-                waterPrevReading = prevBill[0].water_curr_reading;
+        // Sync water (reuse same prevBill)
+        if (!prevBill) {
+            if (waterPrevReading !== unit.initial_water_reading) {
+                waterPrevReading = unit.initial_water_reading;
                 needsUpdate = true;
             }
+        } else if (prevBill.water_curr_reading !== null && prevBill.water_curr_reading !== waterPrevReading) {
+            waterPrevReading = prevBill.water_curr_reading;
+            needsUpdate = true;
         }
 
         // Calculate utility amounts (Electricity) if metered
@@ -912,5 +918,103 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
 
         // Trigger full recalculation (this will also handle metered rate changes)
         await recalculateBill(bill.id);
+    }
+};
+
+/**
+ * Lazy-sync property expenses into an existing bill.
+ * Runs at read time (inside getBillsForPropertyMonth) to ensure bills always
+ * reflect the current state of property expenses — even if expenses were
+ * added/deleted/changed after the bill was originally generated.
+ *
+ * Accepts prefetched property expenses to avoid redundant DB queries (P1).
+ * This is the same self-healing pattern used by applyPenaltiesLazily.
+ */
+const syncPropertyExpensesLazily = async (
+    billId: number,
+    unitId: number,
+    month: number,
+    year: number,
+    prefetchedPropExpenses: any[]
+): Promise<void> => {
+    const db = getDb();
+
+    // E3: End of bill month for created_at guard on monthly expenses
+    const billMonthEnd = new Date(year, month, 0, 23, 59, 59); // last day of bill month
+
+    // Build expected expense map: label -> { amount, isRecurring } for this specific unit
+    const expectedExpenses = new Map<string, { amount: number; isRecurring: boolean }>();
+    for (const propExp of prefetchedPropExpenses) {
+        if (!propExp.distributed_unit_ids) continue;
+
+        // E3: Skip monthly expenses created after this bill month
+        if (propExp.frequency === 'monthly' && propExp.created_at) {
+            const createdAt = propExp.created_at instanceof Date ? propExp.created_at : new Date(propExp.created_at);
+            if (createdAt > billMonthEnd) continue;
+        }
+
+        try {
+            const unitIds: number[] = JSON.parse(propExp.distributed_unit_ids);
+            if (unitIds.includes(unitId)) {
+                const splitAmount = Math.round(propExp.amount / unitIds.length);
+                const label = `Property: ${propExp.expense_type}`;
+                // E2: Preserve is_recurring based on source frequency
+                const isRecurring = propExp.frequency === 'monthly';
+                const existing = expectedExpenses.get(label);
+                expectedExpenses.set(label, {
+                    amount: (existing?.amount || 0) + splitAmount,
+                    isRecurring: existing?.isRecurring || isRecurring,
+                });
+            }
+        } catch (e) {
+            // Invalid JSON, skip
+        }
+    }
+
+    // 2. Get current bill expenses with "Property: " prefix
+    const currentBillExpenses = await db.select().from(billExpenses)
+        .where(eq(billExpenses.bill_id, billId));
+
+    const propertyLabeledExpenses = currentBillExpenses.filter(
+        e => e.label.startsWith('Property: ')
+    );
+
+    let changed = false;
+
+    // 3. Remove stale ones (exist in bill but NOT in expected)
+    for (const existing of propertyLabeledExpenses) {
+        if (!expectedExpenses.has(existing.label)) {
+            await db.delete(billExpenses).where(eq(billExpenses.id, existing.id));
+            changed = true;
+        }
+    }
+
+    // 4. Add missing or update changed amounts
+    const entries = Array.from(expectedExpenses.entries());
+    for (let i = 0; i < entries.length; i++) {
+        const label = entries[i][0];
+        const expected = entries[i][1];
+        const existing = propertyLabeledExpenses.find(e => e.label === label);
+        if (!existing) {
+            // Missing — add it
+            await db.insert(billExpenses).values({
+                bill_id: billId,
+                label,
+                amount: expected.amount,
+                is_recurring: expected.isRecurring, // E2: correct flag
+            });
+            changed = true;
+        } else if (existing.amount !== expected.amount || existing.is_recurring !== expected.isRecurring) {
+            // Amount or recurring flag changed — update it
+            await db.update(billExpenses)
+                .set({ amount: expected.amount, is_recurring: expected.isRecurring })
+                .where(eq(billExpenses.id, existing.id));
+            changed = true;
+        }
+    }
+
+    // 5. Recalculate only if something changed
+    if (changed) {
+        await recalculateBill(billId, true); // skip penalty check to avoid double work
     }
 };

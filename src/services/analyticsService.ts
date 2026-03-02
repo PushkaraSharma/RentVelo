@@ -1,4 +1,4 @@
-import { getAnalytics, logEvent, logScreenView, setUserProperty, setUserId } from '@react-native-firebase/analytics';
+import { getAnalytics, logEvent, setUserProperty, setUserId } from '@react-native-firebase/analytics';
 
 const analytics = getAnalytics();
 
@@ -71,7 +71,7 @@ export const trackEvent = async (
  */
 export const trackScreenView = async (screenName: string) => {
     try {
-        await logScreenView(analytics, {
+        await logEvent(analytics, 'screen_view', {
             screen_name: screenName,
             screen_class: screenName,
         });

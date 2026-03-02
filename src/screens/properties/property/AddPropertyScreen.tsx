@@ -56,13 +56,13 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     // Single Unit Form State
     const [rentAmount, setRentAmount] = useState('');
     const [rentCycle, setRentCycle] = useState<'first_of_month' | 'relative'>('first_of_month');
-    const [electricityEnabled, setElectricityEnabled] = useState(true);
-    const [electricityType, setElectricityType] = useState('Metered');
+    const [electricityEnabled, setElectricityEnabled] = useState(false);
+    const [electricityType, setElectricityType] = useState('Free');
     const [electricityValue, setElectricityValue] = useState('');
     const [initialElectricityReading, setInitialElectricityReading] = useState('');
     const [electricityDefaultUnits, setElectricityDefaultUnits] = useState('');
     const [waterEnabled, setWaterEnabled] = useState(false);
-    const [waterType, setWaterType] = useState('Fixed');
+    const [waterType, setWaterType] = useState('Free');
     const [waterValue, setWaterValue] = useState('');
     const [initialWaterReading, setInitialWaterReading] = useState('');
     const [defaultUnitId, setDefaultUnitId] = useState<number | null>(null);
@@ -201,6 +201,44 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             }
         }
 
+        if (!isMultiUnit) {
+            if (electricityEnabled) {
+                if (electricityType === 'Metered') {
+                    if (!electricityValue || parseFloat(electricityValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Electricity Rate per Unit' });
+                        return;
+                    }
+                    if (!initialElectricityReading || isNaN(parseFloat(initialElectricityReading))) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Initial Electricity Meter Reading' });
+                        return;
+                    }
+                } else if (electricityType === 'Fixed') {
+                    if (!electricityValue || parseFloat(electricityValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Fixed Electricity Amount' });
+                        return;
+                    }
+                }
+            }
+
+            if (waterEnabled) {
+                if (waterType === 'Metered') {
+                    if (!waterValue || parseFloat(waterValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Water Rate per Unit' });
+                        return;
+                    }
+                    if (!initialWaterReading || isNaN(parseFloat(initialWaterReading))) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Initial Water Meter Reading' });
+                        return;
+                    }
+                } else if (waterType === 'Fixed') {
+                    if (!waterValue || parseFloat(waterValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Fixed Water Amount' });
+                        return;
+                    }
+                }
+            }
+        }
+
         setLoading(true);
         try {
             let finalImageUri = image;
@@ -312,19 +350,14 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     name: name,
                     rent_amount: 0,
                     rent_cycle: 'first_of_month',
-                    is_metered: true,
-                    electricity_rate: 0,
-                    water_fixed_amount: 0,
                     floor: floors > 1 ? `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor` : undefined,
                 });
 
                 // Small delay to let the UI breathe and show progress
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
-
-
             showToast({ type: 'success', title: 'Success', message: `Successfully created ${count} rooms!` });
-            navigation.goBack();
+            navigation.replace('RoomsList', { propertyId: createdPropertyId });
         } catch (error) {
             console.error('Bulk creation failed:', error);
             showToast({ type: 'error', title: 'Error', message: 'Failed to create all rooms. Some rooms may have been created.' });

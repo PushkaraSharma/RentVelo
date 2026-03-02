@@ -1,17 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, Pressable, Image,
-    TextInput, FlatList, Dimensions
+    TextInput, Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../../components/common/Header';
-import Button from '../../../components/common/Button';
-import Input from '../../../components/common/Input';
-import Toggle from '../../../components/common/Toggle';
 import RentModalSheet from '../../../components/rent/RentModalSheet';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
+import MonthPickerModal from '../../../components/rent/MonthPickerModal';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import {
@@ -21,7 +19,7 @@ import {
 import { CURRENCY } from '../../../utils/Constants';
 import { useToast } from '../../../hooks/useToast';
 import {
-    Plus, Trash2, ChevronDown, Camera, CreditCard, CalendarDays, Tag
+    Plus, Trash2, ChevronDown, Camera, CreditCard, CalendarDays, Tag, ChevronLeft, ChevronRight
 } from 'lucide-react-native';
 import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
@@ -50,6 +48,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
     const [expenses, setExpenses] = useState<any[]>([]);
     const [property, setProperty] = useState<any>(null);
     const [units, setUnits] = useState<any[]>([]);
+    const [occupiedUnits, setOccupiedUnits] = useState<any[]>([]);
 
     // Add Expense Modal
     const [showAddModal, setShowAddModal] = useState(false);
@@ -61,6 +60,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
     const [distributeType, setDistributeType] = useState<'owner' | 'rooms'>('owner');
     const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [showImagePicker, setShowImagePicker] = useState(false);
     const [addLoading, setAddLoading] = useState(false);
 
@@ -82,6 +82,14 @@ export default function ExpensesScreen({ navigation, route }: any) {
 
             const unitsData = await getUnitsByPropertyId(propertyId);
             setUnits(unitsData || []);
+
+            // Filter to only occupied units (units with an active tenant)
+            const { getTenantsByPropertyId } = await import('../../../db');
+            const allTenants = await getTenantsByPropertyId(propertyId);
+            const activeTenantUnitIds = new Set(
+                allTenants.filter(t => t.status === 'active' && t.unit_id).map(t => t.unit_id)
+            );
+            setOccupiedUnits((unitsData || []).filter(u => activeTenantUnitIds.has(u.id)));
 
             // Load expenses (might fail if migration didn't run)
             try {
@@ -200,22 +208,36 @@ export default function ExpensesScreen({ navigation, route }: any) {
     const ownerExpenses = expenses.filter(e => e.distribute_type === 'owner').reduce((s, e) => s + e.amount, 0);
     const distributedExpenses = expenses.filter(e => e.distribute_type === 'rooms').reduce((s, e) => s + e.amount, 0);
 
+    const goMonth = (dir: number) => {
+        hapticsMedium();
+        let newMonth = month + dir;
+        let newYear = year;
+        if (newMonth < 1) { newMonth = 12; newYear--; }
+        if (newMonth > 12) { newMonth = 1; newYear++; }
+        setMonth(newMonth);
+        setYear(newYear);
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <Header
-                title="Expenses"
-                rightAction={
-                    <Pressable onPress={() => setShowAddModal(true)} style={styles.addBtn}>
-                        <Plus size={22} color={theme.colors.accent} />
-                    </Pressable>
+                centerAction={
+                    <View style={styles.monthSelector}>
+                        <Pressable onPress={() => goMonth(-1)} style={styles.monthArrow}>
+                            <ChevronLeft size={20} color={theme.colors.accent} />
+                        </Pressable>
+                        <Pressable onPress={() => setShowMonthPicker(true)} style={styles.monthLabel}>
+                            <Text style={styles.monthText}>{MONTH_NAMES[month - 1]}</Text>
+                            <Text style={styles.yearLabel}>{year}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => goMonth(1)} style={styles.monthArrow}>
+                            <ChevronRight size={20} color={theme.colors.accent} />
+                        </Pressable>
+                    </View>
                 }
             />
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Month/Year Label */}
-                <Text style={styles.monthLabel}>
-                    {MONTH_NAMES[month - 1]} {year}
-                </Text>
 
                 {/* Summary Cards */}
                 <View style={styles.summaryRow}>
@@ -285,7 +307,19 @@ export default function ExpensesScreen({ navigation, route }: any) {
                                         ) : null}
                                     </View>
                                 </View>
-                                <Text style={styles.expenseAmount}>{CURRENCY}{expense.amount.toLocaleString()}</Text>
+                                <View style={{ alignItems: 'flex-end', gap: 12, flexDirection: 'row' }}>
+                                    <Text style={styles.expenseAmount}>{CURRENCY}{expense.amount.toLocaleString()}</Text>
+                                    <Pressable
+                                        onPress={() => {
+                                            hapticsSelection();
+                                            setDeleteTarget(expense.id);
+                                            setShowDeleteModal(true);
+                                        }}
+                                        hitSlop={10}
+                                    >
+                                        <Trash2 size={20} color={theme.colors.danger} />
+                                    </Pressable>
+                                </View>
                             </Pressable>
                         );
                     })
@@ -413,7 +447,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
                     <View style={styles.inputGroup}>
                         <Text style={styles.inputLabel}>Select Rooms</Text>
                         <View style={styles.roomGrid}>
-                            {units.map((unit) => {
+                            {occupiedUnits.map((unit) => {
                                 const isSelected = selectedUnitIds.includes(unit.id);
                                 return (
                                     <Pressable
@@ -428,20 +462,20 @@ export default function ExpensesScreen({ navigation, route }: any) {
                                 );
                             })}
                         </View>
-                        {units.length > 1 && (
+                        {occupiedUnits.length > 1 && (
                             <Pressable
                                 style={styles.selectAllBtn}
                                 onPress={() => {
                                     hapticsSelection();
-                                    if (selectedUnitIds.length === units.length) {
+                                    if (selectedUnitIds.length === occupiedUnits.length) {
                                         setSelectedUnitIds([]);
                                     } else {
-                                        setSelectedUnitIds(units.map(u => u.id));
+                                        setSelectedUnitIds(occupiedUnits.map(u => u.id));
                                     }
                                 }}
                             >
                                 <Text style={styles.selectAllText}>
-                                    {selectedUnitIds.length === units.length ? 'Deselect All' : 'Select All'}
+                                    {selectedUnitIds.length === occupiedUnits.length ? 'Deselect All' : 'Select All'}
                                 </Text>
                             </Pressable>
                         )}
@@ -454,9 +488,30 @@ export default function ExpensesScreen({ navigation, route }: any) {
                     title="Select Category"
                     options={EXPENSE_CATEGORIES}
                     selectedValue={expenseType}
-                    onSelect={(cat) => setExpenseType(cat)}
+                    onSelect={(cat: string) => setExpenseType(cat)}
                 />
             </RentModalSheet>
+
+            {/* FAB */}
+            <Pressable
+                style={styles.fab}
+                onPress={() => setShowAddModal(true)}
+            >
+                <Plus color="#FFF" size={24} />
+            </Pressable>
+
+            {/* Month Picker Overlay */}
+            <MonthPickerModal
+                visible={showMonthPicker}
+                month={month}
+                year={year}
+                onSelect={(m, y) => {
+                    setMonth(m);
+                    setYear(y);
+                    setShowMonthPicker(false);
+                }}
+                onClose={() => setShowMonthPicker(false)}
+            />
 
             {/* Image Picker Modal */}
             <ImagePickerModal
@@ -485,16 +540,50 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     content: {
         padding: theme.spacing.m,
-        paddingBottom: 40,
+        paddingBottom: 100,
     },
-    addBtn: {
-        padding: theme.spacing.s,
+    fab: {
+        position: 'absolute',
+        bottom: 24,
+        right: 24,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: theme.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        ...theme.shadows.medium,
+        zIndex: 10,
+    },
+    // Month Selector (inside header)
+    monthSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.m,
+    },
+    monthArrow: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        borderWidth: 2,
+        borderColor: theme.colors.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     monthLabel: {
-        fontSize: theme.typography.l,
+        alignItems: 'center',
+        minWidth: 100,
+    },
+    monthText: {
+        fontSize: 18,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-        marginBottom: theme.spacing.m,
+    },
+    yearLabel: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        fontWeight: theme.typography.medium,
     },
     summaryRow: {
         flexDirection: 'row',

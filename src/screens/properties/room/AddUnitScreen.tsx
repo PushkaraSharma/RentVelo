@@ -37,7 +37,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [rentCycle, setRentCycle] = useState<'first_of_month' | 'relative'>('first_of_month');
 
     // Utilities - Electricity
-    const [electricityEnabled, setElectricityEnabled] = useState(true);
+    const [electricityEnabled, setElectricityEnabled] = useState(false);
     const [electricityType, setElectricityType] = useState('Metered');
     const [electricityValue, setElectricityValue] = useState(''); // Rate or Fixed Amount
     const [initialElectricityReading, setInitialElectricityReading] = useState('');
@@ -176,6 +176,42 @@ export default function AddUnitScreen({ navigation, route }: any) {
         if (!rentAmount || parseFloat(rentAmount) <= 0) {
             showToast({ type: 'error', title: 'Error', message: 'Please enter valid rent amount' });
             return;
+        }
+
+        if (electricityEnabled) {
+            if (electricityType === 'Metered') {
+                if (!electricityValue || parseFloat(electricityValue) <= 0) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Electricity Rate per Unit' });
+                    return;
+                }
+                if (!initialElectricityReading || isNaN(parseFloat(initialElectricityReading))) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Initial Electricity Meter Reading' });
+                    return;
+                }
+            } else if (electricityType === 'Fixed') {
+                if (!electricityValue || parseFloat(electricityValue) <= 0) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Fixed Electricity Amount' });
+                    return;
+                }
+            }
+        }
+
+        if (waterEnabled) {
+            if (waterType === 'Metered') {
+                if (!waterValue || parseFloat(waterValue) <= 0) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Water Rate per Unit' });
+                    return;
+                }
+                if (!initialWaterReading || isNaN(parseFloat(initialWaterReading))) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Initial Water Meter Reading' });
+                    return;
+                }
+            } else if (waterType === 'Fixed') {
+                if (!waterValue || parseFloat(waterValue) <= 0) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Fixed Water Amount' });
+                    return;
+                }
+            }
         }
 
         setLoading(true);

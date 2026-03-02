@@ -1,7 +1,6 @@
 import { getDb } from './database';
 import { propertyExpenses, type PropertyExpense, type NewPropertyExpense } from './schema';
-import { eq, and, desc } from 'drizzle-orm';
-
+import { eq, and, desc, or, lt } from 'drizzle-orm';
 // Re-export types
 export { PropertyExpense };
 
@@ -30,8 +29,24 @@ export const getExpensesByPropertyMonth = async (
         .where(
             and(
                 eq(propertyExpenses.property_id, propertyId),
-                eq(propertyExpenses.month, month),
-                eq(propertyExpenses.year, year)
+                or(
+                    // Exact match for this month/year
+                    and(
+                        eq(propertyExpenses.month, month),
+                        eq(propertyExpenses.year, year)
+                    ),
+                    // Or it's a recurring monthly expense created in a past month
+                    and(
+                        eq(propertyExpenses.frequency, 'monthly'),
+                        or(
+                            lt(propertyExpenses.year, year),
+                            and(
+                                eq(propertyExpenses.year, year),
+                                lt(propertyExpenses.month, month)
+                            )
+                        )
+                    )
+                )
             )
         )
         .orderBy(desc(propertyExpenses.created_at));
@@ -52,8 +67,22 @@ export const getExpenseSummary = async (
         .where(
             and(
                 eq(propertyExpenses.property_id, propertyId),
-                eq(propertyExpenses.month, month),
-                eq(propertyExpenses.year, year)
+                or(
+                    and(
+                        eq(propertyExpenses.month, month),
+                        eq(propertyExpenses.year, year)
+                    ),
+                    and(
+                        eq(propertyExpenses.frequency, 'monthly'),
+                        or(
+                            lt(propertyExpenses.year, year),
+                            and(
+                                eq(propertyExpenses.year, year),
+                                lt(propertyExpenses.month, month)
+                            )
+                        )
+                    )
+                )
             )
         );
 
