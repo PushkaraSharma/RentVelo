@@ -8,6 +8,14 @@ export { Property, Unit };
 // Create Property
 export const createProperty = async (property: NewProperty): Promise<number> => {
     const db = getDb();
+
+    if (property.name) {
+        const existingProperties = await db.select().from(properties).where(eq(properties.name, property.name));
+        if (existingProperties.length > 0) {
+            throw new Error('A property with this name already exists.');
+        }
+    }
+
     const result = await db.insert(properties).values(property).returning({ id: properties.id });
     return result[0].id;
 };
@@ -66,6 +74,14 @@ export const getPropertyById = async (id: number): Promise<Property | null> => {
 // Update Property
 export const updateProperty = async (id: number, property: Partial<NewProperty>): Promise<void> => {
     const db = getDb();
+
+    if (property.name) {
+        const existingProperties = await db.select().from(properties).where(eq(properties.name, property.name));
+        if (existingProperties.length > 0 && existingProperties[0].id !== id) {
+            throw new Error('A property with this name already exists.');
+        }
+    }
+
     await db.update(properties)
         .set({ ...property, updated_at: new Date() })
         .where(eq(properties.id, id));
@@ -82,6 +98,14 @@ export const deleteProperty = async (id: number): Promise<void> => {
 // Create Unit
 export const createUnit = async (unit: NewUnit): Promise<number> => {
     const db = getDb();
+
+    if (unit.name && unit.property_id) {
+        const existingUnits = await db.select().from(units).where(and(eq(units.name, unit.name), eq(units.property_id, unit.property_id)));
+        if (existingUnits.length > 0) {
+            throw new Error('A room with this name already exists in this property.');
+        }
+    }
+
     const result = await db.insert(units).values(unit).returning({ id: units.id });
     return result[0].id;
 };
@@ -122,6 +146,18 @@ export const getUnitById = async (id: number): Promise<Unit | null> => {
 // Update Unit
 export const updateUnit = async (id: number, unit: Partial<NewUnit>): Promise<void> => {
     const db = getDb();
+
+    if (unit.name) {
+        const currentUnit = await getUnitById(id);
+        if (currentUnit) {
+            const propertyId = unit.property_id || currentUnit.property_id;
+            const existingUnits = await db.select().from(units).where(and(eq(units.name, unit.name), eq(units.property_id, propertyId)));
+            if (existingUnits.length > 0 && existingUnits[0].id !== id) {
+                throw new Error('A room with this name already exists in this property.');
+            }
+        }
+    }
+
     await db.update(units)
         .set({ ...unit, updated_at: new Date() })
         .where(eq(units.id, id));

@@ -86,7 +86,7 @@ export default function SettingsScreen({ navigation }: any) {
         try {
             await Share.share({
                 message: 'Manage your properties easily with RentVelo! Download now to automate your rent collections.',
-                url: 'https://rentvelo.com',
+                url: 'https://rentvelo.indieroots.in/',
                 title: 'Share RentVelo'
             });
         } catch (error) {

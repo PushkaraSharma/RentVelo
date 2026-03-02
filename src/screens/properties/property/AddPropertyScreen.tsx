@@ -314,12 +314,12 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 trackEvent(AnalyticsEvents.PROPERTY_ADDED, { type: propertyType, is_multi_unit: isMultiUnit.toString() });
                 setShowSuccessModal(true);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving property:', error);
             showToast({
                 type: 'error',
                 title: 'Error',
-                message: `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`
+                message: error?.message || `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`
             });
         } finally {
             setLoading(false);

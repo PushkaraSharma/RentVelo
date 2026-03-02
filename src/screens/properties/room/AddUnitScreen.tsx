@@ -260,12 +260,12 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 setCreatedUnitId(newId);
                 setShowSuccessModal(true);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving room:', error);
             showToast({
                 type: 'error',
                 title: 'Error',
-                message: `Failed to ${isEditMode ? 'update' : 'create'} room. Please try again.`
+                message: error?.message || `Failed to ${isEditMode ? 'update' : 'create'} room. Please try again.`
             });
         } finally {
             setLoading(false);
