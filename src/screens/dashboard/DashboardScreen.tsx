@@ -11,6 +11,8 @@ import { RootState } from '../../redux/store';
 import { getDashboardData, DashboardData, getUnreadNotificationCount } from '../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import { storage } from '../../utils/storage';
+import { OTA_VERSION, CHANGELOG } from '../../utils/Constants';
+import WhatsNewModal from '../../components/modals/WhatsNewModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getFullImageUri } from '../../services/imageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +28,7 @@ export default function DashboardScreen({ navigation }: any) {
     const [showPropertyPicker, setShowPropertyPicker] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+    const [showWhatsNew, setShowWhatsNew] = useState(false);
 
     const loadDashboardData = async () => {
         try {
@@ -57,8 +60,19 @@ export default function DashboardScreen({ navigation }: any) {
             } catch (e) {
                 console.error('Failed to load privacy mode setting:', e);
             }
+
+            // Show What's New if OTA version changed
+            const stored = storage.getString('@ota_version');
+            if (stored !== OTA_VERSION.toString()) {
+                setShowWhatsNew(true);
+            }
         }, [])
     );
+
+    const handleCloseWhatsNew = () => {
+        storage.set('@ota_version', OTA_VERSION.toString());
+        setShowWhatsNew(false);
+    };
 
     const occupancyPercent = data && data.totalRooms > 0
         ? Math.round((data.occupiedCount / data.totalRooms) * 100) : 0;
@@ -159,6 +173,13 @@ export default function DashboardScreen({ navigation }: any) {
                 onSelect={(propertyId) => {
                     navigation.navigate('TakeRent', { propertyId, initialFilter: 'pending' });
                 }}
+            />
+
+            <WhatsNewModal
+                visible={showWhatsNew}
+                onClose={handleCloseWhatsNew}
+                version={CHANGELOG.version}
+                features={CHANGELOG.features}
             />
         </View>
     );

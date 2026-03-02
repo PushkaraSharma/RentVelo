@@ -14,7 +14,7 @@ import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
-import { handleImageSelection } from '../../utils/ImagePickerUtil';
+import { launchLibrary } from '../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
@@ -142,12 +142,17 @@ export default function AddTenantScreen({ navigation, route }: any) {
         }
     };
 
-    const pickPhoto = () => {
-        handleImageSelection((uri) => setPhotoUri(uri), {
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
+    const pickPhoto = async () => {
+        try {
+            const uri = await launchLibrary({
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+            if (uri) setPhotoUri(uri);
+        } catch (error) {
+            console.error('Error picking photo:', error);
+        }
     };
 
     const importFromContacts = async () => {
@@ -180,12 +185,17 @@ export default function AddTenantScreen({ navigation, route }: any) {
         if (contact.email) setEmail(contact.email);
     };
 
-    const pickDocument = (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
-        handleImageSelection((uri) => {
-            if (type === 'aadhaar_front') setAadhaarFrontUri(uri);
-            else if (type === 'aadhaar_back') setAadhaarBackUri(uri);
-            else setPanUri(uri);
-        }, { quality: 0.8, allowsEditing: false });
+    const pickDocument = async (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
+        try {
+            const uri = await launchLibrary({ quality: 0.8, allowsEditing: false });
+            if (uri) {
+                if (type === 'aadhaar_front') setAadhaarFrontUri(uri);
+                else if (type === 'aadhaar_back') setAadhaarBackUri(uri);
+                else setPanUri(uri);
+            }
+        } catch (error) {
+            console.error('Error picking document:', error);
+        }
     };
 
     const handleSubmit = async () => {

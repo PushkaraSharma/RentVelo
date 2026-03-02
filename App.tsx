@@ -24,6 +24,7 @@ export default function App() {
   const { success, error } = useMigrations(db, migrations);
   const [isUpdating, setIsUpdating] = React.useState(false);
 
+
   React.useEffect(() => {
     async function initBackgroundSchedules() {
       // Run eagerly on boot to keep OS triggers in sync with DB state
@@ -68,7 +69,6 @@ export default function App() {
 
   React.useEffect(() => {
     if (success) {
-      // Run once on initial db success to fix any legacy temporary image URIs
       migrateOldImagesToPermanentStorage();
     }
   }, [success]);

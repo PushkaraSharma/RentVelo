@@ -5,7 +5,7 @@ import { CURRENCY } from '../../utils/Constants';
 import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide-react-native';
 import { addPaymentToBill } from '../../db/billService';
 import { syncNotificationSchedules } from '../../services/pushNotificationService';
-import { handleImageSelection } from '../../utils/ImagePickerUtil';
+import { launchLibrary } from '../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage } from '../../services/imageService';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
@@ -83,11 +83,18 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
         }
     };
 
-    const pickPhoto = () => {
-        handleImageSelection((uri) => setPhotoUri(uri), {
-            allowsEditing: true,
-            quality: 0.8,
-        });
+    const pickPhoto = async () => {
+        try {
+            const uri = await launchLibrary({
+                allowsEditing: true,
+                quality: 0.8,
+            });
+            if (uri) {
+                setPhotoUri(uri);
+            }
+        } catch (error) {
+            console.error('Error picking photo:', error);
+        }
     };
 
     const formatDate = (d: Date) => {

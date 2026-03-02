@@ -83,6 +83,7 @@ export {
     getUnreadNotificationCount,
     markNotificationAsRead,
     markAllNotificationsAsRead,
+    clearAllNotifications,
     generateRentReminders
 } from './notificationService';
 export type { Notification } from './notificationService';

@@ -31,7 +31,7 @@ import {
 import Header from '../../../components/common/Header';
 import { getReceiptConfigByPropertyId, upsertReceiptConfig } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
-import { handleImageSelection } from '../../../utils/ImagePickerUtil';
+import { launchLibrary } from '../../../utils/ImagePickerUtil';
 import SignatureModal from '../../../components/common/SignatureModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { useToast } from '../../../hooks/useToast';
@@ -108,11 +108,16 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
         }
     };
 
-    const pickImage = (setter: (uri: string) => void) => {
-        handleImageSelection((uri) => setter(uri), {
-            allowsEditing: true,
-            quality: 0.8,
-        });
+    const pickImage = async (setter: (uri: string) => void) => {
+        try {
+            const uri = await launchLibrary({
+                allowsEditing: true,
+                quality: 0.8,
+            });
+            if (uri) setter(uri);
+        } catch (error) {
+            console.error('Error picking image:', error);
+        }
     };
 
     const handleSignatureSave = (filepath: string) => {
