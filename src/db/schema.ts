@@ -50,6 +50,8 @@ export const units = sqliteTable('units', {
     size: real('size'), // Sq. Ft.
     custom_amenities: text('custom_amenities'), // JSON string
     images: text('images'), // JSON string of URIs
+    room_group: text('room_group'), // PG only: groups beds into a physical room (e.g. "Room A")
+    bed_number: text('bed_number'), // PG only: bed identifier within room (e.g. "Bed 1")
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -222,6 +224,8 @@ export const billExpenses = sqliteTable('bill_expenses', {
     bill_id: integer('bill_id')
         .notNull()
         .references(() => rentBills.id, { onDelete: 'cascade' }),
+    property_expense_id: integer('property_expense_id')
+        .references(() => propertyExpenses.id, { onDelete: 'set null' }),
     label: text('label').notNull(),
     amount: real('amount').notNull(),
     is_recurring: integer('is_recurring', { mode: 'boolean' }).default(false),

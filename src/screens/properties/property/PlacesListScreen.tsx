@@ -98,7 +98,7 @@ export default function PlacesListScreen({ navigation }: any) {
                     <View style={[styles.statsRowCard, { backgroundColor: statusBg }]}>
                         <Text style={[styles.unitsText, { color: statusColor }]}>
                             {item.is_multi_unit
-                                ? `${item.occupiedCount}/${item.totalRooms} Rooms Occupied`
+                                ? `${item.occupiedCount}/${item.totalRooms} ${item.type === 'pg' ? 'Beds' : 'Rooms'} Occupied`
                                 : (item.occupiedCount > 0 ? 'Occupied' : 'Vacant')}
                         </Text>
                     </View>

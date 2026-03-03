@@ -9,6 +9,34 @@ import { differenceInDays, isAfter, startOfDay } from 'date-fns';
 // Re-export types
 export { RentBill, BillExpense };
 
+/**
+ * Helper: count occupied beds in a PG room_group for a given month.
+ * "Occupied" = has a bill for that month (which means had an active tenant).
+ */
+const getOccupiedBedCountForRoom = async (
+    propertyId: number,
+    roomGroup: string,
+    month: number,
+    year: number
+): Promise<number> => {
+    const db = getDb();
+    // Get all bed unit IDs in this room group
+    const bedsInRoom = await db.select({ id: units.id }).from(units).where(
+        and(eq(units.property_id, propertyId), eq(units.room_group, roomGroup))
+    );
+    if (bedsInRoom.length === 0) return 1;
+
+    const bedIds = bedsInRoom.map(b => b.id);
+    const bills = await db.select({ id: rentBills.id }).from(rentBills).where(
+        and(
+            inArray(rentBills.unit_id, bedIds),
+            eq(rentBills.month, month),
+            eq(rentBills.year, year)
+        )
+    );
+    return Math.max(1, bills.length);
+};
+
 // ===== BILL GENERATION =====
 
 /**
@@ -172,16 +200,25 @@ export const generateBillsForProperty = async (
             waterPrevReading = prevBill[0].water_curr_reading;
         }
 
-        // Get electricity amount (for fixed cost units)
+        // Get utilities (PG-aware fixed costs)
         let electricityAmount = 0;
-        if (!unit.is_metered && unit.electricity_fixed_amount) {
-            electricityAmount = unit.electricity_fixed_amount;
-        }
-
-        // Get water amount (for fixed cost units)
         let waterAmount = 0;
+        if (!unit.is_metered && unit.electricity_fixed_amount) {
+            if (unit.room_group) {
+                // Pre-split for PG to avoid incorrect initial totals/balances
+                const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
+                electricityAmount = Math.round((unit.electricity_fixed_amount / occupiedCount) * 100) / 100;
+            } else {
+                electricityAmount = unit.electricity_fixed_amount;
+            }
+        }
         if (unit.water_fixed_amount) {
-            waterAmount = unit.water_fixed_amount;
+            if (unit.room_group) {
+                const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
+                waterAmount = Math.round((unit.water_fixed_amount / occupiedCount) * 100) / 100;
+            } else {
+                waterAmount = unit.water_fixed_amount;
+            }
         }
 
         // B10: Generate unique bill number using MAX id
@@ -276,6 +313,7 @@ export const generateBillsForProperty = async (
                         const splitAmount = Math.round(propExp.amount / unitIds.length);
                         await db.insert(billExpenses).values({
                             bill_id: newBillId,
+                            property_expense_id: propExp.id,
                             label: `Property: ${propExp.expense_type}`,
                             amount: splitAmount,
                             is_recurring: propExp.frequency === 'monthly',
@@ -304,6 +342,181 @@ export const generateBillsForProperty = async (
                     .where(eq(rentBills.id, newBillId));
             }
         }
+    }
+
+    // ── PG Utility Split: split fixed electricity/water across occupied beds ──
+    if (property?.type === 'pg') {
+        await splitPGUtilities(propertyId, month, year);
+    }
+};
+
+/**
+ * For PG properties: split fixed electricity/water costs equally
+ * across occupied beds in the same room_group.
+ * Called after bill generation.
+ */
+const splitPGUtilities = async (
+    propertyId: number,
+    month: number,
+    year: number
+): Promise<void> => {
+    const db = getDb();
+
+    // Get all units for this property that have a room_group
+    const pgUnits = await db.select().from(units).where(
+        and(eq(units.property_id, propertyId), sql`${units.room_group} IS NOT NULL`)
+    );
+
+    if (pgUnits.length === 0) return;
+
+    // Group units by room_group
+    const roomMap = new Map<string, typeof pgUnits>();
+    for (const unit of pgUnits) {
+        const group = unit.room_group!;
+        if (!roomMap.has(group)) roomMap.set(group, []);
+        roomMap.get(group)!.push(unit);
+    }
+
+    // For each room group, find occupied beds and split utilities
+    for (const [roomGroup, bedsInRoom] of roomMap) {
+        // Get bills for this month for these beds
+        const bedIds = bedsInRoom.map(b => b.id);
+        const bills = await db.select().from(rentBills).where(
+            and(
+                inArray(rentBills.unit_id, bedIds),
+                eq(rentBills.month, month),
+                eq(rentBills.year, year)
+            )
+        );
+
+        if (bills.length === 0) continue;
+
+        const occupiedBedCount = bills.length; // Only occupied beds have bills
+
+        // Get the room-level utility config from the first bed
+        const roomConfig = bedsInRoom[0];
+
+        // Split fixed electricity
+        if (roomConfig.electricity_fixed_amount && roomConfig.electricity_fixed_amount > 0) {
+            const perBedElectricity = Math.round((roomConfig.electricity_fixed_amount / occupiedBedCount) * 100) / 100;
+            for (const bill of bills) {
+                const newTotal = (bill.rent_amount ?? 0) + perBedElectricity + (bill.water_amount ?? 0) + (bill.total_expenses ?? 0) + (bill.previous_balance ?? 0);
+                await db.update(rentBills)
+                    .set({
+                        electricity_amount: perBedElectricity,
+                        total_amount: newTotal,
+                        balance: newTotal - (bill.paid_amount ?? 0),
+                        updated_at: new Date(),
+                    })
+                    .where(eq(rentBills.id, bill.id));
+            }
+        }
+
+        // Split fixed water
+        if (roomConfig.water_fixed_amount && roomConfig.water_fixed_amount > 0) {
+            const perBedWater = Math.round((roomConfig.water_fixed_amount / occupiedBedCount) * 100) / 100;
+            for (const bill of bills) {
+                // Re-fetch since electricity might have changed above
+                const freshBill = await getBillById(bill.id);
+                if (!freshBill) continue;
+                const newTotal = (freshBill.rent_amount ?? 0) + (freshBill.electricity_amount ?? 0) + perBedWater + (freshBill.total_expenses ?? 0) + (freshBill.previous_balance ?? 0);
+                await db.update(rentBills)
+                    .set({
+                        water_amount: perBedWater,
+                        total_amount: newTotal,
+                        balance: newTotal - (freshBill.paid_amount ?? 0),
+                        updated_at: new Date(),
+                    })
+                    .where(eq(rentBills.id, bill.id));
+            }
+        }
+    }
+};
+
+/**
+ * Save a metered utility reading for a PG room and split the cost 
+ * equally across all occupied beds for the given month.
+ */
+export const savePGUtilityReading = async (
+    propertyId: number,
+    roomGroup: string,
+    month: number,
+    year: number,
+    type: 'electricity' | 'water',
+    newReading: number
+): Promise<void> => {
+    const db = getDb();
+
+    // Get all beds in this room
+    const pgUnits = await db.select().from(units).where(
+        and(eq(units.property_id, propertyId), eq(units.room_group, roomGroup))
+    );
+
+    if (pgUnits.length === 0) return;
+
+    // Get all bills for these beds for the given month
+    const bedIds = pgUnits.map(b => b.id);
+    const bills = await db.select().from(rentBills).where(
+        and(
+            inArray(rentBills.unit_id, bedIds),
+            eq(rentBills.month, month),
+            eq(rentBills.year, year)
+        )
+    );
+
+    if (bills.length === 0) return;
+
+    const occupiedBedCount = bills.length;
+    const roomConfig = pgUnits[0]; // All beds share the same utility config
+
+    const isElec = type === 'electricity';
+    const rate = isElec ? (roomConfig.electricity_rate ?? 0) : (roomConfig.water_rate ?? 0);
+    const defaultUnits = isElec ? (roomConfig.electricity_default_units ?? 0) : (roomConfig.water_default_units ?? 0);
+
+    // Determine the previous reading. 
+    // We can just use the first bill's prev_reading, as they should all be in sync.
+    const firstBill = bills[0];
+    const prevReading = isElec
+        ? ((firstBill.prev_reading !== null && firstBill.prev_reading !== 0) ? firstBill.prev_reading : (roomConfig.initial_electricity_reading ?? 0))
+        : ((firstBill.water_prev_reading !== null && firstBill.water_prev_reading !== 0) ? firstBill.water_prev_reading : (roomConfig.initial_water_reading ?? 0));
+
+    // Prevent negative units (though UI shouldn't allow this)
+    if (newReading < prevReading) return;
+
+    let unitsUsed = newReading - prevReading;
+
+    // Apply default units logic
+    if (defaultUnits > 0 && unitsUsed <= defaultUnits) {
+        unitsUsed = defaultUnits;
+    }
+
+    const totalCost = unitsUsed * rate;
+    const perBedCost = Math.round((totalCost / occupiedBedCount) * 100) / 100;
+
+    // Update all bills with the new reading and calculated split amount
+    for (const bill of bills) {
+        if (isElec) {
+            await db.update(rentBills)
+                .set({
+                    curr_reading: newReading,
+                    prev_reading: prevReading, // enforce sync just in case
+                    electricity_amount: perBedCost,
+                    updated_at: new Date()
+                })
+                .where(eq(rentBills.id, bill.id));
+        } else {
+            await db.update(rentBills)
+                .set({
+                    water_curr_reading: newReading,
+                    water_prev_reading: prevReading,
+                    water_amount: perBedCost,
+                    updated_at: new Date()
+                })
+                .where(eq(rentBills.id, bill.id));
+        }
+
+        // Recalculate totals for each updated bill
+        await recalculateBill(bill.id);
     }
 };
 
@@ -470,10 +683,12 @@ export const getBillsForPropertyMonth = async (
             // Trigger penalty calculation lazily
             // Pass prefetched data to avoid redundant queries
             await applyPenaltiesLazily(bill.id, { property, tenant, unit });
+
             // E1: Only sync expenses on non-paid bills to avoid disturbing settled bills
             if (bill.status !== 'paid' && bill.status !== 'overpaid') {
                 await syncPropertyExpensesLazily(bill.id, unit.id, month, year, hoistedPropExpenses);
             }
+
             // Re-fetch the bill in case syncs changed it
             const updatedBills = await db.select().from(rentBills).where(eq(rentBills.id, bill.id)).limit(1);
             if (updatedBills.length > 0) {
@@ -682,31 +897,82 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
 
         // Calculate utility amounts (Electricity) if metered
         if (unit.electricity_rate !== null && bill.curr_reading !== null) {
-            const prev = prevReading ?? unit.initial_electricity_reading ?? 0;
+            const prev = (prevReading !== null && prevReading !== 0) ? prevReading : (unit.initial_electricity_reading ?? 0);
             let unitsUsed = Math.max(0, bill.curr_reading - prev);
             const defaultUnits = unit.electricity_default_units;
             if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
                 unitsUsed = defaultUnits;
             }
-            const targetElecAmt = unitsUsed * unit.electricity_rate;
+            let targetElecAmt = unitsUsed * unit.electricity_rate;
+
+            // PG split: divide metered cost across occupied beds in same room
+            if (unit.room_group) {
+                const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
+                if (occupiedCount > 1) {
+                    targetElecAmt = Math.round((targetElecAmt / occupiedCount) * 100) / 100;
+                }
+            }
+
             if (electricityAmount !== targetElecAmt) {
                 electricityAmount = targetElecAmt;
                 needsUpdate = true;
+            }
+        } else if (unit.electricity_rate !== null && bill.curr_reading === null) {
+            // Metered but no reading yet -> cost should be 0
+            if (electricityAmount !== 0) {
+                electricityAmount = 0;
+                needsUpdate = true;
+            }
+        } else if (unit.electricity_rate === null && unit.electricity_fixed_amount && unit.room_group) {
+            // PG split for FIXED electricity
+            // Only split if current amount is the full unsplit amount (default state)
+            if (electricityAmount === unit.electricity_fixed_amount) {
+                const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
+                const targetElecAmt = Math.round((unit.electricity_fixed_amount / occupiedCount) * 100) / 100;
+                if (electricityAmount !== targetElecAmt) {
+                    electricityAmount = targetElecAmt;
+                    needsUpdate = true;
+                }
             }
         }
 
         // Calculate utility amounts (Water) if metered
         if (unit.water_rate !== null && bill.water_curr_reading !== null) {
-            const prev = waterPrevReading ?? unit.initial_water_reading ?? 0;
+            const prev = (waterPrevReading !== null && waterPrevReading !== 0) ? waterPrevReading : (unit.initial_water_reading ?? 0);
             let unitsUsed = Math.max(0, bill.water_curr_reading - prev);
             const defaultUnits = unit.water_default_units;
             if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
                 unitsUsed = defaultUnits;
             }
-            const targetWaterAmt = unitsUsed * unit.water_rate;
+            let targetWaterAmt = unitsUsed * unit.water_rate;
+
+            // PG split: divide metered cost across occupied beds in same room
+            if (unit.room_group) {
+                const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
+                if (occupiedCount > 1) {
+                    targetWaterAmt = Math.round((targetWaterAmt / occupiedCount) * 100) / 100;
+                }
+            }
+
             if (waterAmount !== targetWaterAmt) {
                 waterAmount = targetWaterAmt;
                 needsUpdate = true;
+            }
+        } else if (unit.water_rate !== null && bill.water_curr_reading === null) {
+            // Metered but no reading yet -> cost should be 0
+            if (waterAmount !== 0) {
+                waterAmount = 0;
+                needsUpdate = true;
+            }
+        } else if (unit.water_rate === null && unit.water_fixed_amount && unit.room_group) {
+            // PG split for FIXED water
+            if (waterAmount === unit.water_fixed_amount) {
+                const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
+                const targetWaterAmt = Math.round((unit.water_fixed_amount / occupiedCount) * 100) / 100;
+                if (waterAmount !== targetWaterAmt) {
+                    waterAmount = targetWaterAmt;
+                    needsUpdate = true;
+                }
             }
         }
     }
@@ -814,12 +1080,20 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
 
 export const removeExpense = async (expenseId: number): Promise<void> => {
     const db = getDb();
-    // Get the bill_id before deleting
+    // Get the expense before deleting
     const expense = await db.select().from(billExpenses).where(eq(billExpenses.id, expenseId)).limit(1);
     if (expense.length === 0) return;
 
     const billId = expense[0].bill_id;
+    const propertyExpId = expense[0].property_expense_id;
+
     await db.delete(billExpenses).where(eq(billExpenses.id, expenseId));
+
+    // If this expense came from the property expense module, delete the root expense
+    if (propertyExpId) {
+        await db.delete(propertyExpenses).where(eq(propertyExpenses.id, propertyExpId));
+    }
+
     await recalculateBill(billId);
 };
 
@@ -897,12 +1171,28 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
     for (const bill of pendingBills) {
         let updateData: any = { updated_at: new Date() };
 
-        // Sync fixed amounts
-        if (unit.electricity_rate === null) {
-            updateData.electricity_amount = unit.electricity_fixed_amount ?? 0;
+        // Sync fixed amounts (only if user changed unit setting)
+        if (unit.electricity_rate === null && unit.electricity_fixed_amount !== null) {
+            let elecAmount = unit.electricity_fixed_amount;
+            // For PG, if the current bill electricity is the old fixed amount (or unsplit), apply new split
+            if (unit.room_group && elecAmount > 0) {
+                const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
+                elecAmount = Math.round((elecAmount / occupiedCount) * 100) / 100;
+            }
+            updateData.electricity_amount = elecAmount;
+            updateData.curr_reading = null; // Clear metered data
+            updateData.prev_reading = null;
         }
-        if (unit.water_rate === null) {
-            updateData.water_amount = unit.water_fixed_amount ?? 0;
+
+        if (unit.water_rate === null && unit.water_fixed_amount !== null) {
+            let waterAmt = unit.water_fixed_amount;
+            if (unit.room_group && waterAmt > 0) {
+                const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
+                waterAmt = Math.round((waterAmt / occupiedCount) * 100) / 100;
+            }
+            updateData.water_amount = waterAmt;
+            updateData.water_curr_reading = null;
+            updateData.water_prev_reading = null;
         }
 
         // Update rent amount too if it changed
@@ -916,7 +1206,7 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
                 .where(eq(rentBills.id, bill.id));
         }
 
-        // Trigger full recalculation (this will also handle metered rate changes)
+        // Trigger full recalculation (this will also handle metered rate changes and clearing amounts)
         await recalculateBill(bill.id);
     }
 };
@@ -942,8 +1232,8 @@ const syncPropertyExpensesLazily = async (
     // E3: End of bill month for created_at guard on monthly expenses
     const billMonthEnd = new Date(year, month, 0, 23, 59, 59); // last day of bill month
 
-    // Build expected expense map: label -> { amount, isRecurring } for this specific unit
-    const expectedExpenses = new Map<string, { amount: number; isRecurring: boolean }>();
+    // Build expected expense map: propExpId -> { label, amount, isRecurring } for this specific unit
+    const expectedExpenses = new Map<number, { label: string; amount: number; isRecurring: boolean }>();
     for (const propExp of prefetchedPropExpenses) {
         if (!propExp.distributed_unit_ids) continue;
 
@@ -960,10 +1250,11 @@ const syncPropertyExpensesLazily = async (
                 const label = `Property: ${propExp.expense_type}`;
                 // E2: Preserve is_recurring based on source frequency
                 const isRecurring = propExp.frequency === 'monthly';
-                const existing = expectedExpenses.get(label);
-                expectedExpenses.set(label, {
-                    amount: (existing?.amount || 0) + splitAmount,
-                    isRecurring: existing?.isRecurring || isRecurring,
+                // Rather than aggregating by label, track precisely by property_expense_id
+                expectedExpenses.set(propExp.id, {
+                    label,
+                    amount: splitAmount,
+                    isRecurring,
                 });
             }
         } catch (e) {
@@ -971,19 +1262,28 @@ const syncPropertyExpensesLazily = async (
         }
     }
 
-    // 2. Get current bill expenses with "Property: " prefix
+    // 2. Get current bill expenses with "Property: " prefix or valid property_expense_id
     const currentBillExpenses = await db.select().from(billExpenses)
         .where(eq(billExpenses.bill_id, billId));
 
     const propertyLabeledExpenses = currentBillExpenses.filter(
-        e => e.label.startsWith('Property: ')
+        e => e.property_expense_id !== null || e.label.startsWith('Property: ')
     );
 
     let changed = false;
 
     // 3. Remove stale ones (exist in bill but NOT in expected)
     for (const existing of propertyLabeledExpenses) {
-        if (!expectedExpenses.has(existing.label)) {
+        // Find if this existing bill expense corresponds to any expected property expense
+        let isExpected = false;
+        if (existing.property_expense_id) {
+            isExpected = expectedExpenses.has(existing.property_expense_id);
+        } else {
+            // Fallback for older rows without property_expense_id (matching by label)
+            isExpected = Array.from(expectedExpenses.values()).some(e => e.label === existing.label);
+        }
+
+        if (!isExpected) {
             await db.delete(billExpenses).where(eq(billExpenses.id, existing.id));
             changed = true;
         }
@@ -992,22 +1292,27 @@ const syncPropertyExpensesLazily = async (
     // 4. Add missing or update changed amounts
     const entries = Array.from(expectedExpenses.entries());
     for (let i = 0; i < entries.length; i++) {
-        const label = entries[i][0];
+        const propExpId = entries[i][0];
         const expected = entries[i][1];
-        const existing = propertyLabeledExpenses.find(e => e.label === label);
+
+        const existing = propertyLabeledExpenses.find(e =>
+            e.property_expense_id === propExpId || (!e.property_expense_id && e.label === expected.label)
+        );
+
         if (!existing) {
             // Missing — add it
             await db.insert(billExpenses).values({
                 bill_id: billId,
-                label,
+                property_expense_id: propExpId,
+                label: expected.label,
                 amount: expected.amount,
                 is_recurring: expected.isRecurring, // E2: correct flag
             });
             changed = true;
-        } else if (existing.amount !== expected.amount || existing.is_recurring !== expected.isRecurring) {
-            // Amount or recurring flag changed — update it
+        } else if (existing.amount !== expected.amount || existing.is_recurring !== expected.isRecurring || existing.property_expense_id !== propExpId) {
+            // Amount, recurring flag, or missing ID changed — update it
             await db.update(billExpenses)
-                .set({ amount: expected.amount, is_recurring: expected.isRecurring })
+                .set({ amount: expected.amount, is_recurring: expected.isRecurring, property_expense_id: propExpId })
                 .where(eq(billExpenses.id, existing.id));
             changed = true;
         }

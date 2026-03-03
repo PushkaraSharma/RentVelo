@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
-    View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, ActivityIndicator, Platform
+    View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, Platform
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
 import Header from '../../components/common/Header';
@@ -65,7 +65,8 @@ export default function TakeRentScreen({ navigation, route }: any) {
             const q = search.toLowerCase();
             const tenantName = item.tenant?.name?.toLowerCase() || '';
             const unitName = item.unit?.name?.toLowerCase() || '';
-            if (!tenantName.includes(q) && !unitName.includes(q)) return false;
+            const roomGroup = item.unit?.room_group?.toLowerCase() || '';
+            if (!tenantName.includes(q) && !unitName.includes(q) && !roomGroup.includes(q)) return false;
         }
 
         // Status filter

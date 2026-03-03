@@ -74,7 +74,7 @@ export const OTA_VERSION = 4;
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
-        "Added unique name validation for Properties and Rooms",
+        "Added support bed system in Property type PG",
         "Fixed issue where Android keyboard suggested text auto-filled the wrong inputs",
         "Added 'What's New' screen to keep you informed of updates"
     ]

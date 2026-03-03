@@ -9,7 +9,7 @@ import SuccessModal from '../../../components/common/SuccessModal';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
-import { createUnit, updateUnit, getUnitById, syncPendingBillsWithUnitSettings } from '../../../db';
+import { createUnit, updateUnit, getUnitById, syncPendingBillsWithUnitSettings, createPGRoom, updatePGRoom, getBedsForRoom } from '../../../db';
 import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
@@ -23,7 +23,12 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
     const unitId = route?.params?.unitId;
+    const propertyType = route?.params?.propertyType;
+    const roomGroupParam = route?.params?.roomGroup; // For edit PG room mode
+    const isPG = propertyType === 'pg';
     const isEditMode = !!unitId;
+    const isEditPGRoom = isPG && !!roomGroupParam && !unitId;
+    const isEditBed = isEditMode && isPG; // Editing a single PG bed
     const [loading, setLoading] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [createdUnitId, setCreatedUnitId] = useState<number | null>(null);
@@ -66,11 +71,74 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [showImagePicker, setShowImagePicker] = useState(false);
     const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
 
+    // PG-specific state
+    const [bedCount, setBedCount] = useState('2');
+    const [bedRents, setBedRents] = useState<string[]>(['', '']);
+    const [sameRent, setSameRent] = useState(true);
+
     React.useEffect(() => {
         if (isEditMode) {
             loadUnitData();
+        } else if (isEditPGRoom) {
+            loadPGRoomData();
         }
-    }, [unitId]);
+    }, [unitId, roomGroupParam]);
+
+    const loadPGRoomData = async () => {
+        try {
+            const beds = await getBedsForRoom(propertyId, roomGroupParam);
+            if (beds.length === 0) return;
+
+            const firstBed = beds[0];
+            setRoomName(roomGroupParam);
+            setFloor(firstBed.floor || '');
+            setFurnishing(firstBed.furnishing_type as any || 'none');
+            setBedCount(beds.length.toString());
+
+            // Check if all rents are the same
+            const rents = beds.map(b => b.rent_amount.toString());
+            const allSame = rents.every(r => r === rents[0]);
+            setSameRent(allSame);
+            if (allSame) {
+                setRentAmount(rents[0]);
+            }
+            setBedRents(rents);
+
+            // Electricity
+            if (firstBed.electricity_rate || firstBed.electricity_fixed_amount || firstBed.initial_electricity_reading) {
+                setElectricityEnabled(true);
+                if (firstBed.electricity_rate) {
+                    setElectricityType('Metered');
+                    setElectricityValue(firstBed.electricity_rate.toString());
+                    setInitialElectricityReading(firstBed.initial_electricity_reading?.toString() || '');
+                    setElectricityDefaultUnits(firstBed.electricity_default_units?.toString() || '');
+                } else if (firstBed.electricity_fixed_amount) {
+                    setElectricityType('Fixed');
+                    setElectricityValue(firstBed.electricity_fixed_amount.toString());
+                } else {
+                    setElectricityType('Free');
+                }
+            }
+
+            // Water
+            if (firstBed.water_rate || firstBed.water_fixed_amount || firstBed.initial_water_reading) {
+                setWaterEnabled(true);
+                if (firstBed.water_rate) {
+                    setWaterType('Metered');
+                    setWaterValue(firstBed.water_rate.toString());
+                    setInitialWaterReading(firstBed.initial_water_reading?.toString() || '');
+                    setWaterDefaultUnits(firstBed.water_default_units?.toString() || '');
+                } else if (firstBed.water_fixed_amount) {
+                    setWaterType('Fixed');
+                    setWaterValue(firstBed.water_fixed_amount.toString());
+                } else {
+                    setWaterType('Free');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading PG room:', error);
+        }
+    };
 
     const loadUnitData = async () => {
         try {
@@ -170,12 +238,35 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
     const handleSubmit = async () => {
         if (!roomName.trim()) {
-            showToast({ type: 'error', title: 'Error', message: 'Please enter room name' });
+            showToast({ type: 'error', title: 'Error', message: isPG && !isEditMode ? 'Please enter room name' : 'Please enter room name' });
             return;
         }
-        if (!rentAmount || parseFloat(rentAmount) <= 0) {
-            showToast({ type: 'error', title: 'Error', message: 'Please enter valid rent amount' });
-            return;
+
+        // PG mode validation (create or edit PG room)
+        if (isPG && !isEditMode) {
+            const count = parseInt(bedCount);
+            if (!count || count < 1 || count > 20) {
+                showToast({ type: 'error', title: 'Error', message: 'Please enter a valid bed count (1-20)' });
+                return;
+            }
+            if (sameRent) {
+                if (!rentAmount || parseFloat(rentAmount) <= 0) {
+                    showToast({ type: 'error', title: 'Error', message: 'Please enter valid rent amount' });
+                    return;
+                }
+            } else {
+                for (let i = 0; i < count; i++) {
+                    if (!bedRents[i] || parseFloat(bedRents[i]) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: `Please enter valid rent for Bed ${i + 1}` });
+                        return;
+                    }
+                }
+            }
+        } else if (!isEditPGRoom) {
+            if (!rentAmount || parseFloat(rentAmount) <= 0) {
+                showToast({ type: 'error', title: 'Error', message: 'Please enter valid rent amount' });
+                return;
+            }
         }
 
         if (electricityEnabled) {
@@ -255,6 +346,62 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 await syncPendingBillsWithUnitSettings(unitId);
                 showToast({ type: 'success', title: 'Success', message: 'Room details updated successfully' });
                 navigation.goBack();
+            } else if (isEditPGRoom) {
+                // Edit PG Room mode: update existing room group
+                const count = parseInt(bedCount);
+                const rents = sameRent
+                    ? Array(count).fill(parseFloat(rentAmount))
+                    : bedRents.slice(0, count).map(r => parseFloat(r));
+
+                await updatePGRoom(propertyId, roomGroupParam, {
+                    propertyId,
+                    roomName: roomName.trim(),
+                    floor: floor || undefined,
+                    bedCount: count,
+                    bedRents: rents,
+                    electricityRate: unitData.electricity_rate,
+                    electricityFixedAmount: unitData.electricity_fixed_amount,
+                    initialElectricityReading: unitData.initial_electricity_reading,
+                    electricityDefaultUnits: unitData.electricity_default_units,
+                    waterRate: unitData.water_rate,
+                    waterFixedAmount: unitData.water_fixed_amount,
+                    initialWaterReading: unitData.initial_water_reading,
+                    waterDefaultUnits: unitData.water_default_units,
+                    furnishingType: unitData.furnishing_type,
+                });
+
+                // Sync all beds in this room group to update existing bills
+                const beds = await getBedsForRoom(propertyId, roomName.trim());
+                for (const bed of beds) {
+                    await syncPendingBillsWithUnitSettings(bed.id);
+                }
+
+                showToast({ type: 'success', title: 'Success', message: 'Room updated successfully' });
+                navigation.goBack();
+            } else if (isPG) {
+                // PG mode: create room with multiple beds
+                const count = parseInt(bedCount);
+                const rents = sameRent
+                    ? Array(count).fill(parseFloat(rentAmount))
+                    : bedRents.slice(0, count).map(r => parseFloat(r));
+
+                await createPGRoom({
+                    propertyId,
+                    roomName: roomName.trim(),
+                    floor: floor || undefined,
+                    bedCount: count,
+                    bedRents: rents,
+                    electricityRate: unitData.electricity_rate,
+                    electricityFixedAmount: unitData.electricity_fixed_amount,
+                    initialElectricityReading: unitData.initial_electricity_reading,
+                    electricityDefaultUnits: unitData.electricity_default_units,
+                    waterRate: unitData.water_rate,
+                    waterFixedAmount: unitData.water_fixed_amount,
+                    initialWaterReading: unitData.initial_water_reading,
+                    waterDefaultUnits: unitData.water_default_units,
+                    furnishingType: unitData.furnishing_type,
+                });
+                setShowSuccessModal(true);
             } else {
                 const newId = await createUnit(unitData);
                 setCreatedUnitId(newId);
@@ -279,7 +426,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 style={{ flex: 1 }}
             >
                 {/* Header */}
-                <Header title={isEditMode ? 'Update Room' : 'Add Room Details'} />
+                <Header title={isEditBed ? 'Update Bed Details' : isEditMode ? 'Update Room' : isEditPGRoom ? 'Edit PG Room' : (isPG ? 'Add PG Room' : 'Add Room Details')} />
 
                 <ScrollView
                     ref={scrollViewRef}
@@ -291,27 +438,83 @@ export default function AddUnitScreen({ navigation, route }: any) {
                     <Text style={styles.sectionLabel}>BASIC INFORMATION</Text>
                     <View style={styles.section}>
                         <Input
-                            label="Room Name / Room No."
-                            placeholder="e.g. Room 101 or Flat A-202"
+                            label={isEditBed ? 'Bed Name' : isPG && !isEditMode ? 'Room Name' : 'Room Name / Room No.'}
+                            placeholder={isEditBed ? 'e.g. Bed 1' : isPG ? 'e.g. Room A, Room 101' : 'e.g. Room 101 or Flat A-202'}
                             value={roomName}
                             onChangeText={setRoomName}
                         />
 
-                        <Text style={styles.inputLabel}>Room Type</Text>
-                        <Pressable style={styles.pickerContainer} onPress={() => setShowRoomTypePicker(true)}>
-                            <Text style={[styles.pickerText, !roomType && { color: theme.colors.textTertiary }]}>
-                                {roomType || 'Select Room Type (e.g. 2 BHK)'}
-                            </Text>
-                            <Layout size={18} color={theme.colors.accent} />
-                        </Pressable>
+                        {!isEditBed && (
+                            <>
+                                <Text style={styles.inputLabel}>Room Type</Text>
+                                <Pressable style={styles.pickerContainer} onPress={() => setShowRoomTypePicker(true)}>
+                                    <Text style={[styles.pickerText, !roomType && { color: theme.colors.textTertiary }]}>
+                                        {roomType || 'Select Room Type (e.g. 2 BHK)'}
+                                    </Text>
+                                    <Layout size={18} color={theme.colors.accent} />
+                                </Pressable>
+                            </>
+                        )}
 
-                        <Input
-                            label="Rent Amount"
-                            placeholder="e.g. 12000"
-                            value={rentAmount}
-                            onChangeText={setRentAmount}
-                            keyboardType="numeric"
-                        />
+                        {/* Rent — for PG create mode, show bed config instead */}
+                        {isPG && !isEditMode ? (
+                            <View>
+                                <Input
+                                    label="Number of Beds"
+                                    placeholder="e.g. 3"
+                                    value={bedCount}
+                                    onChangeText={(val) => {
+                                        setBedCount(val);
+                                        const count = parseInt(val) || 0;
+                                        setBedRents(prev => {
+                                            const next = [...prev];
+                                            while (next.length < count) next.push('');
+                                            return next.slice(0, Math.max(count, 1));
+                                        });
+                                    }}
+                                    keyboardType="numeric"
+                                />
+
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.s }}>
+                                    <Text style={styles.inputLabel}>Same Rent for All Beds?</Text>
+                                    <Toggle value={sameRent} onValueChange={() => setSameRent(!sameRent)} />
+                                </View>
+
+                                {sameRent ? (
+                                    <Input
+                                        label="Rent per Bed"
+                                        placeholder="e.g. 5000"
+                                        value={rentAmount}
+                                        onChangeText={setRentAmount}
+                                        keyboardType="numeric"
+                                    />
+                                ) : (
+                                    Array.from({ length: parseInt(bedCount) || 0 }).map((_, i) => (
+                                        <Input
+                                            key={i}
+                                            label={`Bed ${i + 1} Rent`}
+                                            placeholder="e.g. 5000"
+                                            value={bedRents[i] || ''}
+                                            onChangeText={(val) => {
+                                                const updated = [...bedRents];
+                                                updated[i] = val;
+                                                setBedRents(updated);
+                                            }}
+                                            keyboardType="numeric"
+                                        />
+                                    ))
+                                )}
+                            </View>
+                        ) : (
+                            <Input
+                                label="Rent Amount"
+                                placeholder="e.g. 12000"
+                                value={rentAmount}
+                                onChangeText={setRentAmount}
+                                keyboardType="numeric"
+                            />
+                        )}
+
 
                         <Input
                             label="Remarks (Optional)"
@@ -323,243 +526,255 @@ export default function AddUnitScreen({ navigation, route }: any) {
                         />
                     </View>
 
-                    {/* Rent Cycle */}
-                    <Text style={styles.sectionLabel}>RENT CALCULATION</Text>
-                    <View style={styles.cardContainer}>
-                        {RENT_CYCLE_OPTIONS.map((option, index) => (
-                            <Pressable
-                                key={option.id}
-                                style={[
-                                    styles.rentOption,
-                                    index !== RENT_CYCLE_OPTIONS.length - 1 && styles.borderBottom
-                                ]}
-                                onPress={() => setRentCycle(option.id as 'first_of_month' | 'relative')}
-                            >
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.optionTitle}>{option.label}</Text>
-                                    <Text style={styles.optionDesc}>{option.description}</Text>
-                                </View>
-                                <View style={[styles.radio, rentCycle === option.id && styles.radioActive]}>
-                                    {rentCycle === option.id && <View style={styles.radioInner} />}
-                                </View>
-                            </Pressable>
-                        ))}
-                    </View>
-
-                    {/* Utilities */}
-                    <Text style={styles.sectionLabel}>UTILITIES & BILLING</Text>
-
-                    {/* Electricity Card */}
-                    <View style={styles.utilityCard}>
-                        <View style={styles.utilityHeader}>
-                            <View style={[styles.iconBg, { backgroundColor: '#F3E8FF' }]}>
-                                <Zap size={20} color="#9333EA" />
+                    {/* Rent Cycle — hide for PG bed edit */}
+                    {!isEditBed && (
+                        <>
+                            <Text style={styles.sectionLabel}>RENT CALCULATION</Text>
+                            <View style={styles.cardContainer}>
+                                {RENT_CYCLE_OPTIONS.map((option, index) => (
+                                    <Pressable
+                                        key={option.id}
+                                        style={[
+                                            styles.rentOption,
+                                            index !== RENT_CYCLE_OPTIONS.length - 1 && styles.borderBottom
+                                        ]}
+                                        onPress={() => setRentCycle(option.id as 'first_of_month' | 'relative')}
+                                    >
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.optionTitle}>{option.label}</Text>
+                                            <Text style={styles.optionDesc}>{option.description}</Text>
+                                        </View>
+                                        <View style={[styles.radio, rentCycle === option.id && styles.radioActive]}>
+                                            {rentCycle === option.id && <View style={styles.radioInner} />}
+                                        </View>
+                                    </Pressable>
+                                ))}
                             </View>
-                            <Text style={styles.utilityTitle}>Electricity</Text>
-                            <Toggle value={electricityEnabled} onValueChange={setElectricityEnabled} />
-                        </View>
+                        </>
+                    )}
 
-                        {electricityEnabled && (
-                            <>
-                                <View style={styles.segmentContainer}>
-                                    {METER_TYPES.map((type) => (
+                    {/* Utilities — hide for PG bed edit (utilities are room-level) */}
+                    {!isEditBed && (
+                        <>
+                            <Text style={styles.sectionLabel}>UTILITIES & BILLING</Text>
+
+                            {/* Electricity Card */}
+                            <View style={styles.utilityCard}>
+                                <View style={styles.utilityHeader}>
+                                    <View style={[styles.iconBg, { backgroundColor: '#F3E8FF' }]}>
+                                        <Zap size={20} color="#9333EA" />
+                                    </View>
+                                    <Text style={styles.utilityTitle}>Electricity</Text>
+                                    <Toggle value={electricityEnabled} onValueChange={setElectricityEnabled} />
+                                </View>
+
+                                {electricityEnabled && (
+                                    <>
+                                        <View style={styles.segmentContainer}>
+                                            {METER_TYPES.map((type) => (
+                                                <Pressable
+                                                    key={type}
+                                                    style={[
+                                                        styles.segmentParam,
+                                                        electricityType === type && styles.segmentActive
+                                                    ]}
+                                                    onPress={() => {
+                                                        setElectricityType(type);
+                                                        setElectricityValue('');
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.segmentText,
+                                                        electricityType === type && styles.segmentTextActive
+                                                    ]}>{type}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                        {electricityType !== 'Free' && (
+                                            <View style={{ marginTop: theme.spacing.m }}>
+                                                <Input
+                                                    label={electricityType === 'Metered' ? "Rate per Unit (₹)" : "Fixed Monthly Amount (₹)"}
+                                                    placeholder={electricityType === 'Metered' ? "e.g. 8.5" : "e.g. 500"}
+                                                    value={electricityValue}
+                                                    onChangeText={setElectricityValue}
+                                                    keyboardType="numeric"
+                                                />
+                                                {electricityType === 'Metered' && (
+                                                    <>
+                                                        <Input
+                                                            label="Initial Meter Reading"
+                                                            placeholder="e.g. 1045.5"
+                                                            value={initialElectricityReading}
+                                                            onChangeText={setInitialElectricityReading}
+                                                            keyboardType="numeric"
+                                                        />
+                                                        <Input
+                                                            label="Default Minimum Units (Optional)"
+                                                            placeholder="e.g. 5"
+                                                            value={electricityDefaultUnits}
+                                                            onChangeText={setElectricityDefaultUnits}
+                                                            keyboardType="numeric"
+                                                        />
+                                                    </>
+                                                )}
+                                            </View>
+                                        )}
+                                    </>
+                                )}
+                            </View>
+
+                            {/* Water Card */}
+                            <View style={styles.utilityCard}>
+                                <View style={styles.utilityHeader}>
+                                    <View style={[styles.iconBg, { backgroundColor: '#E0F2FE' }]}>
+                                        <Droplets size={20} color="#0284C7" />
+                                    </View>
+                                    <Text style={styles.utilityTitle}>Water</Text>
+                                    <Toggle value={waterEnabled} onValueChange={setWaterEnabled} />
+                                </View>
+
+                                {waterEnabled && (
+                                    <>
+                                        <View style={styles.segmentContainer}>
+                                            {METER_TYPES.map((type) => (
+                                                <Pressable
+                                                    key={type}
+                                                    style={[
+                                                        styles.segmentParam,
+                                                        waterType === type && styles.segmentActive
+                                                    ]}
+                                                    onPress={() => {
+                                                        setWaterType(type);
+                                                        setWaterValue('');
+                                                    }}
+                                                >
+                                                    <Text style={[
+                                                        styles.segmentText,
+                                                        waterType === type && styles.segmentTextActive
+                                                    ]}>{type}</Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                        {waterType !== 'Free' && (
+                                            <View style={{ marginTop: theme.spacing.m }}>
+                                                <Input
+                                                    label={waterType === 'Metered' ? "Rate per Unit (₹)" : "Fixed Monthly Amount (₹)"}
+                                                    placeholder={waterType === 'Metered' ? "e.g. 15" : "e.g. 200"}
+                                                    value={waterValue}
+                                                    onChangeText={setWaterValue}
+                                                    keyboardType="numeric"
+                                                />
+                                                {waterType === 'Metered' && (
+                                                    <>
+                                                        <Input
+                                                            label="Initial Meter Reading"
+                                                            placeholder="e.g. 520.0"
+                                                            value={initialWaterReading}
+                                                            onChangeText={setInitialWaterReading}
+                                                            keyboardType="numeric"
+                                                        />
+                                                        <Input
+                                                            label="Default Minimum Units (Optional)"
+                                                            placeholder="e.g. 3"
+                                                            value={waterDefaultUnits}
+                                                            onChangeText={setWaterDefaultUnits}
+                                                            keyboardType="numeric"
+                                                        />
+                                                    </>
+                                                )}
+                                            </View>
+                                        )}
+                                    </>
+                                )}
+                            </View>
+                        </>
+                    )}
+
+                    {/* Facilities & Additional Info — hide for PG bed edit */}
+                    {!isEditBed && (
+                        <>
+                            <Text style={styles.sectionLabel}>FACILITIES & ADDITIONAL INFO</Text>
+                            <View style={styles.section}>
+                                <Input
+                                    label="Floor Number"
+                                    placeholder="e.g. 2nd Floor"
+                                    value={floor}
+                                    onChangeText={setFloor}
+                                />
+
+                                <Text style={styles.inputLabel}>Furnishing Status</Text>
+                                <View style={styles.furnishingContainer}>
+                                    {FURNISHING_TYPES.map((type) => (
                                         <Pressable
-                                            key={type}
+                                            key={type.id}
                                             style={[
-                                                styles.segmentParam,
-                                                electricityType === type && styles.segmentActive
+                                                styles.furnishingBtn,
+                                                furnishing === type.id && styles.furnishingBtnActive
                                             ]}
-                                            onPress={() => {
-                                                setElectricityType(type);
-                                                setElectricityValue('');
-                                            }}
+                                            onPress={() => setFurnishing(type.id as any)}
                                         >
                                             <Text style={[
-                                                styles.segmentText,
-                                                electricityType === type && styles.segmentTextActive
-                                            ]}>{type}</Text>
+                                                styles.furnishingText,
+                                                furnishing === type.id && styles.furnishingTextActive
+                                            ]}>{type.label}</Text>
                                         </Pressable>
                                     ))}
                                 </View>
-                                {electricityType !== 'Free' && (
-                                    <View style={{ marginTop: theme.spacing.m }}>
-                                        <Input
-                                            label={electricityType === 'Metered' ? "Rate per Unit (₹)" : "Fixed Monthly Amount (₹)"}
-                                            placeholder={electricityType === 'Metered' ? "e.g. 8.5" : "e.g. 500"}
-                                            value={electricityValue}
-                                            onChangeText={setElectricityValue}
-                                            keyboardType="numeric"
-                                        />
-                                        {electricityType === 'Metered' && (
-                                            <>
-                                                <Input
-                                                    label="Initial Meter Reading"
-                                                    placeholder="e.g. 1045.5"
-                                                    value={initialElectricityReading}
-                                                    onChangeText={setInitialElectricityReading}
-                                                    keyboardType="numeric"
-                                                />
-                                                <Input
-                                                    label="Default Minimum Units (Optional)"
-                                                    placeholder="e.g. 5"
-                                                    value={electricityDefaultUnits}
-                                                    onChangeText={setElectricityDefaultUnits}
-                                                    keyboardType="numeric"
-                                                />
-                                            </>
-                                        )}
-                                    </View>
-                                )}
-                            </>
-                        )}
-                    </View>
 
-                    {/* Water Card */}
-                    <View style={styles.utilityCard}>
-                        <View style={styles.utilityHeader}>
-                            <View style={[styles.iconBg, { backgroundColor: '#E0F2FE' }]}>
-                                <Droplets size={20} color="#0284C7" />
-                            </View>
-                            <Text style={styles.utilityTitle}>Water</Text>
-                            <Toggle value={waterEnabled} onValueChange={setWaterEnabled} />
-                        </View>
+                                <Input
+                                    label="Room Size (Sq. Ft.)"
+                                    placeholder="e.g. 1200"
+                                    value={roomSize}
+                                    onChangeText={setRoomSize}
+                                    keyboardType="numeric"
+                                />
 
-                        {waterEnabled && (
-                            <>
-                                <View style={styles.segmentContainer}>
-                                    {METER_TYPES.map((type) => (
-                                        <Pressable
-                                            key={type}
-                                            style={[
-                                                styles.segmentParam,
-                                                waterType === type && styles.segmentActive
-                                            ]}
-                                            onPress={() => {
-                                                setWaterType(type);
-                                                setWaterValue('');
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.segmentText,
-                                                waterType === type && styles.segmentTextActive
-                                            ]}>{type}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                                {waterType !== 'Free' && (
-                                    <View style={{ marginTop: theme.spacing.m }}>
-                                        <Input
-                                            label={waterType === 'Metered' ? "Rate per Unit (₹)" : "Fixed Monthly Amount (₹)"}
-                                            placeholder={waterType === 'Metered' ? "e.g. 15" : "e.g. 200"}
-                                            value={waterValue}
-                                            onChangeText={setWaterValue}
-                                            keyboardType="numeric"
-                                        />
-                                        {waterType === 'Metered' && (
-                                            <>
-                                                <Input
-                                                    label="Initial Meter Reading"
-                                                    placeholder="e.g. 520.0"
-                                                    value={initialWaterReading}
-                                                    onChangeText={setInitialWaterReading}
-                                                    keyboardType="numeric"
-                                                />
-                                                <Input
-                                                    label="Default Minimum Units (Optional)"
-                                                    placeholder="e.g. 3"
-                                                    value={waterDefaultUnits}
-                                                    onChangeText={setWaterDefaultUnits}
-                                                    keyboardType="numeric"
-                                                />
-                                            </>
-                                        )}
-                                    </View>
-                                )}
-                            </>
-                        )}
-                    </View>
-
-                    {/* Facilities & Additional Info */}
-                    <Text style={styles.sectionLabel}>FACILITIES & ADDITIONAL INFO</Text>
-                    <View style={styles.section}>
-                        <Input
-                            label="Floor Number"
-                            placeholder="e.g. 2nd Floor"
-                            value={floor}
-                            onChangeText={setFloor}
-                        />
-
-                        <Text style={styles.inputLabel}>Furnishing Status</Text>
-                        <View style={styles.furnishingContainer}>
-                            {FURNISHING_TYPES.map((type) => (
-                                <Pressable
-                                    key={type.id}
-                                    style={[
-                                        styles.furnishingBtn,
-                                        furnishing === type.id && styles.furnishingBtnActive
-                                    ]}
-                                    onPress={() => setFurnishing(type.id as any)}
-                                >
-                                    <Text style={[
-                                        styles.furnishingText,
-                                        furnishing === type.id && styles.furnishingTextActive
-                                    ]}>{type.label}</Text>
-                                </Pressable>
-                            ))}
-                        </View>
-
-                        <Input
-                            label="Room Size (Sq. Ft.)"
-                            placeholder="e.g. 1200"
-                            value={roomSize}
-                            onChangeText={setRoomSize}
-                            keyboardType="numeric"
-                        />
-
-                        <View style={styles.amenitiesHeader}>
-                            <Text style={styles.inputLabel}>Custom Amenities</Text>
-                            <Pressable onPress={addCustomAmenity} style={styles.addAmenityBtn}>
-                                <Plus size={16} color={theme.colors.accent} />
-                                <Text style={styles.addAmenityText}>ADD</Text>
-                            </Pressable>
-                        </View>
-
-                        <View style={styles.amenitiesList}>
-                            {customAmenities.map((amenity, index) => (
-                                <View key={index} style={styles.amenityBadge}>
-                                    <Text style={styles.amenityBadgeText}>{amenity}</Text>
-                                    <Pressable onPress={() => removeAmenity(index)}>
-                                        <Trash2 size={14} color={theme.colors.textSecondary} />
+                                <View style={styles.amenitiesHeader}>
+                                    <Text style={styles.inputLabel}>Custom Amenities</Text>
+                                    <Pressable onPress={addCustomAmenity} style={styles.addAmenityBtn}>
+                                        <Plus size={16} color={theme.colors.accent} />
+                                        <Text style={styles.addAmenityText}>ADD</Text>
                                     </Pressable>
                                 </View>
-                            ))}
-                            {customAmenities.length === 0 && (
-                                <Text style={styles.emptyText}>No custom amenities added</Text>
-                            )}
-                        </View>
-                    </View>
 
-                    {/* Photos */}
-                    <Text style={styles.sectionLabel}>ROOM PHOTOS</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
-                        <Pressable style={styles.addPhotoBox} onPress={pickImage}>
-                            <Camera size={24} color={theme.colors.textSecondary} />
-                            <Text style={styles.addPhotoText}>Add Photo</Text>
-                        </Pressable>
-
-                        {images.map((uri, index) => (
-                            <View key={index} style={styles.photoWrapper}>
-                                <Image source={{ uri: getFullImageUri(uri) || uri }} style={styles.bottomPhoto} />
-                                <Pressable style={styles.removePhotoBtn} onPress={() => removeImage(index)}>
-                                    <Trash2 size={12} color="#FFF" />
-                                </Pressable>
+                                <View style={styles.amenitiesList}>
+                                    {customAmenities.map((amenity, index) => (
+                                        <View key={index} style={styles.amenityBadge}>
+                                            <Text style={styles.amenityBadgeText}>{amenity}</Text>
+                                            <Pressable onPress={() => removeAmenity(index)}>
+                                                <Trash2 size={14} color={theme.colors.textSecondary} />
+                                            </Pressable>
+                                        </View>
+                                    ))}
+                                    {customAmenities.length === 0 && (
+                                        <Text style={styles.emptyText}>No custom amenities added</Text>
+                                    )}
+                                </View>
                             </View>
-                        ))}
-                    </ScrollView>
+
+                            {/* Photos */}
+                            <Text style={styles.sectionLabel}>ROOM PHOTOS</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
+                                <Pressable style={styles.addPhotoBox} onPress={pickImage}>
+                                    <Camera size={24} color={theme.colors.textSecondary} />
+                                    <Text style={styles.addPhotoText}>Add Photo</Text>
+                                </Pressable>
+
+                                {images.map((uri, index) => (
+                                    <View key={index} style={styles.photoWrapper}>
+                                        <Image source={{ uri: getFullImageUri(uri) || uri }} style={styles.bottomPhoto} />
+                                        <Pressable style={styles.removePhotoBtn} onPress={() => removeImage(index)}>
+                                            <Trash2 size={12} color="#FFF" />
+                                        </Pressable>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </>
+                    )}
 
                     {/* Submit Button */}
                     <Button
-                        title={isEditMode ? "Save Changes" : "Create Room"}
+                        title={(isEditMode || isEditPGRoom) ? "Save Changes" : "Create Room"}
                         onPress={handleSubmit}
                         loading={loading}
                         style={styles.submitBtn}

@@ -107,7 +107,7 @@ export default function PropertySettingsScreen({ navigation, route }: any) {
                             <View style={{ flex: 1, marginRight: theme.spacing.m }}>
                                 <Input
                                     label="PENALTY AFTER DAYS"
-                                    placeholder="e.g. 5 days"
+                                    placeholder="Enter days"
                                     value={penaltyGracePeriodDays}
                                     onChangeText={setPenaltyGracePeriodDays}
                                     keyboardType="numeric"
@@ -116,7 +116,7 @@ export default function PropertySettingsScreen({ navigation, route }: any) {
                             <View style={{ flex: 1 }}>
                                 <Input
                                     label="PENALTY AMOUNT"
-                                    placeholder="e.g. ₹50 per day"
+                                    placeholder="Enter amount"
                                     value={penaltyAmountPerDay}
                                     onChangeText={setPenaltyAmountPerDay}
                                     keyboardType="numeric"

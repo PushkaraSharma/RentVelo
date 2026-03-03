@@ -334,24 +334,39 @@ export default function AddPropertyScreen({ navigation, route }: any) {
         const count = parseInt(totalUnits);
         const floors = parseInt(totalFloors) || 1;
         const unitsPerFloor = Math.ceil(count / floors);
+        const isPG = propertyType === 'pg';
 
         try {
             for (let i = 1; i <= count; i++) {
                 const floorNum = Math.ceil(i / unitsPerFloor);
-                const unitInFloor = i % unitsPerFloor === 0 ? unitsPerFloor : i % unitsPerFloor;
 
                 let name = `Room ${i}`;
+                const floorLabel = floors > 1 ? `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor` : undefined;
 
                 setCurrentBulkRoomName(name);
                 setBulkProgress(i / count);
 
-                await createUnit({
-                    property_id: createdPropertyId,
-                    name: name,
-                    rent_amount: 0,
-                    rent_cycle: 'first_of_month',
-                    floor: floors > 1 ? `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor` : undefined,
-                });
+                if (isPG) {
+                    // For PG: each room gets 1 default bed with room_group + bed_number
+                    const bedName = 'Bed 1';
+                    await createUnit({
+                        property_id: createdPropertyId,
+                        name: `${name} - ${bedName}`,
+                        rent_amount: 0,
+                        rent_cycle: 'first_of_month',
+                        floor: floorLabel,
+                        room_group: name,
+                        bed_number: bedName,
+                    });
+                } else {
+                    await createUnit({
+                        property_id: createdPropertyId,
+                        name: name,
+                        rent_amount: 0,
+                        rent_cycle: 'first_of_month',
+                        floor: floorLabel,
+                    });
+                }
 
                 // Small delay to let the UI breathe and show progress
                 await new Promise(resolve => setTimeout(resolve, 200));
@@ -765,7 +780,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                             icon: Building,
                             onPress: () => {
                                 setShowSuccessModal(false);
-                                navigation.replace('AddUnit', { propertyId: createdPropertyId });
+                                navigation.replace('AddUnit', { propertyId: createdPropertyId, propertyType });
                             }
                         },
                         {

@@ -123,7 +123,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
         },
         {
             id: 'rooms',
-            label: property?.is_multi_unit ? 'Rooms' : 'Tenant',
+            label: property?.is_multi_unit ? (property?.type === 'pg' ? 'Rooms & Beds' : 'Rooms') : 'Tenant',
             icon: property?.is_multi_unit ? DoorOpen : Users,
             color: theme.colors.accent,
             bg: isDark ? '#6366F120' : '#EEF2FF',
@@ -215,7 +215,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                         { color: occupiedCount === 0 ? theme.colors.danger : (property?.is_multi_unit && occupiedCount < units.length) ? theme.colors.warning : theme.colors.success }
                     ]}>
                         {property?.is_multi_unit
-                            ? `${occupiedCount} out of ${units.length} rooms are occupied`
+                            ? `${occupiedCount} out of ${units.length} ${property?.type === 'pg' ? 'beds' : 'rooms'} are occupied`
                             : (activeTenant ? 'Currently Occupied' : 'Currently Vacant')}
                     </Text>
                 </View>

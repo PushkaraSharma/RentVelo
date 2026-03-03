@@ -148,14 +148,14 @@ export default function DashboardScreen({ navigation }: any) {
                                         <View style={[styles.dot, { backgroundColor: theme.colors.accent }]} />
                                         <View>
                                             <Text style={styles.legendLabel}>OCCUPIED</Text>
-                                            <Text style={styles.legendValue}>{data.occupiedCount} Rooms</Text>
+                                            <Text style={styles.legendValue}>{data.occupiedCount} Units</Text>
                                         </View>
                                     </View>
                                     <View style={styles.legendItem}>
                                         <View style={[styles.dot, { backgroundColor: theme.colors.border }]} />
                                         <View>
                                             <Text style={styles.legendLabel}>VACANT</Text>
-                                            <Text style={styles.legendValue}>{data.vacantCount} Rooms</Text>
+                                            <Text style={styles.legendValue}>{data.vacantCount} Units</Text>
                                         </View>
                                     </View>
                                 </View>

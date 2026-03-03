@@ -9,47 +9,46 @@ const expoDb = SQLite.openDatabaseSync(DATABASE_NAME);
 // Enable foreign keys
 expoDb.execSync('PRAGMA foreign_keys = ON;');
 
-// Defensive repair: only needed if migration 0013 was PARTIALLY applied.
-// Drizzle's expo-sqlite migrator tracks migrations by created_at (folderMillis),
-// NOT by hash (hash is always ''). Migration 0013's folderMillis = 1772560957000.
-// If Drizzle already recorded it, but columns are missing, we patch them.
-// If Drizzle hasn't recorded it yet, we do NOT interfere — Drizzle will handle it.
+// Defensive repair: fixes inconsistent states where 0013 partially ran or table exists but isn't recorded.
 try {
-  const migrationTable = expoDb.getAllSync(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'"
+  const MIGRATION_0013_TIMESTAMP = 1772530225637;
+
+  // 1. Check if property_expenses already exists (the primary cause of crashes)
+  const expensesTable = expoDb.getAllSync(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='property_expenses'"
   ) as any[];
 
-  if (migrationTable.length > 0) {
-    // Drizzle uses: SELECT ... ORDER BY created_at DESC LIMIT 1
-    // Then runs migrations where created_at > lastDbMigration.created_at
-    // So if the last recorded created_at >= 0013's folderMillis, 0013 was "applied"
-    const lastMigration = expoDb.getAllSync(
-      "SELECT created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1"
-    ) as any[];
+  if (expensesTable.length > 0) {
+    // If the table exists, we MUST ensure Drizzle doesn't try to CREATE it again.
+    // We do this by manually marking migration 0013 as "done" in Drizzle's internal table.
+    expoDb.execSync(`CREATE TABLE IF NOT EXISTS __drizzle_migrations (id integer PRIMARY KEY AUTOINCREMENT, hash text NOT NULL, created_at integer);`);
+    expoDb.execSync(`INSERT OR IGNORE INTO __drizzle_migrations (hash, created_at) VALUES ('', ${MIGRATION_0013_TIMESTAMP});`);
 
-    const MIGRATION_0013_TIMESTAMP = 1772560957000;
+    // 2. Since 0013 is now "skipped", we must manually ensure all its other changes (ALTER TABLEs) are applied.
+    const patchTable = (tableName: string, col: string, type: string, def?: string) => {
+      const columns = expoDb.getAllSync(`PRAGMA table_info(\`${tableName}\`)`) as any[];
+      const exists = columns.some((c: any) => c.name === col);
+      if (!exists) {
+        const d = def !== undefined ? ` DEFAULT ${def}` : '';
+        expoDb.execSync(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${col}\` ${type}${d};`);
+      }
+    };
 
-    if (lastMigration.length > 0 && Number(lastMigration[0].created_at) >= MIGRATION_0013_TIMESTAMP) {
-      // Drizzle thinks 0013 ran. Patch any missing columns (partial apply scenario).
-      const columns = expoDb.getAllSync("PRAGMA table_info(properties)") as any[];
-      const colNames = new Set(columns.map((c: any) => c.name));
+    // Properties
+    patchTable('properties', 'auto_increment_rent_enabled', 'integer', '0');
+    patchTable('properties', 'auto_increment_percent', 'real');
+    patchTable('properties', 'auto_increment_frequency', 'text');
+    patchTable('properties', 'last_increment_date', 'integer');
 
-      const patch = (col: string, type: string, def?: string) => {
-        if (!colNames.has(col)) {
-          const d = def !== undefined ? ` DEFAULT ${def}` : '';
-          expoDb.execSync(`ALTER TABLE \`properties\` ADD COLUMN \`${col}\` ${type}${d};`);
-        }
-      };
+    // Units
+    patchTable('units', 'room_group', 'text');
+    patchTable('units', 'bed_number', 'text');
 
-      patch('auto_increment_rent_enabled', 'integer', '0');
-      patch('auto_increment_percent', 'real');
-      patch('auto_increment_frequency', 'text');
-      patch('last_increment_date', 'integer');
-    }
-    // If 0013 hasn't been recorded yet, do nothing — Drizzle will run it.
+    // Bill Expenses
+    patchTable('bill_expenses', 'property_expense_id', 'integer');
   }
 } catch (e) {
-  // Safe to ignore — fresh install or table doesn't exist yet
+  console.warn('Database defensive repair failed, but continuing...', e);
 }
 
 export const db = drizzle(expoDb);

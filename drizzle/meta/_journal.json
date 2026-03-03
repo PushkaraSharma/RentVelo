@@ -96,15 +96,8 @@
     {
       "idx": 13,
       "version": "6",
-      "when": 1772560957000,
-      "tag": "0013_auto_increment_and_expenses",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "6",
-      "when": 1772561000000,
-      "tag": "0014_force_expenses_table",
+      "when": 1772530225637,
+      "tag": "0013_large_bloodaxe",
       "breakpoints": true
     }
   ]
