@@ -69,13 +69,13 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 4;
+export const OTA_VERSION = 0;
 
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
         "Added support bed system in Property type PG",
         "Fixed issue where Android keyboard suggested text auto-filled the wrong inputs",
-        "Added 'What's New' screen to keep you informed of updates"
+        "Added Excel Import feature"
     ]
 };
