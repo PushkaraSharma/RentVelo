@@ -62,7 +62,7 @@ export const TITLES = [
 ];
 
 export const PROFESSIONS = [
-    'Software Engineer', 'Doctor', 'Teacher', 'Businessman', 'Student', 'Banking', 'Government Job', 'Freelancer', 'Other'
+    'Private Job', 'White Collar Job', 'Blue Collar Job', 'Software Engineer', 'Doctor', 'Teacher', 'Businessman', 'Student', 'Banking', 'Government Job', 'Freelancer', 'Other'
 ];
 
 export const GUEST_COUNTS = [
