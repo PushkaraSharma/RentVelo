@@ -74,9 +74,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         {
           ios: {
             useFrameworks: "static",
+            deploymentTarget: "15.5",
             podfileProperties: {
               use_modular_headers: "true",
-              "ios.deploymentTarget": "15.5",
             },
             forceStaticLinking: [
               "RNFBApp",
@@ -87,8 +87,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           },
         },
       ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/auth"
     ],
     "extra": {
       "eas": {
