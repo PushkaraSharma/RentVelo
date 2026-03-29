@@ -66,6 +66,7 @@ export default function SignatureModal({ visible, onClose, onSave, propertyId }:
                     <SignatureScreen
                         ref={signatureRef}
                         onOK={handleSignatureSave}
+                        trimWhitespace={true}
                         webStyle={signatureStyle}
                         backgroundColor="#FFF"
                         penColor="#000"

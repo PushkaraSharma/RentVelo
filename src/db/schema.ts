@@ -15,6 +15,10 @@ export const properties = sqliteTable('properties', {
     penalty_grace_period_days: integer('penalty_grace_period_days'),
     penalty_amount_per_day: real('penalty_amount_per_day'),
     waive_penalty_on_partial_payment: integer('waive_penalty_on_partial_payment', { mode: 'boolean' }).default(false),
+    auto_increment_rent_enabled: integer('auto_increment_rent_enabled', { mode: 'boolean' }).default(false),
+    auto_increment_percent: real('auto_increment_percent'),
+    auto_increment_frequency: text('auto_increment_frequency', { enum: ['yearly', 'half_yearly'] }),
+    last_increment_date: integer('last_increment_date', { mode: 'timestamp' }),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -46,6 +50,8 @@ export const units = sqliteTable('units', {
     size: real('size'), // Sq. Ft.
     custom_amenities: text('custom_amenities'), // JSON string
     images: text('images'), // JSON string of URIs
+    room_group: text('room_group'), // PG only: groups beds into a physical room (e.g. "Room A")
+    bed_number: text('bed_number'), // PG only: bed identifier within room (e.g. "Bed 1")
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -218,6 +224,8 @@ export const billExpenses = sqliteTable('bill_expenses', {
     bill_id: integer('bill_id')
         .notNull()
         .references(() => rentBills.id, { onDelete: 'cascade' }),
+    property_expense_id: integer('property_expense_id')
+        .references(() => propertyExpenses.id, { onDelete: 'set null' }),
     label: text('label').notNull(),
     amount: real('amount').notNull(),
     is_recurring: integer('is_recurring', { mode: 'boolean' }).default(false),
@@ -241,3 +249,25 @@ export const notifications = sqliteTable('notifications', {
 
 export type Notification = InferSelectModel<typeof notifications>;
 export type NewNotification = InferInsertModel<typeof notifications>;
+
+// ===== PROPERTY EXPENSES =====
+
+export const propertyExpenses = sqliteTable('property_expenses', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    property_id: integer('property_id')
+        .notNull()
+        .references(() => properties.id, { onDelete: 'cascade' }),
+    amount: real('amount').notNull(),
+    expense_type: text('expense_type').notNull(),
+    frequency: text('frequency', { enum: ['one_time', 'monthly'] }).default('one_time'),
+    image_uri: text('image_uri'),
+    remarks: text('remarks'),
+    distribute_type: text('distribute_type', { enum: ['owner', 'rooms'] }).default('owner'),
+    distributed_unit_ids: text('distributed_unit_ids'), // JSON array of unit IDs
+    month: integer('month').notNull(),
+    year: integer('year').notNull(),
+    created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+});
+
+export type PropertyExpense = InferSelectModel<typeof propertyExpenses>;
+export type NewPropertyExpense = InferInsertModel<typeof propertyExpenses>;

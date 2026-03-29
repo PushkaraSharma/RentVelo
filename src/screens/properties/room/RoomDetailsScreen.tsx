@@ -86,6 +86,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    const isPGBed = !!unit?.room_group;
+
     const loadData = async () => {
         try {
             const [propData, unitData, tenantsData] = await Promise.all([
@@ -196,9 +198,15 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     };
 
     const loadPropertiesForMove = async () => {
-        const props = await getAllProperties();
-        setAvailableProperties(props);
-        setTargetPropertyId(propertyId); // Default to current property
+        if (property?.type === 'pg') {
+            // PG: lock to current property only
+            setAvailableProperties([property]);
+            setTargetPropertyId(propertyId);
+        } else {
+            const props = await getAllProperties();
+            setAvailableProperties(props);
+            setTargetPropertyId(propertyId); // Default to current property
+        }
     };
 
     useEffect(() => {
@@ -215,7 +223,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
         try {
             await deleteUnit(unitId);
             setShowDeleteModal(false);
-            showToast({ type: 'success', title: 'Success', message: 'Room deleted successfully' });
+            showToast({ type: 'success', title: 'Success', message: `${isPGBed ? 'Bed' : 'Room'} deleted successfully` });
             navigation.goBack();
         } catch (error) {
             console.error('Error deleting room:', error);
@@ -304,8 +312,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
             <Header
-                title={unit?.name || 'Room Details'}
-                subTitle={property?.name}
+                title={isPGBed ? (unit?.bed_number || unit?.name) : (unit?.name || 'Room Details')}
+                subTitle={isPGBed ? `${unit?.room_group} • ${property?.name}` : property?.name}
                 rightAction={
                     property?.is_multi_unit !== false ? (
                         <Pressable onPress={() => setShowDeleteModal(true)} style={{ padding: 4 }}>
@@ -323,7 +331,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                         onPress={() => setActiveTab('info')}
                     >
                         <Info size={20} color={activeTab === 'info' ? theme.colors.accent : theme.colors.textTertiary} />
-                        <Text style={[styles.tabText, activeTab === 'info' && styles.activeTabText]}>Room Info</Text>
+                        <Text style={[styles.tabText, activeTab === 'info' && styles.activeTabText]}>{isPGBed ? 'Bed Info' : 'Room Info'}</Text>
                     </Pressable>
                     <Pressable
                         style={[styles.tab, activeTab === 'tenants' && styles.activeTab]}
@@ -344,24 +352,43 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                     <View style={styles.infoSection}>
                         <View style={styles.infoCard}>
                             <Text style={styles.infoLabel}>Details</Text>
-                            <View style={styles.infoRow}>
-                                <Text style={styles.infoKey}>Type</Text>
-                                <Text style={styles.infoValue}>{unit?.type || 'Standard'}</Text>
-                            </View>
+                            {unit?.room_group && (
+                                <>
+                                    <View style={styles.infoRow}>
+                                        <Text style={styles.infoKey}>Room</Text>
+                                        <Text style={styles.infoValue}>{unit.room_group}</Text>
+                                    </View>
+                                    <View style={styles.infoRow}>
+                                        <Text style={styles.infoKey}>Bed</Text>
+                                        <Text style={styles.infoValue}>{unit.bed_number || 'N/A'}</Text>
+                                    </View>
+                                </>
+                            )}
+                            {!isPGBed && (
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoKey}>Type</Text>
+                                    <Text style={styles.infoValue}>{unit?.type || 'Standard'}</Text>
+                                </View>
+                            )}
                             <View style={styles.infoRow}>
                                 <Text style={styles.infoKey}>Floor</Text>
                                 <Text style={styles.infoValue}>{unit?.floor || 'N/A'}</Text>
                             </View>
-                            <View style={styles.infoRow}>
-                                <Text style={styles.infoKey}>Size</Text>
-                                <Text style={styles.infoValue}>{unit?.size ? `${unit.size} Sq. Ft.` : 'N/A'}</Text>
-                            </View>
-                            <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                                <Text style={styles.infoKey}>Furnishing</Text>
-                                <Text style={styles.infoValue}>{unit?.furnishing_type || 'None'}</Text>
-                            </View>
+                            {!isPGBed && (
+                                <>
+                                    <View style={styles.infoRow}>
+                                        <Text style={styles.infoKey}>Size</Text>
+                                        <Text style={styles.infoValue}>{unit?.size ? `${unit.size} Sq. Ft.` : 'N/A'}</Text>
+                                    </View>
+                                    <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                                        <Text style={styles.infoKey}>Furnishing</Text>
+                                        <Text style={styles.infoValue}>{unit?.furnishing_type || 'None'}</Text>
+                                    </View>
+                                </>
+                            )}
                         </View>
 
+                        {/* Rent & Billing — for PG beds, only show rent (utilities are room-level) */}
                         <View style={styles.infoCard}>
                             <Text style={styles.infoLabel}>Rent & Billing</Text>
                             <View style={styles.infoRow}>
@@ -369,8 +396,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                 <Text style={[styles.infoValue, { color: theme.colors.accent, fontWeight: 'bold' }]}>₹ {unit?.rent_amount}</Text>
                             </View>
 
-                            {/* Electricity Section */}
-                            {(unit?.electricity_rate !== null || unit?.electricity_fixed_amount !== null) && (
+                            {/* Electricity Section — hide for PG beds */}
+                            {!isPGBed && (unit?.electricity_rate !== null || unit?.electricity_fixed_amount !== null) && (
                                 <View style={styles.utilitySection}>
                                     <View style={styles.utilityHeaderSmall}>
                                         <Zap size={14} color="#EAB308" />
@@ -402,8 +429,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                 </View>
                             )}
 
-                            {/* Water Section */}
-                            {(unit?.water_rate !== null || unit?.water_fixed_amount !== null) && (
+                            {/* Water Section — hide for PG beds */}
+                            {!isPGBed && (unit?.water_rate !== null || unit?.water_fixed_amount !== null) && (
                                 <View style={styles.utilitySection}>
                                     <View style={styles.utilityHeaderSmall}>
                                         <Droplets size={14} color="#0284C7" />
@@ -437,8 +464,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                         </View>
 
                         <Button
-                            title="Update Room Details"
-                            onPress={() => navigation.navigate('AddUnit', { propertyId, unitId })}
+                            title={isPGBed ? 'Update Bed Details' : 'Update Room Details'}
+                            onPress={() => navigation.navigate('AddUnit', { propertyId, unitId, propertyType: property?.type })}
                             variant='primary'
                             style={{ marginTop: 20 }}
                         />
@@ -453,7 +480,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                         ) : (
                             <View style={styles.emptyTenantBox}>
                                 <UserPlus size={48} color={theme.colors.textTertiary} />
-                                <Text style={styles.emptyTenantText}>Room is currently empty</Text>
+                                <Text style={styles.emptyTenantText}>{isPGBed ? 'Bed is vacant' : 'Room is currently empty'}</Text>
                                 <Button
                                     title="Add New Tenant"
                                     onPress={() => navigation.navigate('AddTenant', { propertyId, unitId })}
@@ -497,6 +524,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 onPropertyPress={() => setShowPropertyPicker(true)}
                 onUnitPress={() => setShowUnitPicker(true)}
                 onSubmit={handleMoveTenant}
+                isPG={isPGBed}
             />
 
             {/* Pickers */}

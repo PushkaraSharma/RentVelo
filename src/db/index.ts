@@ -15,7 +15,12 @@ export {
     getUnitById,
     updateUnit,
     deleteUnit,
+    createPGRoom,
+    getUnitsGroupedByRoom,
+    getBedsForRoom,
+    updatePGRoom,
 } from './propertyService';
+export type { PGRoomConfig } from './propertyService';
 
 // Tenant operations
 export {
@@ -74,6 +79,7 @@ export {
     getBillPayments,
     resetBill,
     syncPendingBillsWithUnitSettings,
+    savePGUtilityReading,
 } from './billService';
 
 // Notification operations
@@ -83,6 +89,17 @@ export {
     getUnreadNotificationCount,
     markNotificationAsRead,
     markAllNotificationsAsRead,
+    clearAllNotifications,
     generateRentReminders
 } from './notificationService';
 export type { Notification } from './notificationService';
+
+// Expense operations
+export {
+    createExpense,
+    getExpensesByProperty,
+    getExpensesByPropertyMonth,
+    deleteExpense,
+    getExpenseSummary,
+    getRecurringExpenses,
+} from './expenseService';

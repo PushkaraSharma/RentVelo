@@ -56,13 +56,13 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     // Single Unit Form State
     const [rentAmount, setRentAmount] = useState('');
     const [rentCycle, setRentCycle] = useState<'first_of_month' | 'relative'>('first_of_month');
-    const [electricityEnabled, setElectricityEnabled] = useState(true);
-    const [electricityType, setElectricityType] = useState('Metered');
+    const [electricityEnabled, setElectricityEnabled] = useState(false);
+    const [electricityType, setElectricityType] = useState('Free');
     const [electricityValue, setElectricityValue] = useState('');
     const [initialElectricityReading, setInitialElectricityReading] = useState('');
     const [electricityDefaultUnits, setElectricityDefaultUnits] = useState('');
     const [waterEnabled, setWaterEnabled] = useState(false);
-    const [waterType, setWaterType] = useState('Fixed');
+    const [waterType, setWaterType] = useState('Free');
     const [waterValue, setWaterValue] = useState('');
     const [initialWaterReading, setInitialWaterReading] = useState('');
     const [defaultUnitId, setDefaultUnitId] = useState<number | null>(null);
@@ -201,6 +201,44 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             }
         }
 
+        if (!isMultiUnit) {
+            if (electricityEnabled) {
+                if (electricityType === 'Metered') {
+                    if (!electricityValue || parseFloat(electricityValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Electricity Rate per Unit' });
+                        return;
+                    }
+                    if (!initialElectricityReading || isNaN(parseFloat(initialElectricityReading))) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Initial Electricity Meter Reading' });
+                        return;
+                    }
+                } else if (electricityType === 'Fixed') {
+                    if (!electricityValue || parseFloat(electricityValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Fixed Electricity Amount' });
+                        return;
+                    }
+                }
+            }
+
+            if (waterEnabled) {
+                if (waterType === 'Metered') {
+                    if (!waterValue || parseFloat(waterValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Water Rate per Unit' });
+                        return;
+                    }
+                    if (!initialWaterReading || isNaN(parseFloat(initialWaterReading))) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Initial Water Meter Reading' });
+                        return;
+                    }
+                } else if (waterType === 'Fixed') {
+                    if (!waterValue || parseFloat(waterValue) <= 0) {
+                        showToast({ type: 'error', title: 'Error', message: 'Please enter a valid Fixed Water Amount' });
+                        return;
+                    }
+                }
+            }
+        }
+
         setLoading(true);
         try {
             let finalImageUri = image;
@@ -276,12 +314,12 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 trackEvent(AnalyticsEvents.PROPERTY_ADDED, { type: propertyType, is_multi_unit: isMultiUnit.toString() });
                 setShowSuccessModal(true);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving property:', error);
             showToast({
                 type: 'error',
                 title: 'Error',
-                message: `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`
+                message: error?.message || `Failed to ${isEditMode ? 'update' : 'create'} property. Please try again.`
             });
         } finally {
             setLoading(false);
@@ -296,35 +334,45 @@ export default function AddPropertyScreen({ navigation, route }: any) {
         const count = parseInt(totalUnits);
         const floors = parseInt(totalFloors) || 1;
         const unitsPerFloor = Math.ceil(count / floors);
+        const isPG = propertyType === 'pg';
 
         try {
             for (let i = 1; i <= count; i++) {
                 const floorNum = Math.ceil(i / unitsPerFloor);
-                const unitInFloor = i % unitsPerFloor === 0 ? unitsPerFloor : i % unitsPerFloor;
 
                 let name = `Room ${i}`;
+                const floorLabel = floors > 1 ? `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor` : undefined;
 
                 setCurrentBulkRoomName(name);
                 setBulkProgress(i / count);
 
-                await createUnit({
-                    property_id: createdPropertyId,
-                    name: name,
-                    rent_amount: 0,
-                    rent_cycle: 'first_of_month',
-                    is_metered: true,
-                    electricity_rate: 0,
-                    water_fixed_amount: 0,
-                    floor: floors > 1 ? `${floorNum}${floorNum === 1 ? 'st' : floorNum === 2 ? 'nd' : floorNum === 3 ? 'rd' : 'th'} Floor` : undefined,
-                });
+                if (isPG) {
+                    // For PG: each room gets 1 default bed with room_group + bed_number
+                    const bedName = 'Bed 1';
+                    await createUnit({
+                        property_id: createdPropertyId,
+                        name: `${name} - ${bedName}`,
+                        rent_amount: 0,
+                        rent_cycle: 'first_of_month',
+                        floor: floorLabel,
+                        room_group: name,
+                        bed_number: bedName,
+                    });
+                } else {
+                    await createUnit({
+                        property_id: createdPropertyId,
+                        name: name,
+                        rent_amount: 0,
+                        rent_cycle: 'first_of_month',
+                        floor: floorLabel,
+                    });
+                }
 
                 // Small delay to let the UI breathe and show progress
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
-
-
             showToast({ type: 'success', title: 'Success', message: `Successfully created ${count} rooms!` });
-            navigation.goBack();
+            navigation.replace('RoomsList', { propertyId: createdPropertyId });
         } catch (error) {
             console.error('Bulk creation failed:', error);
             showToast({ type: 'error', title: 'Error', message: 'Failed to create all rooms. Some rooms may have been created.' });
@@ -643,36 +691,6 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         ))}
                     </View>
 
-                    {/* Rent Penalties */}
-                    <Text style={styles.sectionTitle}>Rent Penalties (Optional)</Text>
-                    <View style={[styles.row, { alignItems: 'center', justifyContent: 'space-between' }]}>
-                        <View style={{ flex: 1, marginRight: isMultiUnit ? theme.spacing.m : 0 }}>
-                            <Input
-                                label="PENALTY AFTER DAYS"
-                                placeholder="e.g. 5 days"
-                                value={penaltyGracePeriodDays}
-                                onChangeText={setPenaltyGracePeriodDays}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Input
-                                label="PENALTY AMOUNT"
-                                placeholder="e.g. ₹50 per day"
-                                value={penaltyAmountPerDay}
-                                onChangeText={setPenaltyAmountPerDay}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                    </View>
-
-                    <View style={[styles.utilityHeader, { marginBottom: theme.spacing.m }]}>
-                        <Text style={[{ flex: 1, color: theme.colors.textSecondary, fontSize: theme.typography.s, fontWeight: theme.typography.medium }]}>
-                            No penalty if partial payment done
-                        </Text>
-                        <Toggle value={waivePenaltyOnPartialPayment} onValueChange={setWaivePenaltyOnPartialPayment} />
-                    </View>
-
                     {/* Owner Details */}
                     <Text style={styles.sectionTitle}>Owner Details</Text>
                     <Input
@@ -762,7 +780,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                             icon: Building,
                             onPress: () => {
                                 setShowSuccessModal(false);
-                                navigation.replace('AddUnit', { propertyId: createdPropertyId });
+                                navigation.replace('AddUnit', { propertyId: createdPropertyId, propertyType });
                             }
                         },
                         {

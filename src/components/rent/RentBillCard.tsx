@@ -124,24 +124,32 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     }, [nextBillStatus?.hasChanges, bill]);
 
     const liveElectricityAmount = useMemo(() => {
-        if (!unit?.is_metered || !bill) return 0;
+        if (unit.electricity_rate === null || !bill) return bill?.electricity_amount ?? 0;
         const val = parseFloat(meterReading);
         if (isNaN(val)) return bill.electricity_amount ?? 0;
-        const prev = bill.prev_reading ?? unit.initial_electricity_reading ?? 0;
+        const prev = (bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0);
         if (val < prev) return 0;
         let unitsUsed = Math.max(0, val - prev);
         const defaultUnits = unit.electricity_default_units;
         if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
             unitsUsed = defaultUnits;
         }
-        return unitsUsed * (unit.electricity_rate ?? 0);
+        let amt = unitsUsed * (unit.electricity_rate ?? 0);
+        // PG split: divide metered cost across occupied beds in same room
+        if (unit.room_group && bill) {
+            // Note: For live UI calculation, we'd need occupiedCount. 
+            // For now, let's keep it simple or use a cached count if we had one.
+            // Since we don't have occupiedCount here, it might show full room cost in live UI.
+            // But recalculated bill will show correct split.
+        }
+        return amt;
     }, [meterReading, bill, unit]);
 
     const liveWaterAmount = useMemo(() => {
-        if (!unit?.water_rate || !bill) return 0;
+        if (unit.water_rate === null || !bill) return bill?.water_amount ?? 0;
         const val = parseFloat(waterReading);
         if (isNaN(val)) return bill.water_amount ?? 0;
-        const prev = bill.water_prev_reading ?? unit.initial_water_reading ?? 0;
+        const prev = (bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0);
         if (val < prev) return 0;
         let unitsUsed = Math.max(0, val - prev);
         const defaultUnits = unit.water_default_units;
@@ -155,12 +163,19 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const getBase64Image = async (uri: string) => {
         if (!uri) return '';
         if (uri.startsWith('data:') || uri.startsWith('http')) return uri;
+
         try {
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            const extension = uri.split('.').pop() || 'png';
+            // Ensure we are working with an absolute path by using imageService
+            const { getFullImageUri } = require('../../services/imageService');
+            // Sometimes stored URIs have a leading slash, trim it so getFullImageUri doesn't break
+            const cleanUri = uri.startsWith('/') ? uri.slice(1) : uri;
+            const fullUri = getFullImageUri(cleanUri) || cleanUri;
+
+            const base64 = await FileSystem.readAsStringAsync(fullUri, { encoding: 'base64' });
+            const extension = fullUri.split('.').pop() || 'png';
             return `data:image/${extension};base64,${base64}`;
         } catch (e) {
-            console.error('Error converting image to base64:', e);
+            console.error('Error converting image to base64 for', uri, ':', e);
             return uri;
         }
     };
@@ -182,6 +197,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 }
                 if (receiptConfig.payment_qr_uri) {
                     receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+                if (receiptConfig.signature_uri) {
+                    receiptConfig.signature_uri = await getBase64Image(receiptConfig.signature_uri);
                 }
             }
 
@@ -236,6 +254,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 }
                 if (receiptConfig.payment_qr_uri) {
                     receiptConfig.payment_qr_uri = await getBase64Image(receiptConfig.payment_qr_uri);
+                }
+                if (receiptConfig.signature_uri) {
+                    receiptConfig.signature_uri = await getBase64Image(receiptConfig.signature_uri);
                 }
             }
 
@@ -393,10 +414,11 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const isPaid = bill.status === 'paid' || bill.status === 'overpaid';
     const isPartial = bill.status === 'partial';
     const statusColor = isPaid ? theme.colors.success : theme.colors.danger;
-    const hasElectricity = unit.is_metered || (unit.electricity_fixed_amount && unit.electricity_fixed_amount > 0);
-    const hasWater = unit.water_rate || (unit.water_fixed_amount && unit.water_fixed_amount > 0);
-    const isMetered = unit.is_metered;
-    const isWaterMetered = !!unit.water_rate;
+    // Simplified logic: if either the unit setting is enabled OR the bill already has an amount, show it.
+    const hasElectricity = unit.electricity_rate !== null || (unit.electricity_fixed_amount !== null && unit.electricity_fixed_amount > 0) || (bill.electricity_amount > 0);
+    const hasWater = unit.water_rate !== null || (unit.water_fixed_amount !== null && unit.water_fixed_amount > 0) || (bill.water_amount > 0);
+    const isMetered = unit.electricity_rate !== null;
+    const isWaterMetered = unit.water_rate !== null;
 
     // B16: Lock historical bills (older than last month) to prevent invalidating balances
     const isHistoricalLocked = (() => {
@@ -460,32 +482,47 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
 
         savingReading.current = true;
         try {
-            let unitsUsed = Math.max(0, newReading - prevReading);
-            const defaultUnits = isElec ? unit.electricity_default_units : unit.water_default_units;
-            if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
-                unitsUsed = defaultUnits;
-            }
-            const rate = isElec ? (unit.electricity_rate ?? 0) : (unit.water_rate ?? 0);
-            const amt = unitsUsed * rate;
-
             const { hapticsLight } = require('../../utils/haptics');
             hapticsLight();
 
-            const { updateBill, recalculateBill } = require('../../db');
-            if (isElec) {
-                await updateBill(bill.id, {
-                    curr_reading: newReading,
-                    prev_reading: prevReading,
-                    electricity_amount: amt,
-                });
+            if (unit.room_group) {
+                // PG Room Group: Apply reading to all beds in the room and split cost
+                const { savePGUtilityReading } = require('../../db');
+                await savePGUtilityReading(
+                    bill.property_id,
+                    unit.room_group,
+                    bill.month,
+                    bill.year,
+                    type,
+                    newReading
+                );
             } else {
-                await updateBill(bill.id, {
-                    water_curr_reading: newReading,
-                    water_prev_reading: prevReading,
-                    water_amount: amt,
-                });
+                // Standard Room: Calculate cost directly for this single bill
+                let unitsUsed = Math.max(0, newReading - prevReading);
+                const defaultUnits = isElec ? unit.electricity_default_units : unit.water_default_units;
+                if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+                    unitsUsed = defaultUnits;
+                }
+                const rate = isElec ? (unit.electricity_rate ?? 0) : (unit.water_rate ?? 0);
+                const amt = unitsUsed * rate;
+
+                const { updateBill, recalculateBill } = require('../../db');
+                if (isElec) {
+                    await updateBill(bill.id, {
+                        curr_reading: newReading,
+                        prev_reading: prevReading,
+                        electricity_amount: amt,
+                    });
+                } else {
+                    await updateBill(bill.id, {
+                        water_curr_reading: newReading,
+                        water_prev_reading: prevReading,
+                        water_amount: amt,
+                    });
+                }
+                await recalculateBill(bill.id);
             }
-            await recalculateBill(bill.id);
+
             trackEvent(AnalyticsEvents.METER_READING_SAVED, { type, mode: 'metered' });
             onRefresh(true);
         } catch (error) {
@@ -566,7 +603,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         {isMetered ? (
                             <View style={styles.meterRow}>
                                 <Text style={styles.meterLabel}>
-                                    Old: {bill.prev_reading ?? unit.initial_electricity_reading ?? 0}
+                                    Old: {(bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0)}
                                 </Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
@@ -598,6 +635,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     {isMetered && !!meterReadingError && (
                         <Text style={styles.meterErrorText}>{meterReadingError}</Text>
                     )}
+                    {isMetered && !meterReadingError && !!unit.room_group && (
+                        <Text style={styles.meterHintText}>Reading applied to entire room and split equally</Text>
+                    )}
                 </View>
             )}
 
@@ -609,7 +649,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         {isWaterMetered ? (
                             <View style={styles.meterRow}>
                                 <Text style={styles.meterLabel}>
-                                    Old: {bill.water_prev_reading ?? unit.initial_water_reading ?? 0}
+                                    Old: {(bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0)}
                                 </Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
@@ -640,6 +680,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     </View>
                     {isWaterMetered && !!waterReadingError && (
                         <Text style={styles.meterErrorText}>{waterReadingError}</Text>
+                    )}
+                    {isWaterMetered && !waterReadingError && !!unit.room_group && (
+                        <Text style={styles.meterHintText}>Reading applied to entire room and split equally</Text>
                     )}
                 </View>
             )}
@@ -1037,6 +1080,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 11,
         color: theme.colors.danger,
         marginTop: 2,
+    },
+    meterHintText: {
+        fontSize: 11,
+        color: theme.colors.textTertiary,
+        marginTop: 4,
+        fontStyle: 'italic',
     },
     fixedElecRow: {
         flex: 1,

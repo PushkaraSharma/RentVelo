@@ -2,15 +2,18 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { BellOff, Check, Banknote } from 'lucide-react-native';
+import { BellOff, Check, Banknote, Sparkles, ChevronRight } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
 import { Notification, getNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '../../db';
+import WhatsNewModal from '../../components/modals/WhatsNewModal';
+import { CHANGELOG } from '../../utils/Constants';
 
 export default function NotificationsCenterScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
     const styles = getStyles(theme, isDark);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [showWhatsNew, setShowWhatsNew] = useState(false);
 
     const loadNotifications = async () => {
         try {
@@ -39,11 +42,10 @@ export default function NotificationsCenterScreen({ navigation }: any) {
     const handlePress = async (item: Notification) => {
         if (!item.is_read) {
             await markNotificationAsRead(item.id);
+            await loadNotifications();
         }
         if (item.property_id) {
             navigation.navigate('TakeRent', { propertyId: item.property_id, initialFilter: 'pending' });
-        } else {
-            loadNotifications();
         }
     };
 
@@ -58,17 +60,40 @@ export default function NotificationsCenterScreen({ navigation }: any) {
         return d.toLocaleDateString();
     };
 
+    const getNotifIcon = (type: string) => {
+        if (type === 'rent_due') return <Banknote size={20} color={theme.colors.warning} />;
+        return <Banknote size={20} color={theme.colors.success} />;
+    };
+
+    const renderWhatsNewCard = () => (
+        <Pressable style={styles.whatsNewCard} onPress={() => setShowWhatsNew(true)}>
+            <View style={styles.whatsNewIconBox}>
+                <Sparkles size={20} color={theme.colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+                <Text style={styles.notifTitle}>What's New</Text>
+                <Text style={styles.notifBody} numberOfLines={1}>
+                    v{CHANGELOG.version} • {CHANGELOG.features[0]}
+                </Text>
+            </View>
+            <ChevronRight size={18} color={theme.colors.textTertiary} />
+        </Pressable>
+    );
+
     const renderNotification = ({ item }: { item: Notification }) => (
         <Pressable
             style={[styles.card, !item.is_read && styles.unreadCard]}
             onPress={() => handlePress(item)}
         >
-            <View style={[styles.iconBox, item.type === 'rent_due' ? styles.iconDue : styles.iconPayment]}>
-                <Banknote size={20} color={item.type === 'rent_due' ? theme.colors.warning : theme.colors.success} />
+            <View style={[
+                styles.iconBox,
+                item.type === 'rent_due' ? styles.iconDue : styles.iconPayment
+            ]}>
+                {getNotifIcon(item.type)}
             </View>
             <View style={{ flex: 1 }}>
                 <Text style={styles.notifTitle}>{item.title}</Text>
-                <Text style={styles.notifBody}>{item.body}</Text>
+                <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
                 <Text style={styles.notifTime}>{item.created_at ? formatDate(item.created_at) : 'Just now'}</Text>
             </View>
             {!item.is_read && <View style={styles.unreadDot} />}
@@ -86,22 +111,27 @@ export default function NotificationsCenterScreen({ navigation }: any) {
                 }
             />
 
-            {notifications.length === 0 ? (
-                <View style={styles.emptyState}>
-                    <BellOff size={48} color={theme.colors.border} />
-                    <Text style={styles.emptyTitle}>No Notifications</Text>
-                    <Text style={styles.emptySubtitle}>
-                        Rent reminders and collection alerts will appear here
-                    </Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={notifications}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={renderNotification}
-                    contentContainerStyle={{ padding: theme.spacing.m }}
-                />
-            )}
+            <FlatList
+                data={notifications}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={renderNotification}
+                contentContainerStyle={{ padding: theme.spacing.m, flexGrow: 1 }}
+                ListHeaderComponent={renderWhatsNewCard}
+                ListEmptyComponent={
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptySubtitle}>
+                            Rent reminders and collection alerts will appear here
+                        </Text>
+                    </View>
+                }
+            />
+
+            <WhatsNewModal
+                visible={showWhatsNew}
+                onClose={() => setShowWhatsNew(false)}
+                version={CHANGELOG.version}
+                features={CHANGELOG.features}
+            />
         </SafeAreaView>
     );
 }
@@ -111,47 +141,39 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.m,
-        paddingBottom: theme.spacing.m,
-    },
-    backBtn: {
-        width: 44,
-        height: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
     markAllBtn: {
         width: 44,
         height: 44,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    emptyState: {
-        flex: 1,
+    whatsNewCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: isDark ? theme.colors.accent + '15' : theme.colors.accentLight + '50',
+        borderRadius: 16,
+        padding: theme.spacing.m,
+        marginBottom: theme.spacing.m,
+        gap: theme.spacing.m,
+        borderWidth: 1,
+        borderColor: theme.colors.accent + '30',
+    },
+    whatsNewIconBox: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: isDark ? theme.colors.accent + '30' : theme.colors.accentLight,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 40,
     },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        marginTop: theme.spacing.l,
+    emptyState: {
+        alignItems: 'center',
+        paddingTop: 40,
     },
     emptySubtitle: {
         fontSize: 14,
         color: theme.colors.textSecondary,
         textAlign: 'center',
-        marginTop: 8,
         lineHeight: 20,
     },
     card: {

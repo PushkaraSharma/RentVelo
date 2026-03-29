@@ -2,25 +2,39 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { Globe, Github, Twitter, Heart } from 'lucide-react-native';
+import { Globe, Heart } from 'lucide-react-native';
 import Header from '../../components/common/Header';
-import Constants from 'expo-constants';
-import { OTA_VERSION } from '../../utils/Constants';
+import { CHANGELOG } from '../../utils/Constants';
+import { hapticsSelection } from '../../utils/haptics';
 
 export default function AboutScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
     const styles = getStyles(theme, isDark);
+    const [tapCount, setTapCount] = React.useState(0);
+
+    const handleLogoPress = () => {
+        const newCount = tapCount + 1;
+        setTapCount(newCount);
+        hapticsSelection();
+
+        if (newCount >= 5) {
+            setTapCount(0);
+            navigation.navigate('ExcelImport');
+        }
+    };
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <Header title="About App" />
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.logoSection}>
-                    <View style={styles.logoPlaceholder}>
-                        <Image source={isDark ? require('../../../assets/app-icon-dark.png') : require('../../../assets/app-icon.png')} style={styles.logo} />
-                    </View>
+                    <Pressable onPress={handleLogoPress}>
+                        <View style={styles.logoPlaceholder}>
+                            <Image source={isDark ? require('../../../assets/app-icon-dark.png') : require('../../../assets/app-icon.png')} style={styles.logo} />
+                        </View>
+                    </Pressable>
                     <Text style={styles.appName}>RentVelo</Text>
-                    <Text style={styles.appVersion}>Version {Constants.expoConfig?.version}_{OTA_VERSION}</Text>
+                    <Text style={styles.appVersion}>Version {CHANGELOG.version}</Text>
                 </View>
 
                 <View style={styles.card}>

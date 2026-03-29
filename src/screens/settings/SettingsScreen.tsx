@@ -21,8 +21,7 @@ import {
     Share2
 } from 'lucide-react-native';
 import Toggle from '../../components/common/Toggle';
-import Constants from 'expo-constants';
-import { OTA_VERSION } from '../../utils/Constants';
+import { CHANGELOG } from '../../utils/Constants';
 import { signOutGoogle } from '../../services/googleAuthService';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getDb } from '../../db';
@@ -86,7 +85,7 @@ export default function SettingsScreen({ navigation }: any) {
         try {
             await Share.share({
                 message: 'Manage your properties easily with RentVelo! Download now to automate your rent collections.',
-                url: 'https://rentvelo.com',
+                url: 'https://rentvelo.indieroots.in/',
                 title: 'Share RentVelo'
             });
         } catch (error) {
@@ -164,12 +163,14 @@ export default function SettingsScreen({ navigation }: any) {
                             color="#EC4899"
                             onPress={() => navigation.navigate('Backup')}
                         />
-                        {/* <SettingItem
-                            icon={Database}
-                            label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
-                            color="#8B5CF6"
-                            onPress={handleSeedDatabase}
-                        /> */}
+                        {__DEV__ && (
+                            <SettingItem
+                                icon={Database}
+                                label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
+                                color="#8B5CF6"
+                                onPress={handleSeedDatabase}
+                            />
+                        )}
                     </View>
                 </View>
 
@@ -218,7 +219,7 @@ export default function SettingsScreen({ navigation }: any) {
                         <LogOut size={20} color={theme.colors.danger} />
                         <Text style={styles.logoutText}>Log Out</Text>
                     </Pressable>
-                    <Text style={styles.version}>RentVelo v{Constants.expoConfig?.version}_{OTA_VERSION} • Made with ❤️</Text>
+                    <Text style={styles.version}>RentVelo v{CHANGELOG.version} • Made with ❤️</Text>
                 </View>
             </ScrollView>
 

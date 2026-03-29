@@ -121,6 +121,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     actionBtn: {
         backgroundColor: theme.colors.primary,
         marginHorizontal: theme.spacing.l,
+        marginTop: theme.spacing.s,
         marginBottom: theme.spacing.s,
         borderRadius: 16,
         paddingVertical: 16,

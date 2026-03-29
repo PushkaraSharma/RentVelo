@@ -28,6 +28,7 @@ interface MoveTenantModalProps {
     onPropertyPress: () => void;
     onUnitPress: () => void;
     onSubmit: () => void;
+    isPG?: boolean;
 }
 
 const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
@@ -42,7 +43,8 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
     availableUnits,
     onPropertyPress,
     onUnitPress,
-    onSubmit
+    onSubmit,
+    isPG = false
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
@@ -70,18 +72,22 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
                             </Pressable>
                         </View>
 
-                        <Text style={styles.inputLabel}>Choose Property</Text>
-                        <Pressable style={styles.pickerTrigger} onPress={onPropertyPress}>
-                            <Text style={styles.pickerTriggerText}>
-                                {availableProperties.find(p => p.id === targetPropertyId)?.name || 'Select Property'}
-                            </Text>
-                            <ChevronRight size={20} color={theme.colors.textSecondary} />
-                        </Pressable>
+                        {!isPG && (
+                            <>
+                                <Text style={styles.inputLabel}>Choose Property</Text>
+                                <Pressable style={styles.pickerTrigger} onPress={onPropertyPress}>
+                                    <Text style={styles.pickerTriggerText}>
+                                        {availableProperties.find(p => p.id === targetPropertyId)?.name || 'Select Property'}
+                                    </Text>
+                                    <ChevronRight size={20} color={theme.colors.textSecondary} />
+                                </Pressable>
+                            </>
+                        )}
 
-                        <Text style={styles.inputLabel}>Target Room</Text>
+                        <Text style={styles.inputLabel}>{isPG ? 'Target Bed' : 'Target Room'}</Text>
                         <Pressable style={styles.pickerTrigger} onPress={onUnitPress}>
                             <Text style={styles.pickerTriggerText}>
-                                {availableUnits.find(u => u.id === targetUnitId)?.name || 'Select Room'}
+                                {availableUnits.find(u => u.id === targetUnitId)?.name || (isPG ? 'Select Bed' : 'Select Room')}
                             </Text>
                             <ChevronRight size={20} color={theme.colors.textSecondary} />
                         </Pressable>

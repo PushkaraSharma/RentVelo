@@ -1,4 +1,5 @@
 import { Bike, Building, Building2, Car, Dumbbell, Home, Layers, Shield, Sparkles, Store, Wifi, Zap } from "lucide-react-native";
+import Constants from 'expo-constants';
 
 export const CURRENCY = '₹';
 
@@ -68,4 +69,13 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 2;
+export const OTA_VERSION = 0;
+
+export const CHANGELOG = {
+    version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
+    features: [
+        "Added support bed system in Property type PG",
+        "Fixed issue where Android keyboard suggested text auto-filled the wrong inputs",
+        "Added Excel Import feature"
+    ]
+};

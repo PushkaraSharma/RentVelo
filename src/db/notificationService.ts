@@ -36,6 +36,11 @@ export const markAllNotificationsAsRead = async (): Promise<void> => {
         .where(eq(notifications.is_read, false));
 };
 
+export const clearAllNotifications = async (): Promise<void> => {
+    const db = getDb();
+    await db.delete(notifications);
+};
+
 // Auto-generate rent reminders based on pending bills
 export const generateRentReminders = async (): Promise<void> => {
     const db = getDb();

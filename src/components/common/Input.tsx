@@ -19,6 +19,8 @@ export default function Input({ label, icon, error, style, ...props }: InputProp
                 <TextInput
                     style={[styles.input, style]}
                     placeholderTextColor={theme.colors.textTertiary}
+                    autoComplete={"off"}
+                    importantForAutofill={"no"}
                     {...props}
                 />
             </View>

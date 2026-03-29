@@ -92,6 +92,13 @@
       "when": 1772211782829,
       "tag": "0012_complex_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1772530225637,
+      "tag": "0013_large_bloodaxe",
+      "breakpoints": true
     }
   ]
 }
