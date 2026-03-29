@@ -55,9 +55,12 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
             setFilteredContacts(contacts);
         } else {
             const query = searchQuery.toLowerCase();
+            const numericQuery = query.replace(/[^0-9]/g, '');
             const filtered = contacts.filter(contact => {
                 const nameMatch = contact.name?.toLowerCase().includes(query);
-                const phoneMatch = contact.phoneNumbers?.some(p => p.number?.replace(/[^0-9]/g, '').includes(query.replace(/[^0-9]/g, '')));
+                const phoneMatch = numericQuery
+                    ? contact.phoneNumbers?.some(p => p.number?.replace(/[^0-9]/g, '').includes(numericQuery))
+                    : false;
                 return nameMatch || phoneMatch;
             });
             setFilteredContacts(filtered);
@@ -83,17 +86,17 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
                 <User size={20} color={theme.colors.accent} />
             </View>
             <View style={styles.contactDetails}>
-                <Text style={styles.contactName}>{item.name}</Text>
+                <Text style={[styles.contactName, { color: theme.colors.textPrimary }]}>{item.name}</Text>
                 {item.phoneNumbers?.[0] && (
                     <View style={styles.infoRow}>
                         <Phone size={12} color={theme.colors.textTertiary} style={styles.infoIcon} />
-                        <Text style={styles.contactInfo}>{item.phoneNumbers[0].number}</Text>
+                        <Text style={[styles.contactInfo, { color: theme.colors.textSecondary }]}>{item.phoneNumbers[0].number}</Text>
                     </View>
                 )}
                 {item.emails?.[0] && !item.phoneNumbers?.[0] && (
                     <View style={styles.infoRow}>
                         <Mail size={12} color={theme.colors.textTertiary} style={styles.infoIcon} />
-                        <Text style={styles.contactInfo}>{item.emails[0].email}</Text>
+                        <Text style={[styles.contactInfo, { color: theme.colors.textSecondary }]}>{item.emails[0].email}</Text>
                     </View>
                 )}
             </View>
@@ -107,7 +110,7 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
             transparent={false}
             onRequestClose={onClose}
         >
-            <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+            <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
                     <View>
                         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>Import Contact</Text>

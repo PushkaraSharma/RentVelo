@@ -99,6 +99,13 @@
       "when": 1772530225637,
       "tag": "0013_large_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1774766534121,
+      "tag": "0014_gorgeous_cyclops",
+      "breakpoints": true
     }
   ]
 }

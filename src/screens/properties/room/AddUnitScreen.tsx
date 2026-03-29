@@ -9,13 +9,25 @@ import SuccessModal from '../../../components/common/SuccessModal';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
-import { createUnit, updateUnit, getUnitById, syncPendingBillsWithUnitSettings, createPGRoom, updatePGRoom, getBedsForRoom } from '../../../db';
+import { createUnit, updateUnit, getUnitById, getPropertyById, syncPendingBillsWithUnitSettings, createPGRoom, updatePGRoom, getBedsForRoom } from '../../../db';
 import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { useToast } from '../../../hooks/useToast';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import PromptModal from '../../../components/common/PromptModal';
+
+const generateFloorOptions = (totalFloors: number) => {
+    const options = ['Basement 2', 'Basement 1', 'Ground Floor']
+    for (let i = 1; i <= totalFloors; i++) {
+        let suffix = 'th';
+        if (i % 10 === 1 && i % 100 !== 11) suffix = 'st';
+        else if (i % 10 === 2 && i % 100 !== 12) suffix = 'nd';
+        else if (i % 10 === 3 && i % 100 !== 13) suffix = 'rd';
+        options.push(`${i}${suffix} Floor`);
+    }
+    return options;
+};
 
 export default function AddUnitScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -63,6 +75,8 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
     // Pickers visibility
     const [showRoomTypePicker, setShowRoomTypePicker] = useState(false);
+    const [showFloorPicker, setShowFloorPicker] = useState(false);
+    const [floorOptions, setFloorOptions] = useState<any[]>([]);
 
     // Photos
     const [images, setImages] = useState<string[]>([]);
@@ -77,12 +91,27 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [sameRent, setSameRent] = useState(true);
 
     React.useEffect(() => {
+        loadProperty();
         if (isEditMode) {
             loadUnitData();
         } else if (isEditPGRoom) {
             loadPGRoomData();
         }
-    }, [unitId, roomGroupParam]);
+    }, [unitId, propertyId, roomGroupParam]);
+
+    const loadProperty = async () => {
+        try {
+            const prop = await getPropertyById(propertyId);
+            if (prop && prop.total_floors) {
+                setFloorOptions(generateFloorOptions(prop.total_floors));
+            } else {
+                setFloorOptions(generateFloorOptions(10));
+            }
+        } catch (e) {
+            console.error(e);
+            setFloorOptions(generateFloorOptions(10));
+        }
+    };
 
     const loadPGRoomData = async () => {
         try {
@@ -695,13 +724,13 @@ export default function AddUnitScreen({ navigation, route }: any) {
                         <>
                             <Text style={styles.sectionLabel}>FACILITIES & ADDITIONAL INFO</Text>
                             <View style={styles.section}>
-                                <Input
-                                    label="Floor Number"
-                                    placeholder="e.g. 2nd Floor"
-                                    value={floor}
-                                    onChangeText={setFloor}
-                                />
-
+                                <Text style={styles.inputLabel}>Floor Selection</Text>
+                                <Pressable style={styles.pickerContainer} onPress={() => setShowFloorPicker(true)}>
+                                    <Text style={[styles.pickerText, !floor && { color: theme.colors.textTertiary }]}>
+                                        {floor || 'Select Floor (e.g. Ground Floor)'}
+                                    </Text>
+                                    <Layout size={18} color={theme.colors.accent} />
+                                </Pressable>
                                 <Text style={styles.inputLabel}>Furnishing Status</Text>
                                 <View style={styles.furnishingContainer}>
                                     {FURNISHING_TYPES.map((type) => (
@@ -791,6 +820,15 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 options={ROOM_TYPES}
                 selectedValue={roomType}
                 onSelect={setRoomType}
+            />
+
+            <PickerBottomSheet
+                visible={showFloorPicker}
+                onClose={() => setShowFloorPicker(false)}
+                title="Select Floor"
+                options={floorOptions}
+                selectedValue={floor}
+                onSelect={setFloor}
             />
 
             {/* Success Modal */}

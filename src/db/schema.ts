@@ -18,6 +18,7 @@ export const properties = sqliteTable('properties', {
     auto_increment_rent_enabled: integer('auto_increment_rent_enabled', { mode: 'boolean' }).default(false),
     auto_increment_percent: real('auto_increment_percent'),
     auto_increment_frequency: text('auto_increment_frequency', { enum: ['yearly', 'half_yearly'] }),
+    total_floors: integer('total_floors'),
     last_increment_date: integer('last_increment_date', { mode: 'timestamp' }),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),

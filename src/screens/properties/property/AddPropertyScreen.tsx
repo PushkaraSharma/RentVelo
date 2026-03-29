@@ -95,6 +95,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 setPenaltyGracePeriodDays(data.penalty_grace_period_days?.toString() || '');
                 setPenaltyAmountPerDay(data.penalty_amount_per_day?.toString() || '');
                 setWaivePenaltyOnPartialPayment(data.waive_penalty_on_partial_payment ?? false);
+                setTotalFloors(data.total_floors?.toString() || '');
 
                 // If it's a single unit and edit mode, load the unit details
                 if (data.is_multi_unit === false && isEditMode) {
@@ -265,6 +266,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 penalty_grace_period_days: penaltyGracePeriodDays ? parseInt(penaltyGracePeriodDays) : null,
                 penalty_amount_per_day: penaltyAmountPerDay ? parseFloat(penaltyAmountPerDay) : null,
                 waive_penalty_on_partial_payment: waivePenaltyOnPartialPayment,
+                total_floors: totalFloors ? parseInt(totalFloors) : null,
             };
 
             if (isEditMode) {
