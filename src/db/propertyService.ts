@@ -120,14 +120,26 @@ export const createUnit = async (unit: NewUnit): Promise<number> => {
         }
     }
 
-    const result = await db.insert(units).values(unit).returning({ id: units.id });
+    // Auto-assign sequence if missing
+    let finalUnit = { ...unit };
+    if (finalUnit.sequence === undefined || finalUnit.sequence === null) {
+        const maxSeqResult = await db.select({ maxSeq: sql<number>`MAX(${units.sequence})` })
+            .from(units)
+            .where(eq(units.property_id, unit.property_id));
+        const maxSeq = maxSeqResult[0]?.maxSeq || 0;
+        finalUnit.sequence = maxSeq + 1;
+    }
+
+    const result = await db.insert(units).values(finalUnit).returning({ id: units.id });
     return result[0].id;
 };
 
 // Get Units by Property ID with Tenant info
 export const getUnitsByPropertyId = async (propertyId: number): Promise<any[]> => {
     const db = getDb();
-    const propUnits = await db.select().from(units).where(eq(units.property_id, propertyId)).orderBy(units.name);
+    const propUnits = await db.select().from(units)
+        .where(eq(units.property_id, propertyId))
+        .orderBy(sql`CASE WHEN ${units.sequence} IS NULL THEN 1 ELSE 0 END`, units.sequence, units.created_at);
 
     return await Promise.all(propUnits.map(async (unit) => {
         const activeTenant = await db.select()
@@ -202,6 +214,7 @@ export interface PGRoomConfig {
     initialWaterReading?: number | null;
     waterDefaultUnits?: number | null;
     furnishingType?: 'full' | 'semi' | 'none' | null;
+    sequence?: number | null;
 }
 
 /**
@@ -233,6 +246,7 @@ export const createPGRoom = async (config: PGRoomConfig): Promise<number[]> => {
             initial_water_reading: config.initialWaterReading,
             water_default_units: config.waterDefaultUnits,
             furnishing_type: config.furnishingType,
+            sequence: config.sequence,
         });
         bedIds.push(id);
     }
@@ -274,7 +288,7 @@ export const getBedsForRoom = async (propertyId: number, roomGroup: string): Pro
     const db = getDb();
     return await db.select().from(units).where(
         and(eq(units.property_id, propertyId), eq(units.room_group, roomGroup))
-    ).orderBy(units.bed_number);
+    ).orderBy(sql`CASE WHEN ${units.sequence} IS NULL THEN 1 ELSE 0 END`, units.sequence, units.created_at, units.bed_number);
 };
 
 /**
@@ -331,6 +345,7 @@ export const updatePGRoom = async (
                 water_fixed_amount: config.waterFixedAmount ?? null,
                 initial_water_reading: config.initialWaterReading ?? null,
                 water_default_units: config.waterDefaultUnits ?? null,
+                sequence: config.sequence ?? null,
                 updated_at: new Date(),
             })
             .where(eq(units.id, bed.id));
@@ -356,6 +371,7 @@ export const updatePGRoom = async (
             water_fixed_amount: config.waterFixedAmount,
             initial_water_reading: config.initialWaterReading,
             water_default_units: config.waterDefaultUnits,
+            sequence: config.sequence,
         });
     }
 

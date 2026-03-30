@@ -53,6 +53,7 @@ export const units = sqliteTable('units', {
     images: text('images'), // JSON string of URIs
     room_group: text('room_group'), // PG only: groups beds into a physical room (e.g. "Room A")
     bed_number: text('bed_number'), // PG only: bed identifier within room (e.g. "Bed 1")
+    sequence: integer('sequence'), // Optional sequence for custom ordering
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });

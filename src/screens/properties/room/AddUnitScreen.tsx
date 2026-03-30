@@ -71,6 +71,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [floor, setFloor] = useState('');
     const [furnishing, setFurnishing] = useState<'none' | 'semi' | 'full'>('none');
     const [roomSize, setRoomSize] = useState('');
+    const [sequence, setSequence] = useState('');
     const [customAmenities, setCustomAmenities] = useState<string[]>([]);
 
     // Pickers visibility
@@ -122,6 +123,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
             setRoomName(roomGroupParam);
             setFloor(firstBed.floor || '');
             setFurnishing(firstBed.furnishing_type as any || 'none');
+            setSequence(firstBed.sequence?.toString() || '');
             setBedCount(beds.length.toString());
 
             // Check if all rents are the same
@@ -181,6 +183,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 setFloor(data.floor || '');
                 setFurnishing(data.furnishing_type as any);
                 setRoomSize(data.size?.toString() || '');
+                setSequence(data.sequence?.toString() || '');
                 setCustomAmenities(data.custom_amenities ? JSON.parse(data.custom_amenities) : []);
                 setImages(data.images ? JSON.parse(data.images) : []);
 
@@ -357,6 +360,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 floor: floor || null,
                 furnishing_type: furnishing,
                 size: roomSize ? parseFloat(roomSize) : null,
+                sequence: sequence ? parseInt(sequence) : null,
                 custom_amenities: customAmenities.length > 0 ? JSON.stringify(customAmenities) : null,
                 images: finalImages.length > 0 ? JSON.stringify(finalImages) : null,
                 is_metered: (electricityEnabled && electricityType === 'Metered') || (waterEnabled && waterType === 'Metered'),
@@ -397,6 +401,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                     initialWaterReading: unitData.initial_water_reading,
                     waterDefaultUnits: unitData.water_default_units,
                     furnishingType: unitData.furnishing_type,
+                    sequence: unitData.sequence,
                 });
 
                 // Sync all beds in this room group to update existing bills
@@ -429,6 +434,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                     initialWaterReading: unitData.initial_water_reading,
                     waterDefaultUnits: unitData.water_default_units,
                     furnishingType: unitData.furnishing_type,
+                    sequence: unitData.sequence,
                 });
                 setShowSuccessModal(true);
             } else {
@@ -755,6 +761,14 @@ export default function AddUnitScreen({ navigation, route }: any) {
                                     placeholder="e.g. 1200"
                                     value={roomSize}
                                     onChangeText={setRoomSize}
+                                    keyboardType="numeric"
+                                />
+
+                                <Input
+                                    label="Sequence (Sorting Order)"
+                                    placeholder="e.g. 1, 2, 3"
+                                    value={sequence}
+                                    onChangeText={setSequence}
                                     keyboardType="numeric"
                                 />
 
