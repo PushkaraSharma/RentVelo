@@ -497,7 +497,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
                 style={styles.fab}
                 onPress={() => setShowAddModal(true)}
             >
-                <Plus color="#FFF" size={24} />
+                <Plus color={theme.colors.background} size={24} />
             </Pressable>
 
             {/* Month Picker Overlay */}

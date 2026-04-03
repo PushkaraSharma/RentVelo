@@ -10,7 +10,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../redux/store';
 import { linkGoogleAccount, unlinkGoogleAccount } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn } from '../../services/googleAuthService';
-import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive } from '../../services/backupService';
+import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive, restoreFromLocalBackup, verifyDrivePermissions } from '../../services/backupService';
 import { storage } from '../../utils/storage';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
@@ -32,6 +32,7 @@ export default function BackupScreen({ navigation }: any) {
 
     const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [showRestoreModal, setShowRestoreModal] = useState(false);
+    const [showLocalRestoreModal, setShowLocalRestoreModal] = useState(false);
 
     useEffect(() => {
         initGoogleAuth();
@@ -56,16 +57,19 @@ export default function BackupScreen({ navigation }: any) {
         setBackingUp(true);
         const result = await performLocalBackup();
         setBackingUp(false);
-        if (result) {
+        if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
             updateLastSync();
             showToast({ type: 'success', title: 'Success', message: 'Local backup saved successfully' });
         } else {
-            showToast({ type: 'error', title: 'Error', message: 'Failed to create local backup.' });
+            const errorMsg = result.error === 'zip_failed' 
+                ? 'Failed to compress data. Check storage space.' 
+                : 'Failed to create local backup.';
+            showToast({ type: 'error', title: 'Error', message: errorMsg });
         }
     };
 
-    const toggleAutoBackup = (value: boolean) => {
+    const toggleAutoBackup = async (value: boolean) => {
         if (!isGoogleLinked && value) {
             showToast({
                 type: 'info',
@@ -74,6 +78,19 @@ export default function BackupScreen({ navigation }: any) {
             });
             return;
         }
+
+        if (value) {
+            const hasPerms = await verifyDrivePermissions();
+            if (!hasPerms) {
+                showToast({
+                    type: 'error',
+                    title: 'Permissions Missing',
+                    message: 'Drive access missing. Please disconnect and relink your account.'
+                });
+                return;
+            }
+        }
+
         setIsAutoBackupEnabled(value);
         trackEvent(AnalyticsEvents.AUTO_BACKUP_TOGGLED, { enabled: value });
         storage.set('@auto_backup_enabled', String(value));
@@ -110,14 +127,38 @@ export default function BackupScreen({ navigation }: any) {
             }
         }
         setBackingUp(true);
-        const success = await backupToGoogleDrive();
+        const result = await backupToGoogleDrive();
         setBackingUp(false);
-        if (success) {
+        if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
             updateLastSync();
             showToast({ type: 'success', title: 'Success', message: 'Backup uploaded to Google Drive.' });
         } else {
-            showToast({ type: 'error', title: 'Error', message: 'Failed to upload backup to Drive.' });
+            let errorMsg = 'Failed to upload backup to Drive.';
+            if (result.error === 'insufficient_permissions') {
+                showToast({ 
+                    type: 'info', 
+                    title: 'Action Required', 
+                    message: 'Granting permission...' 
+                });
+                // Attempt to re-authorize
+                try {
+                    const user = await signInWithGoogle();
+                    if (user) {
+                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                        // Try again once after re-authorizing
+                        handleGoogleBackup();
+                        return;
+                    }
+                } catch (e) {
+                    errorMsg = 'Drive permissions missing. Please link account and tick for "App Data" access.';
+                }
+            } else if (result.error === 'zip_failed') {
+                errorMsg = 'Failed to compress database items.';
+            } else if (result.error === 'not_signed_in') {
+                errorMsg = 'Please sign in to Google Drive first.';
+            }
+            showToast({ type: 'error', title: 'Upload Failed', message: errorMsg });
         }
     };
 
@@ -142,9 +183,9 @@ export default function BackupScreen({ navigation }: any) {
     const confirmRestore = async () => {
         setShowRestoreModal(false);
         setRestoring(true);
-        const success = await restoreFromGoogleDrive();
+        const result = await restoreFromGoogleDrive();
         setRestoring(false);
-        if (success) {
+        if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_RESTORED);
             showToast({
                 type: 'success',
@@ -152,7 +193,52 @@ export default function BackupScreen({ navigation }: any) {
                 message: 'Data restored successfully. Please restart the app for changes.'
             });
         } else {
-            showToast({ type: 'error', title: 'Restore Failed', message: 'Could not restore data from Google Drive.' });
+            let errorMsg = 'Could not restore data from Google Drive.';
+            if (result.error === 'insufficient_permissions') {
+                showToast({ 
+                    type: 'info', 
+                    title: 'Action Required', 
+                    message: 'Granting permission...' 
+                });
+                // Attempt to re-authorize
+                try {
+                    const user = await signInWithGoogle();
+                    if (user) {
+                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                        // Try restore again
+                        confirmRestore();
+                        return;
+                    }
+                } catch (e) {
+                    errorMsg = 'Drive permissions missing. Please relink account and grant file access.';
+                }
+            } else if (result.error === 'no_backup_found') {
+                errorMsg = 'No backup file discovered on your Google Drive.';
+            } else if (result.error === 'download_failed') {
+                errorMsg = 'Failed to download backup file from Drive.';
+            }
+            showToast({ type: 'error', title: 'Restore Failed', message: errorMsg });
+        }
+    };
+
+    const confirmLocalRestore = async () => {
+        setShowLocalRestoreModal(false);
+        setRestoring(true);
+        const result = await restoreFromLocalBackup();
+        setRestoring(false);
+        if (result.success) {
+            trackEvent(AnalyticsEvents.BACKUP_RESTORED);
+            showToast({
+                type: 'success',
+                title: 'Success',
+                message: 'Data restored successfully. Please restart the app for changes.'
+            });
+        } else {
+            let errorMsg = 'Could not restore data from local backup.';
+            if (result.error === 'no_local_backup_found') {
+                errorMsg = 'No local backup file was found on this device.';
+            }
+            showToast({ type: 'error', title: 'Restore Failed', message: errorMsg });
         }
     };
 
@@ -233,11 +319,22 @@ export default function BackupScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Restore</Text>
                     <View style={styles.card}>
+                        <Pressable style={styles.item} onPress={() => setShowLocalRestoreModal(true)} disabled={backingUp || restoring}>
+                            <View style={styles.itemLeft}>
+                                <HardDrive size={20} color={theme.colors.textPrimary} />
+                                <View>
+                                    <Text style={styles.itemLabel}>Local Restore</Text>
+                                    <Text style={styles.itemSubLabel}>Restore from latest local backup</Text>
+                                </View>
+                            </View>
+                            {restoring && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                        </Pressable>
+                        <View style={styles.divider} />
                         <Pressable style={styles.item} onPress={handleRestore} disabled={backingUp || restoring}>
                             <View style={styles.itemLeft}>
                                 <RotateCcw size={20} color={theme.colors.textPrimary} />
                                 <View>
-                                    <Text style={styles.itemLabel}>Restore Data</Text>
+                                    <Text style={styles.itemLabel}>Drive Restore</Text>
                                     <Text style={styles.itemSubLabel}>Import data from Google Drive</Text>
                                 </View>
                             </View>
@@ -268,7 +365,19 @@ export default function BackupScreen({ navigation }: any) {
                 onClose={() => setShowRestoreModal(false)}
                 onConfirm={confirmRestore}
                 title="Restore Data"
-                message="This will overwrite all current local data. Are you sure you want to proceed?"
+                message="This will overwrite all current local data with the Drive backup. Are you sure you want to proceed?"
+                confirmText="Restore"
+                cancelText="Cancel"
+                variant="warning"
+                loading={restoring}
+            />
+
+            <ConfirmationModal
+                visible={showLocalRestoreModal}
+                onClose={() => setShowLocalRestoreModal(false)}
+                onConfirm={confirmLocalRestore}
+                title="Local Restore"
+                message="This will overwrite your data with the local backup. Are you sure?"
                 confirmText="Restore"
                 cancelText="Cancel"
                 variant="warning"

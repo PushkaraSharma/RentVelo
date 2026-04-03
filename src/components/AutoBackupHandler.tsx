@@ -50,15 +50,21 @@ export default function AutoBackupHandler() {
 
             // Perform backup silently
             console.log('Performing silent auto-backup...');
-            const success = await backupToGoogleDrive();
+            const result = await backupToGoogleDrive();
 
-            if (success) {
+            if (result.success) {
                 storage.set('@auto_last_backup_time', now.toISOString());
                 // Also update the manual sync display time
                 storage.set('@last_backup_time', now.toISOString());
                 console.log('Auto-backup completed successfully.');
             } else {
-                console.log('Auto-backup failed silently.');
+                if (result.error === 'insufficient_permissions') {
+                    console.warn('Auto-backup skipped: Drive permissions are missing.');
+                    // Consider turning off auto backup if permissions are definitely revoked
+                    // storage.set('@auto_backup_enabled', 'false');
+                } else {
+                    console.log('Auto-backup failed quietly:', result.error);
+                }
             }
         } catch (error) {
             console.error('Error in AutoBackupHandler:', error);
