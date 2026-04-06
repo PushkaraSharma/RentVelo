@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
 import { login } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
+import { signInWithApple } from '../../services/appleAuthService';
 import { requestNotificationPermissions } from '../../services/pushNotificationService';
 import { FontAwesome } from '@expo/vector-icons';
 import { AnalyticsEvents, trackEvent, setAnalyticsUser } from '../../services/analyticsService';
@@ -15,7 +16,8 @@ export default function WelcomeScreen() {
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
-    const [loading, setLoading] = React.useState(false);
+    const [googleLoading, setGoogleLoading] = React.useState(false);
+    const [appleLoading, setAppleLoading] = React.useState(false);
 
     React.useEffect(() => {
         initGoogleAuth();
@@ -23,13 +25,14 @@ export default function WelcomeScreen() {
 
     const handleGoogleLogin = async () => {
         try {
-            setLoading(true);
+            setGoogleLoading(true);
             const user = await signInWithGoogle();
             if (user) {
                 dispatch(login({
                     name: user.name || 'User',
                     email: user.email,
-                    photoUrl: user.photo || undefined
+                    photoUrl: user.photo || undefined,
+                    isGoogleLinked: true // Integrated flow for both iOS and Android
                 }));
 
                 trackEvent(AnalyticsEvents.SIGN_IN, { method: 'google' });
@@ -52,7 +55,39 @@ export default function WelcomeScreen() {
                 });
             }
         } finally {
-            setLoading(false);
+            setGoogleLoading(false);
+        }
+    };
+
+    const handleAppleLogin = async () => {
+        try {
+            setAppleLoading(true);
+            const user = await signInWithApple();
+            if (user) {
+                dispatch(login({
+                    name: user.name || 'Apple User',
+                    email: user.email || 'Private Apple ID', 
+                    isGoogleLinked: false 
+                }));
+
+                trackEvent(AnalyticsEvents.SIGN_IN, { method: 'apple' });
+                await setAnalyticsUser({
+                    email: user.email || 'apple-user@rentvelo.app',
+                    name: user.name || 'User'
+                });
+
+                // Request permissions after login
+                setTimeout(() => requestNotificationPermissions(), 1000);
+            }
+        } catch (error: any) {
+            console.error('Failed to sign in with Apple:', error);
+            showToast({
+                type: 'error',
+                title: 'Sign In Failed',
+                message: 'Could not sign in with Apple. Please try again.'
+            });
+        } finally {
+            setAppleLoading(false);
         }
     };
 
@@ -87,22 +122,42 @@ export default function WelcomeScreen() {
                     <Pressable
                         style={({ pressed }) => [
                             styles.googleButton,
-                            (loading || pressed) && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+                            (googleLoading || pressed) && { opacity: 0.8, transform: [{ scale: 0.98 }] }
                         ]}
                         onPress={handleGoogleLogin}
-                        disabled={loading}
+                        disabled={googleLoading || appleLoading}
                     >
                         <View style={styles.gIcon}>
                             <FontAwesome name="google" size={18} color="#EA4335" />
                         </View>
                         <Text style={styles.googleButtonText}>
-                            {loading ? 'Connecting...' : 'Continue with Google'}
+                            {googleLoading ? 'Connecting...' : 'Continue with Google'}
                         </Text>
                     </Pressable>
 
+                    {Platform.OS === 'ios' && (
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.appleButton,
+                                (appleLoading || pressed) && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+                            ]}
+                            onPress={handleAppleLogin}
+                            disabled={googleLoading || appleLoading}
+                        >
+                            <View style={styles.appleIconWrapper}>
+                                <FontAwesome name="apple" size={18} color={isDark ? "#FFFFFF" : "#000000"} />
+                            </View>
+                            <Text style={styles.appleButtonText}>
+                                {appleLoading ? 'Connecting...' : 'Continue with Apple'}
+                            </Text>
+                        </Pressable>
+                    )}
+
                     <View style={styles.footer}>
                         <Text style={styles.securityNote}>
-                            Sign in to securely backup your data to Google Drive.
+                            {Platform.OS === 'ios' 
+                                ? 'Sign in to securely manage your properties and backup data manually to Google Drive.'
+                                : 'Sign in to securely backup your data to Google Drive.'}
                         </Text>
                     </View>
                 </View>
@@ -212,6 +267,36 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         justifyContent: 'center',
         marginBottom: theme.spacing.m,
         ...theme.shadows.small,
+    },
+    appleButtonText: {
+        fontSize: 16,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+    },
+    appleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: theme.colors.surface,
+        paddingVertical: 18,
+        paddingHorizontal: theme.spacing.xl,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        width: '100%',
+        justifyContent: 'center',
+        marginBottom: theme.spacing.m,
+        ...theme.shadows.small,
+    },
+    appleIconWrapper: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: isDark ? theme.colors.background : '#FFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: theme.spacing.m,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
     gIcon: {
         width: 32,

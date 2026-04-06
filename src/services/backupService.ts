@@ -418,3 +418,36 @@ export const restoreFromLocalBackup = async (): Promise<BackupResult> => {
         return { success: false, error: 'local_restore_failed' };
     }
 };
+/**
+ * Deletes the backup file from Google Drive (appDataFolder).
+ */
+export const deleteBackupFromDrive = async (): Promise<BackupResult> => {
+    try {
+        const isUserSignedIn = await isSignedIn();
+        if (!isUserSignedIn) return { success: false, error: 'not_signed_in' };
+
+        const tokens = await getGoogleTokens();
+        if (!tokens || !tokens.accessToken) return { success: false, error: 'no_token' };
+
+        const fileId = await findExistingBackupFileId(tokens.accessToken);
+        if (!fileId) return { success: true }; // Already deleted or none exists
+
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+            method: 'DELETE',
+            headers: {
+                Authorization: `Bearer ${tokens.accessToken}`,
+            },
+        });
+
+        if (!response.ok && response.status !== 404) {
+            const err = await response.text();
+            console.error('Drive delete failed:', err);
+            return { success: false, error: 'delete_failed' };
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error('Delete backup from Google Drive failed:', error);
+        return { success: false, error: 'unknown_error' };
+    }
+};

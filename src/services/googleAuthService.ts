@@ -1,5 +1,6 @@
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { storage } from '../utils/storage';
+import { Platform } from 'react-native';
 
 // We are using the web client ID extracted from google-services.json (oauth_client with client_type 3)
 const GOOGLE_WEB_CLIENT_ID = '221955250116-tfa60qhpibsg77pmt6i43u80ovp40rij.apps.googleusercontent.com';
@@ -8,8 +9,32 @@ export const initGoogleAuth = () => {
     GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         offlineAccess: true,
+        // Using full scopes for "one-step" Drive access, even on iOS per user request.
         scopes: ['https://www.googleapis.com/auth/drive.appdata', 'https://www.googleapis.com/auth/drive.file'],
     });
+};
+
+/**
+ * Manually request Google Drive scopes. 
+ * Used on iOS to link Drive for backups AFTER the user has logged in.
+ */
+export const requestDriveScopes = async (): Promise<boolean> => {
+    try {
+        const hasPlayServices = await GoogleSignin.hasPlayServices();
+        if (!hasPlayServices) return false;
+
+        // On iOS, we use addScopes to request specific permissions post-login.
+        // In version 16.x, hasPermissions is not available, and addScopes 
+        // will trigger the system prompt if the scopes are not already granted.
+        await GoogleSignin.addScopes({
+            scopes: ['https://www.googleapis.com/auth/drive.appdata', 'https://www.googleapis.com/auth/drive.file']
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('Error requesting Drive scopes:', error);
+        return false;
+    }
 };
 
 export interface GoogleUser {
@@ -62,6 +87,17 @@ export const signOutGoogle = async () => {
         storage.remove('@google_auth_token');
     } catch (error) {
         console.error('Google Sign-Out Error:', error);
+        throw error;
+    }
+};
+
+export const revokeGoogleAccess = async () => {
+    try {
+        await GoogleSignin.revokeAccess();
+        await GoogleSignin.signOut();
+        storage.remove('@google_auth_token');
+    } catch (error) {
+        console.error('Google Revoke Access Error:', error);
         throw error;
     }
 };

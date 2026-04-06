@@ -55,12 +55,17 @@ const authSlice = createSlice({
     name: 'auth',
     initialState,
     reducers: {
-        login: (state, action: PayloadAction<{ name: string; email: string; photoUrl?: string }>) => {
+        login: (state, action: PayloadAction<{ name: string; email: string; photoUrl?: string; isGoogleLinked?: boolean }>) => {
             state.isAuthenticated = true;
-            state.user = action.payload;
-            // Since login is now always via Google Sign-In, auto-link Google
-            state.isGoogleLinked = true;
-            state.googleEmail = action.payload.email;
+            state.user = {
+                name: action.payload.name,
+                email: action.payload.email,
+                photoUrl: action.payload.photoUrl
+            };
+            // On Android, if logged in via Google, it likely has scopes already.
+            // On iOS, we link separately.
+            state.isGoogleLinked = action.payload.isGoogleLinked ?? false;
+            state.googleEmail = action.payload.isGoogleLinked ? action.payload.email : null;
             saveAuthState(state);
         },
         logout: (state) => {

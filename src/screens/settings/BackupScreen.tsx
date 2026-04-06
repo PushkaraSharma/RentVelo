@@ -9,9 +9,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../redux/store';
 import { linkGoogleAccount, unlinkGoogleAccount } from '../../redux/authSlice';
-import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn } from '../../services/googleAuthService';
+import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn, requestDriveScopes } from '../../services/googleAuthService';
 import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive, restoreFromLocalBackup, verifyDrivePermissions } from '../../services/backupService';
 import { storage } from '../../utils/storage';
+import { Platform } from 'react-native';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
@@ -101,10 +102,24 @@ export default function BackupScreen({ navigation }: any) {
             setShowDisconnectModal(true);
         } else {
             try {
-                const user = await signInWithGoogle();
-                if (user) {
-                    dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                    showToast({ type: 'success', title: 'Success', message: 'Google account linked successfully!' });
+                if (Platform.OS === 'ios') {
+                    // On iOS, we first ensure the user is signed in, then request Drive scopes
+                    const user = await signInWithGoogle();
+                    if (user) {
+                        const granted = await requestDriveScopes();
+                        if (granted) {
+                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                            showToast({ type: 'success', title: 'Success', message: 'Google account linked with Drive successfully!' });
+                        } else {
+                            showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
+                        }
+                    }
+                } else {
+                    const user = await signInWithGoogle();
+                    if (user) {
+                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                        showToast({ type: 'success', title: 'Success', message: 'Google account linked successfully!' });
+                    }
                 }
             } catch (error) {
                 showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
@@ -115,11 +130,25 @@ export default function BackupScreen({ navigation }: any) {
     const handleGoogleBackup = async () => {
         if (!isGoogleLinked) {
             try {
-                const user = await signInWithGoogle();
-                if (user) {
-                    dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                if (Platform.OS === 'ios') {
+                    const user = await signInWithGoogle();
+                    if (user) {
+                        const granted = await requestDriveScopes();
+                        if (granted) {
+                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                        } else {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
                 } else {
-                    return; // User cancelled or failed
+                    const user = await signInWithGoogle();
+                    if (user) {
+                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                    } else {
+                        return;
+                    }
                 }
             } catch (error) {
                 showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
@@ -145,10 +174,13 @@ export default function BackupScreen({ navigation }: any) {
                 try {
                     const user = await signInWithGoogle();
                     if (user) {
-                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        // Try again once after re-authorizing
-                        handleGoogleBackup();
-                        return;
+                        const granted = Platform.OS === 'ios' ? await requestDriveScopes() : true;
+                        if (granted) {
+                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                            // Try again once after re-authorizing
+                            handleGoogleBackup();
+                            return;
+                        }
                     }
                 } catch (e) {
                     errorMsg = 'Drive permissions missing. Please link account and tick for "App Data" access.';
@@ -204,10 +236,13 @@ export default function BackupScreen({ navigation }: any) {
                 try {
                     const user = await signInWithGoogle();
                     if (user) {
-                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        // Try restore again
-                        confirmRestore();
-                        return;
+                        const granted = Platform.OS === 'ios' ? await requestDriveScopes() : true;
+                        if (granted) {
+                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+                            // Try restore again
+                            confirmRestore();
+                            return;
+                        }
                     }
                 } catch (e) {
                     errorMsg = 'Drive permissions missing. Please relink account and grant file access.';

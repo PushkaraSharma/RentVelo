@@ -23,6 +23,7 @@ interface ConfirmationModalProps {
     cancelText?: string;
     variant?: 'danger' | 'warning' | 'info';
     loading?: boolean;
+    children?: React.ReactNode;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -34,7 +35,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     confirmText = 'Delete',
     cancelText = 'Cancel',
     variant = 'danger',
-    loading = false
+    loading = false,
+    children
 }) => {
     const { theme, isDark } = useAppTheme();
     const insets = useSafeAreaInsets();
@@ -70,6 +72,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                     <View style={styles.body}>
                         <Text style={styles.title}>{title}</Text>
                         <Text style={styles.message}>{message}</Text>
+                        {children && <View style={styles.customContent}>{children}</View>}
                     </View>
 
                     <View style={[styles.actions, { paddingBottom: insets.bottom }]}>
@@ -164,6 +167,10 @@ const getStyles = (theme: any, isDark: boolean, variant: string) => StyleSheet.c
         color: theme.colors.textSecondary,
         textAlign: 'center',
         lineHeight: 24
+    },
+    customContent: {
+        width: '100%',
+        marginTop: 20,
     },
     actions: {
         flexDirection: 'row',

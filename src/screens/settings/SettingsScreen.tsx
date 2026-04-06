@@ -16,9 +16,11 @@ import {
     FileText,
     Shield,
     CircleUser,
+    Share2,
+    Trash2,
+    AlertCircle,
     HelpCircle,
-    Info,
-    Share2
+    Info
 } from 'lucide-react-native';
 import Toggle from '../../components/common/Toggle';
 import { CHANGELOG } from '../../utils/Constants';
@@ -30,6 +32,7 @@ import { getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents, setAnalyticsUser } from '../../services/analyticsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../../hooks/useToast';
+import { deleteAccountData } from '../../services/accountService';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -41,12 +44,16 @@ export default function SettingsScreen({ navigation }: any) {
 
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showSeedModal, setShowSeedModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteCloudBackup, setDeleteCloudBackup] = useState(true);
 
     const handleLogout = () => {
         setShowLogoutModal(true);
     };
 
     const confirmLogout = async () => {
+        setIsDeleting(true);
         try {
             await signOutGoogle();
         } catch (e) {
@@ -55,6 +62,49 @@ export default function SettingsScreen({ navigation }: any) {
         trackEvent(AnalyticsEvents.SIGN_OUT);
         await setAnalyticsUser(null);
         dispatch(logout());
+        setIsDeleting(false);
+    };
+
+    const confirmDeleteAccount = async () => {
+        if (!user) return;
+
+        setIsDeleting(true);
+        try {
+            // Here we determine the auth method. 
+            // In this app, if isGoogleLinked is true, it's Google. 
+            // Otherwise, we check if it's apple. 
+            // Since we don't explicitly store auth type in the slice yet, we can infer it.
+            // If they have a googleEmail, it's likely Google.
+            const authMethod = user.email ? 'google' : 'apple';
+            // Actually, we'll try to revoke Google if isGoogleLinked is true.
+
+            const result = await deleteAccountData(
+                user.email || '', // ID placeholder for apple
+                authMethod,
+                deleteCloudBackup
+            );
+
+            if (result.success) {
+                showToast({
+                    type: 'success',
+                    title: 'Account Deleted',
+                    message: 'Your account and data have been permanently removed.'
+                });
+                dispatch(logout());
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            console.error('Delete Account failed:', error);
+            showToast({
+                type: 'error',
+                title: 'Deletion Failed',
+                message: 'Could not complete account deletion. Please try again or contact support.'
+            });
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteModal(false);
+        }
     };
 
     const [isSeeding, setIsSeeding] = useState(false);
@@ -219,6 +269,21 @@ export default function SettingsScreen({ navigation }: any) {
                         <LogOut size={20} color={theme.colors.danger} />
                         <Text style={styles.logoutText}>Log Out</Text>
                     </Pressable>
+                </View>
+
+                <View style={[styles.section, { marginTop: theme.spacing.xl }]}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.danger }]}>Danger Zone</Text>
+                    <View style={[styles.sectionContent, { borderColor: theme.colors.danger + '30' }]}>
+                        <SettingItem
+                            icon={Trash2}
+                            label="Permanently Delete Account"
+                            color={theme.colors.danger}
+                            onPress={() => setShowDeleteModal(true)}
+                        />
+                    </View>
+                </View>
+
+                <View style={styles.versionWrapper}>
                     <Text style={styles.version}>RentVelo v{CHANGELOG.version} • Made with ❤️</Text>
                 </View>
             </ScrollView>
@@ -243,13 +308,40 @@ export default function SettingsScreen({ navigation }: any) {
                 cancelText="Cancel"
                 variant="danger"
             />
-            <Modal visible={isSeeding} transparent={true} animationType="fade">
+            <Modal visible={isSeeding || isDeleting} transparent={true} animationType="fade">
                 <View style={styles.loaderOverlay}>
                     <ActivityIndicator size="large" color={theme.colors.primary} />
-                    <Text style={styles.loaderText}>Generating 1 Year of Realistic App Data...</Text>
-                    <Text style={styles.loaderSubText}>This takes about 10-15 seconds.</Text>
+                    <Text style={styles.loaderText}>
+                        {isDeleting ? "Permanently Wiping Data..." : "Generating 1 Year of Realistic App Data..."}
+                    </Text>
+                    <Text style={styles.loaderSubText}>
+                        {isDeleting ? "This may take a moment." : "This takes about 10-15 seconds."}
+                    </Text>
                 </View>
             </Modal>
+
+            <ConfirmationModal
+                visible={showDeleteModal}
+                onClose={() => setShowDeleteModal(false)}
+                onConfirm={confirmDeleteAccount}
+                title="Permanently Delete Account?"
+                message="This action is IRREVERSIBLE. All your properties, rent records, and documents will be permanently deleted from this device."
+                confirmText="Delete"
+                cancelText="Cancel"
+                variant="danger"
+                loading={isDeleting}
+            >
+                <Pressable
+                    style={styles.deleteOption}
+                    onPress={() => setDeleteCloudBackup(!deleteCloudBackup)}
+                >
+                    <View style={styles.checkboxLabel}>
+                        <AlertCircle size={16} color={theme.colors.textSecondary} />
+                        <Text style={styles.deleteOptionText}>Also wipe Google Drive backups</Text>
+                    </View>
+                    <Toggle value={deleteCloudBackup} onValueChange={(v) => setDeleteCloudBackup(v)} />
+                </Pressable>
+            </ConfirmationModal>
 
         </View>
     );
@@ -387,6 +479,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginTop: theme.spacing.l,
         alignItems: 'center',
         paddingHorizontal: theme.spacing.l,
+        marginBottom: theme.spacing.m,
+    },
+    versionWrapper: {
+        alignItems: 'center',
+        paddingVertical: theme.spacing.xl,
     },
     logoutBtn: {
         flexDirection: 'row',
@@ -429,6 +526,25 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         marginTop: 8,
         textAlign: 'center',
+    },
+    deleteOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: isDark ? theme.colors.background : theme.colors.surfaceVariant,
+        padding: 16,
+        borderRadius: 16,
+        marginTop: 8,
+    },
+    checkboxLabel: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    deleteOptionText: {
+        fontSize: 14,
+        color: theme.colors.textPrimary,
+        fontWeight: theme.typography.medium,
     }
 });
 

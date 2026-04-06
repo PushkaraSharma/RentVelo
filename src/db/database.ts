@@ -67,5 +67,14 @@ export const getDatabase = () => {
   return expoDb;
 };
 
+export const closeDatabase = () => {
+    try {
+        expoDb.closeSync();
+        console.log('✅ SQLite Database connection closed');
+    } catch (e) {
+        console.error('Failed to close SQLite Database:', e);
+    }
+};
+
 // Export migrations
 export { migrations };
