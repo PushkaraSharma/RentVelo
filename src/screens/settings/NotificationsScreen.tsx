@@ -25,7 +25,7 @@ export interface NotificationPrefs {
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
-    enableAll: true,
+    enableAll: false,
     rentDueEnabled: true,
     rentDueDaysBefore: 3,
     overdueEnabled: true,
@@ -64,14 +64,17 @@ export default function NotificationsScreen({ navigation }: any) {
 
     const updatePref = async <K extends keyof NotificationPrefs>(key: K, value: NotificationPrefs[K]) => {
         try {
-            // If enabling notifications, request permission immediately
             if (key === 'enableAll' && value === true) {
                 const granted = await requestNotificationPermissions();
                 if (!granted) {
+                    const revertedPrefs = { ...prefs, enableAll: false };
+                    setPrefs(revertedPrefs);
+                    storage.set(PREFS_KEY, JSON.stringify(revertedPrefs));
+                    await syncNotificationSchedules();
                     showToast({
                         type: 'warning',
                         title: 'Permission Required',
-                        message: 'Please enable notifications in device settings.'
+                        message: 'Notifications stay off until permission is allowed.'
                     });
                     return;
                 }
@@ -100,7 +103,9 @@ export default function NotificationsScreen({ navigation }: any) {
                 {
                     type: 'timeInterval',
                     repeats: false
-                } as any
+                } as any,
+                undefined,
+                { requestPermission: false }
             );
             if (id) {
                 showToast({ type: 'success', title: 'Success', message: 'Test notification triggered.' });

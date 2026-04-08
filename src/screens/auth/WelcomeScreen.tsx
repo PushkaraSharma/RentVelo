@@ -6,7 +6,6 @@ import { useDispatch } from 'react-redux';
 import { login } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
 import { signInWithApple } from '../../services/appleAuthService';
-import { requestNotificationPermissions } from '../../services/pushNotificationService';
 import { FontAwesome } from '@expo/vector-icons';
 import { AnalyticsEvents, trackEvent, setAnalyticsUser } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
@@ -40,9 +39,6 @@ export default function WelcomeScreen() {
                     email: user.email,
                     name: user.name || 'User'
                 });
-
-                // Request permissions after login
-                setTimeout(() => requestNotificationPermissions(), 1000);
             }
         } catch (error: any) {
             console.error('Failed to sign in with Google:', error);
@@ -75,9 +71,6 @@ export default function WelcomeScreen() {
                     email: user.email || 'apple-user@rentvelo.app',
                     name: user.name || 'User'
                 });
-
-                // Request permissions after login
-                setTimeout(() => requestNotificationPermissions(), 1000);
             }
         } catch (error: any) {
             console.error('Failed to sign in with Apple:', error);

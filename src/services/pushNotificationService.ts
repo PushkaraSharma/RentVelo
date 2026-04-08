@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 
 // Lazily configure notification handler to avoid accessing native modules
 // before the JSI runtime is ready (which causes "Cannot read property 'prototype' of undefined")
@@ -49,15 +49,39 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
     return true;
 };
 
+export const hasNotificationPermissions = async (): Promise<boolean> => {
+    ensureNotificationHandler();
+    if (!Device.isDevice) {
+        return false;
+    }
+
+    const { status } = await Notifications.getPermissionsAsync();
+
+    if (status === 'granted' && Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+        });
+    }
+
+    return status === 'granted';
+};
+
 // Schedule a local notification
 export const scheduleLocalNotification = async (
     title: string,
     body: string,
     trigger: Notifications.NotificationTriggerInput,
-    data?: any
+    data?: any,
+    options?: { requestPermission?: boolean }
 ) => {
     try {
-        const hasPermission = await requestNotificationPermissions();
+        const shouldRequestPermission = options?.requestPermission ?? true;
+        const hasPermission = shouldRequestPermission
+            ? await requestNotificationPermissions()
+            : await hasNotificationPermissions();
         if (!hasPermission) return null;
 
         const id = await Notifications.scheduleNotificationAsync({
@@ -110,6 +134,12 @@ export const syncNotificationSchedules = async () => {
         const prefs = JSON.parse(stored);
         if (!prefs.enableAll) {
             console.log('[PushNotifications] Notifications globally disabled by user.');
+            return;
+        }
+
+        const hasPermission = await hasNotificationPermissions();
+        if (!hasPermission) {
+            console.log('[PushNotifications] Notification permission not granted, skipping sync.');
             return;
         }
 
@@ -191,7 +221,8 @@ export const syncNotificationSchedules = async () => {
                     'Upcoming Rent Collection',
                     `Rent collection is coming up for ${info.propertyName}.`,
                     { type: 'date', date: info.date } as any,
-                    { route: 'TakeRent', propertyId: info.propertyId }
+                    { route: 'TakeRent', propertyId: info.propertyId },
+                    { requestPermission: false }
                 );
                 scheduledCount++;
             }
@@ -201,7 +232,8 @@ export const syncNotificationSchedules = async () => {
                     'Overdue Rent',
                     `You have pending rent collections for ${info.propertyName}. Tap to collect.`,
                     { type: 'date', date: info.date } as any,
-                    { route: 'TakeRent', propertyId: info.propertyId }
+                    { route: 'TakeRent', propertyId: info.propertyId },
+                    { requestPermission: false }
                 );
                 scheduledCount++;
             }
