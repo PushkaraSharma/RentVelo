@@ -753,6 +753,10 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
 
                     const panResponder = PanResponder.create({
                         onStartShouldSetPanResponder: () => true,
+                        onPanResponderTerminationRequest: (_, gestureState) => {
+                            // Allow scroll view to steal the touch ONLY if the user is scrolling vertically
+                            return Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+                        },
                         onPanResponderMove: (_, gestureState) => {
                             if (gestureState.dx > 0) {
                                 swipeAnim.setValue(Math.min(gestureState.dx, TRACK_WIDTH - 48));
@@ -780,6 +784,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     useNativeDriver: false,
                                 }).start();
                             }
+                        },
+                        onPanResponderTerminate: () => {
+                            // If the scroll view successfully steals the touch, snap the thumb back so it doesn't get stuck
+                            Animated.spring(swipeAnim, {
+                                toValue: 0,
+                                useNativeDriver: false,
+                            }).start();
                         },
                     });
 
