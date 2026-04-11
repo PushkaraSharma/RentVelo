@@ -42,18 +42,41 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
                 setBalanceType('balance');
                 setBalanceAmount(prevBal.toString());
             }
-            // Initialize dates from bill's period_start/end or default it
-            setStartDate(bill.period_start ? new Date(bill.period_start) : new Date(bill.year, bill.month - 1, 1));
-            setEndDate(bill.period_end ? new Date(bill.period_end) : new Date(bill.year, bill.month, 0));
+            // Initialize dates from bill's period_start/end or derive from period prop
+            // period.end is like "31 Mar 2026" — parse to get correct month for postpaid
+            const monthAbbrMap: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+            const endParts = period.end.split(' ');
+            const pMonth = endParts.length >= 2 ? (monthAbbrMap[endParts[1]] ?? (bill.month - 1)) : (bill.month - 1);
+            const pYear = endParts.length >= 3 ? parseInt(endParts[2]) : bill.year;
+            setStartDate(bill.period_start ? new Date(bill.period_start) : new Date(pYear, pMonth, 1));
+            setEndDate(bill.period_end ? new Date(bill.period_end) : new Date(pYear, pMonth + 1, 0));
         }
     }, [visible, bill]);
+
+    // Track if it's the initial mount or if user actually changed dates
+    const initialMount = React.useRef(true);
+    useEffect(() => {
+        if (visible) {
+            initialMount.current = true;
+        }
+    }, [visible]);
 
     // Auto calculate rent if dates change (only if unit rent is available)
     useEffect(() => {
         if (visible && unit?.rent_amount && startDate && endDate && bill) {
-            // Check if dates are customized vs full month
-            const defaultStart = new Date(bill.year, bill.month - 1, 1);
-            const defaultEnd = new Date(bill.year, bill.month, 0);
+            if (initialMount.current) {
+                // Skip the calculation on the very first render block when dates are just initialized
+                initialMount.current = false;
+                return;
+            }
+
+            // Use the same period-derived month for proration defaults
+            const monthAbbrMap2: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+            const endParts2 = period.end.split(' ');
+            const pMonth2 = endParts2.length >= 2 ? (monthAbbrMap2[endParts2[1]] ?? (bill.month - 1)) : (bill.month - 1);
+            const pYear2 = endParts2.length >= 3 ? parseInt(endParts2[2]) : bill.year;
+            const defaultStart = new Date(pYear2, pMonth2, 1);
+            const defaultEnd = new Date(pYear2, pMonth2 + 1, 0);
 
             // If the user hasn't customized dates, use original rent, 
             // otherwise calculate prorated rent based on days
@@ -64,6 +87,9 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
 
                 const calculatedRent = Math.round((unit.rent_amount / totalDaysInMonth) * selectedDays);
                 setRentAmount(calculatedRent.toString());
+            } else {
+                // Restored back to full month, set back to unit's original fixed rent
+                setRentAmount((unit.rent_amount || 0).toString());
             }
         }
     }, [startDate, endDate]);

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
@@ -190,8 +190,8 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 getPropertyById(propertyId),
             ]);
 
-            // B12: Convert images to base64 for WebView/ViewShot capture
-            if (format === 'Image' && receiptConfig) {
+            // B12: Convert images to base64 for WebView/ViewShot capture and PDF
+            if (receiptConfig) {
                 if (receiptConfig.logo_uri) {
                     receiptConfig.logo_uri = await getBase64Image(receiptConfig.logo_uri);
                 }
@@ -221,7 +221,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 if (await Sharing.isAvailableAsync()) {
                     await Sharing.shareAsync(uri, {
                         mimeType: 'application/pdf',
-                        dialogTitle: `Rent Receipt - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
+                        dialogTitle: `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`,
                         UTI: 'com.adobe.pdf',
                     });
                 } else {
@@ -247,8 +247,8 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 getPropertyById(propertyId),
             ]);
 
-            // B12: Convert images to base64 for WebView/ViewShot capture
-            if (format === 'Image' && receiptConfig) {
+            // B12: Convert images to base64 for WebView/ViewShot capture and PDF
+            if (receiptConfig) {
                 if (receiptConfig.logo_uri) {
                     receiptConfig.logo_uri = await getBase64Image(receiptConfig.logo_uri);
                 }
@@ -277,7 +277,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 if (await Sharing.isAvailableAsync()) {
                     await Sharing.shareAsync(uri, {
                         mimeType: 'application/pdf',
-                        dialogTitle: `Payment Reminder - ${tenant?.name || unit?.name} - ${bill.month}/${bill.year}`,
+                        dialogTitle: `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`,
                         UTI: 'com.adobe.pdf',
                     });
                 } else {
@@ -696,9 +696,16 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     <View>
                         <Text style={styles.rentLabel}>Rent</Text>
                         <Text style={styles.rentPeriod}>
-                            {bill.period_start ? new Date(bill.period_start).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.start}
-                            {' - '}
-                            {bill.period_end ? new Date(bill.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : period.end}
+                            {(() => {
+                                // Same postpaid logic derivation as TransactionInfoModal
+                                const monthAbbrMap: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+                                const endParts = period.end.split(' ');
+                                const pMonth = endParts.length >= 2 ? (monthAbbrMap[endParts[1]] ?? (bill.month - 1)) : (bill.month - 1);
+                                const pYear = endParts.length >= 3 ? parseInt(endParts[2]) : bill.year;
+                                const startObj = bill.period_start ? new Date(bill.period_start) : new Date(pYear, pMonth, 1);
+                                const endObj = bill.period_end ? new Date(bill.period_end) : new Date(pYear, pMonth + 1, 0);
+                                return `${startObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - ${endObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+                            })()}
                         </Text>
                     </View>
                     <Text style={styles.rentAmount}>{formatAmount(bill.rent_amount)}</Text>
@@ -836,22 +843,31 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
 
             {/* Hidden WebView for capturing as Image */}
-            {/* WebView matches the CSS .page exactly (794×1123px).
-                ViewShot captures at PixelRatio.get() scale automatically —
-                on a 3× iPhone this gives 2382×3369 native pixels, crisp with no white borders. */}
             {
                 shareHtml && (
-                    <View style={styles.hiddenViewShotContainer} pointerEvents="none">
-                        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }}>
+                    <View style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: 794,
+                        height: 1123,
+                        overflow: 'hidden',
+                        opacity: 0,
+                        zIndex: -1,
+                    }} pointerEvents="none" collapsable={false}>
+                        <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: 794, height: 1123 }}>
                             <WebView
                                 source={{ html: shareHtml.html }}
-                                style={{ width: 794, height: 1123 }}
+                                style={{ width: 794, height: 1123, backgroundColor: '#ffffff' }}
                                 onLoadEnd={handleCaptureImage}
                                 originWhitelist={['*']}
                                 allowFileAccess={true}
                                 javaScriptEnabled={true}
                                 domStorageEnabled={true}
                                 scalesPageToFit={false}
+                                automaticallyAdjustContentInsets={false}
+                                bounces={false}
+                                showsVerticalScrollIndicator={false}
                             />
                         </ViewShot>
                     </View>

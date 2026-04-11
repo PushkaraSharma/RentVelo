@@ -31,8 +31,15 @@ const fmtCur = (amount: number | null | undefined): string => {
 export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const { property, unit, tenant, bill, payments, expenses, receiptConfig, period } = data;
 
-    const monthName = MONTHS[(bill.month || 1) - 1];
-    const yearNum = bill.year || new Date().getFullYear();
+    // Use the period (already postpaid-adjusted) to derive the display month
+    // period.start is like "1 Mar", period.end is like "31 Mar 2026"
+    const periodEndParts = period.end.split(' '); // ["31", "Mar", "2026"]
+    const periodMonthAbbr = periodEndParts.length >= 2 ? periodEndParts[1] : '';
+    const periodYear = periodEndParts.length >= 3 ? parseInt(periodEndParts[2]) : (bill.year || new Date().getFullYear());
+    const monthAbbrMap: Record<string, number> = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+    const displayMonth = monthAbbrMap[periodMonthAbbr] || (bill.month || 1);
+    const monthName = MONTHS[displayMonth - 1];
+    const yearNum = periodYear || (bill.year || new Date().getFullYear());
     const receiptNo = bill.bill_number || `RR-${bill.id}`;
     const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -50,22 +57,18 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const statusBg = isPaid ? '#10B981' : isPartial ? '#F59E0B' : '#EF4444';
     const statusLabel = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'PENDING';
 
-    // Rent Period
-    const startObj = bill.period_start ? new Date(bill.period_start) : new Date(period.start);
-    const endObj = bill.period_end ? new Date(bill.period_end) : new Date(period.end);
-    const startStr = isNaN(startObj.getTime())
-        ? new Date(bill.year, bill.month - 1, 1).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-        : startObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-    const endStr = isNaN(endObj.getTime())
-        ? new Date(bill.year, bill.month, 0).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-        : endObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    // Rent Period — use bill dates if available, otherwise derive from displayMonth
+    const startObj = bill.period_start ? new Date(bill.period_start) : new Date(yearNum, displayMonth - 1, 1);
+    const endObj = bill.period_end ? new Date(bill.period_end) : new Date(yearNum, displayMonth, 0);
+    const startStr = startObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const endStr = endObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
     // Expense rows
     const filteredExpenses = expenses.filter(e => e.amount !== 0);
     const expenseRows = filteredExpenses.map(e => `
         <tr>
-            <td style="padding:3px 8px; border-bottom:1px solid #f0f0f0; font-size:9px;">${e.label}</td>
-            <td style="padding:3px 8px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:600; color:${e.amount < 0 ? '#EF4444' : '#111'}; font-size:9px;">
+            <td style="padding:4px 10px; border-bottom:1px solid #f0f0f0; font-size:11px;">${e.label}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:600; color:${e.amount < 0 ? '#EF4444' : '#111'}; font-size:11px;">
                 ${e.amount < 0 ? '−' : '+'}${fmtCur(Math.abs(e.amount))}
             </td>
         </tr>
@@ -74,9 +77,9 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     // Payment rows
     const paymentRows = payments.map(p => `
         <tr>
-            <td style="padding:3px 8px; border-bottom:1px solid #e5f5ed; font-size:9px;">${fmtDate(p.payment_date || p.created_at)}</td>
-            <td style="padding:3px 8px; border-bottom:1px solid #e5f5ed; font-size:9px;">${p.payment_method || 'Cash'}</td>
-            <td style="padding:3px 8px; border-bottom:1px solid #e5f5ed; text-align:right; font-weight:700; font-size:9px; color:#10B981;">${fmtCur(p.amount)}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #e5f5ed; font-size:11px;">${fmtDate(p.payment_date || p.created_at)}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #e5f5ed; font-size:11px;">${p.payment_method || 'Cash'}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #e5f5ed; text-align:right; font-weight:700; font-size:11px; color:#10B981;">${fmtCur(p.amount)}</td>
         </tr>
     `).join('');
 
@@ -91,9 +94,9 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 
     const bankCol = hasBank ? `
         <td style="padding:0 6px 0 0; vertical-align:top; width:${hasQr ? '38%' : '50%'};">
-            <div style="background:#F5F3FF; border-radius:6px; padding:6px 8px; height:100%;">
-                <div style="font-size:9px; font-weight:700; color:#7C3AED; margin-bottom:3px;">🏦 Bank Transfer</div>
-                <div style="font-size:8.5px; color:#333; line-height:1.5;">${receiptConfig.bank_name || ''}<br/>A/C: <strong>${receiptConfig.bank_acc_number || '—'}</strong><br/>IFSC: ${receiptConfig.bank_ifsc || '—'}${receiptConfig.bank_acc_holder ? `<br/>Name: ${receiptConfig.bank_acc_holder}` : ''}</div>
+            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px; height:100%;">
+                <div style="font-size:12px; font-weight:700; color:#7C3AED; margin-bottom:4px;">🏦 Bank Transfer</div>
+                <div style="font-size:12px; color:#333; line-height:1.5;">${receiptConfig.bank_name || ''}<br/>A/C: <strong>${receiptConfig.bank_acc_number || '—'}</strong><br/>IFSC: ${receiptConfig.bank_ifsc || '—'}${receiptConfig.bank_acc_holder ? `<br/>Name: ${receiptConfig.bank_acc_holder}` : ''}</div>
             </div>
         </td>
     ` : '';
@@ -101,30 +104,30 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const upiOrWalletCol = (hasUpi || hasWallet) ? `
         <td style="padding:0 6px; vertical-align:top; width:${hasQr ? '30%' : '50%'};">
             ${hasUpi ? `
-            <div style="background:#F5F3FF; border-radius:6px; padding:6px 8px; margin-bottom:${hasWallet ? '4px' : '0'};">
-                <div style="font-size:9px; font-weight:700; color:#7C3AED; margin-bottom:2px;">💳 UPI</div>
-                <div style="font-size:8.5px; font-weight:600; color:#333; word-break:break-all;">${receiptConfig.upi_id}</div>
+            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px; margin-bottom:${hasWallet ? '4px' : '0'};">
+                <div style="font-size:12px; font-weight:700; color:#7C3AED; margin-bottom:3px;">💳 UPI</div>
+                <div style="font-size:14px; font-weight:600; color:#333; word-break:break-all;">${receiptConfig.upi_id}</div>
             </div>` : ''}
             ${hasWallet ? `
-            <div style="background:#F5F3FF; border-radius:6px; padding:6px 8px;">
-                <div style="font-size:9px; font-weight:700; color:#7C3AED; margin-bottom:2px;">📱 ${walletLabels[receiptConfig.wallet_type] || 'Wallet'}</div>
-                <div style="font-size:8.5px; color:#333;">${receiptConfig.wallet_phone}${receiptConfig.wallet_name ? ` (${receiptConfig.wallet_name})` : ''}</div>
+            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px;">
+                <div style="font-size:12px; font-weight:700; color:#7C3AED; margin-bottom:3px;">📱 ${walletLabels[receiptConfig.wallet_type] || 'Wallet'}</div>
+                <div style="font-size:14px; color:#333;">${receiptConfig.wallet_phone}${receiptConfig.wallet_name ? ` (${receiptConfig.wallet_name})` : ''}</div>
             </div>` : ''}
         </td>
     ` : '';
 
     const qrCol = hasQr ? `
         <td style="padding:0 0 0 6px; vertical-align:top; width:${hasBank || hasUpi || hasWallet ? '32%' : '100%'}; text-align:center;">
-            <div style="background:#F5F3FF; border-radius:6px; padding:6px 8px; display:inline-block; width:100%;">
-                <img src="${receiptConfig.payment_qr_uri}" style="width:70px; height:70px; display:block; margin:0 auto;" />
-                <div style="font-size:8px; font-weight:700; color:#7C3AED; margin-top:3px;">Scan to Pay</div>
+            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px; display:inline-block; width:100%;">
+                <img src="${receiptConfig.payment_qr_uri}" style="width:80px; height:80px; display:block; margin:0 auto;" />
+                <div style="font-size:10px; font-weight:700; color:#7C3AED; margin-top:4px;">Scan to Pay</div>
             </div>
         </td>
     ` : '';
 
     const paymentMethodsSection = hasPaymentMethods ? `
-        <div style="margin-top:8px;">
-            <div style="font-size:9px; font-weight:700; color:#555; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Pay Via</div>
+        <div style="margin-top:10px;">
+            <div style="font-size:12px; font-weight:700; color:#555; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.5px;">Pay Via</div>
             <table style="width:100%; border-collapse:collapse;">
                 <tr>
                     ${bankCol}
@@ -139,35 +142,33 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=794">
     <style>
         @page { size: A4; margin: 0; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: #111;
-            font-size: 10px;
+            font-size: 12px;
             line-height: 1.4;
             -webkit-print-color-adjust: exact;
         }
         .page {
             width: 794px;
             min-height: 1123px;
-            max-height: 1123px;
-            overflow: hidden;
             margin: 0 auto;
-            padding: 20px 28px 60px 28px;
+            padding: 24px 32px 60px 32px;
             position: relative;
             background: #fff;
         }
         .divider { border: none; border-top: 1px solid #E5E7EB; margin: 8px 0; }
         .section-label {
-            font-size: 8px;
+            font-size: 12px;
             font-weight: 700;
             color: #7C3AED;
             text-transform: uppercase;
             letter-spacing: 0.8px;
-            margin-bottom: 4px;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -175,81 +176,81 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 <div class="page">
 
     <!-- ═══ HEADER ═══ -->
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
         <div style="display:flex; align-items:center; gap:10px;">
-            ${receiptConfig?.logo_uri ? `<img src="${receiptConfig.logo_uri}" style="height:36px; width:auto;" />` : ''}
+            ${receiptConfig?.logo_uri ? `<img src="${receiptConfig.logo_uri}" style="height:42px; width:auto;" />` : ''}
             <div>
-                <div style="font-size:20px; font-weight:900; color:#7C3AED; letter-spacing:1px; line-height:1;">RENT RECEIPT</div>
-                <div style="font-size:9px; color:#555; margin-top:1px;">${monthName} ${yearNum} &nbsp;|&nbsp; ${period.days} Days</div>
+                <div style="font-size:24px; font-weight:900; color:#7C3AED; letter-spacing:1px; line-height:1;">RENT RECEIPT</div>
+                <div style="font-size:11px; color:#555; margin-top:2px;">${monthName} ${yearNum} &nbsp;|&nbsp; ${period.days} Days</div>
             </div>
         </div>
         <div style="text-align:right;">
-            <div style="font-size:8px; color:#888; margin-bottom:1px;">RECEIPT NO.</div>
-            <div style="font-size:13px; font-weight:800; color:#111;">${receiptNo}</div>
-            <div style="font-size:8px; color:#666; margin-top:2px;">Date: ${today}</div>
-            <div style="display:inline-block; background:${statusBg}; color:#FFF; padding:2px 10px; border-radius:10px; font-size:8px; font-weight:700; margin-top:4px; letter-spacing:0.5px;">${statusLabel}</div>
+            <div style="font-size:10px; color:#888; margin-bottom:1px;">RECEIPT NO.</div>
+            <div style="font-size:15px; font-weight:800; color:#111;">${receiptNo}</div>
+            <div style="font-size:10px; color:#666; margin-top:2px;">Date: ${today}</div>
+            <div style="display:inline-block; background:${statusBg}; color:#FFF; padding:3px 12px; border-radius:10px; font-size:10px; font-weight:700; margin-top:4px; letter-spacing:0.5px;">${statusLabel}</div>
         </div>
     </div>
-    <div style="border-top:2.5px solid #7C3AED; margin-bottom:8px;"></div>
+    <div style="border-top:2.5px solid #7C3AED; margin-bottom:14px;"></div>
 
     <!-- ═══ PARTIES ═══ -->
-    <div style="display:flex; gap:10px; margin-bottom:8px;">
-        <div style="flex:1; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:6px; padding:7px 10px;">
+    <div style="display:flex; gap:12px; margin-bottom:14px;">
+        <div style="flex:1; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:6px; padding:9px 12px;">
             <div class="section-label">From — Landlord</div>
-            <div style="font-weight:700; font-size:10.5px;">${property?.owner_name || '—'}</div>
-            <div style="font-size:9px; color:#444; margin-top:2px;">${property?.name || ''}</div>
-            <div style="font-size:9px; color:#555;">${property?.address || ''}</div>
-            ${property?.owner_phone ? `<div style="font-size:9px; color:#555; margin-top:1px;">📞 ${property.owner_phone}</div>` : ''}
+            <div style="font-weight:700; font-size:12.5px;">${property?.owner_name || '—'}</div>
+            <div style="font-size:12px; color:#444; margin-top:2px;">${property?.name || ''}</div>
+            <div style="font-size:12px; color:#555;">${property?.address || ''}</div>
+            ${property?.owner_phone ? `<div style="font-size:12px; color:#555; margin-top:2px;">📞 ${property.owner_phone}</div>` : ''}
         </div>
-        <div style="flex:1; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:6px; padding:7px 10px;">
+        <div style="flex:1; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:6px; padding:9px 12px;">
             <div class="section-label">To — Tenant</div>
-            <div style="font-weight:700; font-size:10.5px;">${tenant?.name || '—'}</div>
-            <div style="font-size:9px; color:#444; margin-top:2px;">Room: <strong>${unit?.name || '—'}</strong></div>
-            ${tenant?.phone ? `<div style="font-size:9px; color:#555; margin-top:1px;">📞 ${tenant.phone}</div>` : ''}
-            ${tenant?.email ? `<div style="font-size:9px; color:#555;">✉ ${tenant.email}</div>` : ''}
+            <div style="font-weight:700; font-size:12.5px;">${tenant?.name || '—'}</div>
+            <div style="font-size:12px; color:#444; margin-top:2px;">Room: <strong>${unit?.name || '—'}</strong></div>
+            ${tenant?.phone ? `<div style="font-size:12px; color:#555; margin-top:2px;">📞 ${tenant.phone}</div>` : ''}
+            ${tenant?.email ? `<div style="font-size:12px; color:#555;">✉ ${tenant.email}</div>` : ''}
         </div>
     </div>
 
     <!-- ═══ RENT PERIOD BAR ═══ -->
-    <div style="background:#7C3AED; border-radius:6px; padding:5px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <div style="color:#EDE9FE; font-size:8.5px;">Rent Period</div>
-        <div style="color:#FFF; font-weight:700; font-size:10px;">${startStr} — ${endStr}</div>
-        <div style="color:#EDE9FE; font-size:8.5px;">${period.days} Days</div>
+    <div style="background:#7C3AED; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="color:#EDE9FE; font-size:12px;">Rent Period</div>
+        <div style="color:#FFF; font-weight:700; font-size:12px;">${startStr} — ${endStr}</div>
+        <div style="color:#EDE9FE; font-size:12px;">${period.days} Days</div>
     </div>
 
     <!-- ═══ BILL BREAKDOWN ═══ -->
-    <div style="margin-bottom:8px;">
+    <div style="margin-bottom:14px;">
         <div class="section-label">Bill Breakdown</div>
-        <table style="width:100%; border-collapse:collapse; font-size:9.5px;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead>
                 <tr style="background:#F3F4F6;">
-                    <th style="padding:4px 8px; text-align:left; font-weight:600; color:#555; font-size:8.5px;">Description</th>
-                    <th style="padding:4px 8px; text-align:right; font-weight:600; color:#555; font-size:8.5px;">Amount</th>
+                    <th style="padding:5px 10px; text-align:left; font-weight:600; color:#555; font-size:11px;">Description</th>
+                    <th style="padding:5px 10px; text-align:right; font-weight:600; color:#555; font-size:11px;">Amount</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td style="padding:4px 8px; border-bottom:1px solid #F0F0F0;">Monthly Rent</td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:11px;">${fmtCur(rentAmt)}</td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">Monthly Rent</td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(rentAmt)}</td>
                 </tr>
                 ${electricityAmt > 0 ? `
                 <tr>
-                    <td style="padding:4px 8px; border-bottom:1px solid #F0F0F0;">
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">
                         Electricity${bill.prev_reading != null && bill.curr_reading != null ? ` <span style="color:#888;">(${bill.prev_reading} → ${bill.curr_reading} units × ${CURRENCY}${unit.electricity_rate || 0})</span>` : ''}
                     </td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:11px;">${fmtCur(electricityAmt)}</td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(electricityAmt)}</td>
                 </tr>
                 ` : ''}
                 ${filteredExpenses.length > 0 ? `
-                <tr><td colspan="2" style="padding:3px 8px; font-size:8.5px; color:#7C3AED; font-weight:700; background:#F8F5FF;">Additional Charges / Discounts</td></tr>
+                <tr><td colspan="2" style="padding:4px 10px; font-size:12px; color:#7C3AED; font-weight:700; background:#F8F5FF;">Additional Charges / Discounts</td></tr>
                 ${expenseRows}
                 ` : ''}
                 ${prevBalance !== 0 ? `
                 <tr>
-                    <td style="padding:4px 8px; border-bottom:1px solid #F0F0F0; color:${prevBalance > 0 ? '#EF4444' : '#10B981'};">
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px; color:${prevBalance > 0 ? '#EF4444' : '#10B981'};">
                         ${prevBalance > 0 ? 'Previous Balance (Due)' : 'Previous Advance'}
                     </td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; color:${prevBalance > 0 ? '#EF4444' : '#10B981'}; font-size:11px;">
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; color:${prevBalance > 0 ? '#EF4444' : '#10B981'}; font-size:14px;">
                         ${prevBalance > 0 ? '+' : '−'}${fmtCur(Math.abs(prevBalance))}
                     </td>
                 </tr>
@@ -257,8 +258,8 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
             </tbody>
             <tfoot>
                 <tr style="background:#7C3AED;">
-                    <td style="padding:5px 8px; font-weight:700; color:#FFF; font-size:10px;">TOTAL</td>
-                    <td style="padding:5px 8px; text-align:right; font-weight:800; color:#FFF; font-size:12px;">${fmtCur(totalAmt)}</td>
+                    <td style="padding:6px 10px; font-weight:700; color:#FFF; font-size:13px;">TOTAL</td>
+                    <td style="padding:6px 10px; text-align:right; font-weight:800; color:#FFF; font-size:15px;">${fmtCur(totalAmt)}</td>
                 </tr>
             </tfoot>
         </table>
@@ -266,14 +267,14 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 
     <!-- ═══ PAYMENTS RECEIVED ═══ -->
     ${payments.length > 0 ? `
-    <div style="margin-bottom:8px;">
-        <div class="section-label">💰 Payments Received</div>
+    <div style="margin-bottom:14px;">
+        <div class="section-label">Payments Received</div>
         <table style="width:100%; border-collapse:collapse; background:#F0FDF4; border-radius:6px; overflow:hidden;">
             <thead>
                 <tr style="background:#D1FAE5;">
-                    <th style="padding:4px 8px; text-align:left; font-size:8.5px; font-weight:600; color:#065F46;">Date</th>
-                    <th style="padding:4px 8px; text-align:left; font-size:8.5px; font-weight:600; color:#065F46;">Method</th>
-                    <th style="padding:4px 8px; text-align:right; font-size:8.5px; font-weight:600; color:#065F46;">Amount</th>
+                    <th style="padding:5px 10px; text-align:left; font-size:11px; font-weight:600; color:#065F46;">Date</th>
+                    <th style="padding:5px 10px; text-align:left; font-size:11px; font-weight:600; color:#065F46;">Method</th>
+                    <th style="padding:5px 10px; text-align:right; font-size:11px; font-weight:600; color:#065F46;">Amount</th>
                 </tr>
             </thead>
             <tbody>
@@ -281,8 +282,8 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
             </tbody>
             <tfoot>
                 <tr style="background:#D1FAE5;">
-                    <td colspan="2" style="padding:4px 8px; font-weight:700; color:#065F46; font-size:9px;">Total Paid</td>
-                    <td style="padding:4px 8px; text-align:right; font-weight:800; color:#10B981; font-size:11px;">${fmtCur(paidAmt)}</td>
+                    <td colspan="2" style="padding:5px 10px; font-weight:700; color:#065F46; font-size:12px;">Total Paid</td>
+                    <td style="padding:5px 10px; text-align:right; font-weight:800; color:#10B981; font-size:14px;">${fmtCur(paidAmt)}</td>
                 </tr>
             </tfoot>
         </table>
@@ -291,18 +292,18 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 
     <!-- ═══ BALANCE STATUS ═══ -->
     ${balanceAmt > 0 ? `
-    <div style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:6px; padding:5px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <div style="font-weight:700; color:#B91C1C; font-size:9.5px;">⚠ Remaining Balance Due</div>
-        <div style="font-size:14px; font-weight:800; color:#B91C1C;">${fmtCur(balanceAmt)}</div>
+    <div style="background:#FEF2F2; border:1.5px solid #FCA5A5; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="font-weight:700; color:#B91C1C; font-size:12px;">⚠ Remaining Balance Due</div>
+        <div style="font-size:18px; font-weight:800; color:#B91C1C;">${fmtCur(balanceAmt)}</div>
     </div>
     ` : balanceAmt < 0 ? `
-    <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:6px; padding:5px 12px; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <div style="font-weight:700; color:#10B981; font-size:9.5px;">✓ Advance / Credit</div>
-        <div style="font-size:14px; font-weight:800; color:#10B981;">${fmtCur(Math.abs(balanceAmt))}</div>
+    <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="font-weight:700; color:#10B981; font-size:12px;">✓ Advance / Credit</div>
+        <div style="font-size:18px; font-weight:800; color:#10B981;">${fmtCur(Math.abs(balanceAmt))}</div>
     </div>
     ` : `
-    <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:6px; padding:5px 12px; text-align:center; margin-bottom:8px;">
-        <div style="font-weight:700; color:#10B981; font-size:9.5px;">✅ FULLY PAID — No Balance Due</div>
+    <div style="background:#ECFDF5; border:1.5px solid #10B981; border-radius:6px; padding:7px 14px; text-align:center; margin-bottom:14px;">
+        <div style="font-weight:700; color:#10B981; font-size:12px;">✅ FULLY PAID — No Balance Due</div>
     </div>
     `}
 
@@ -310,24 +311,24 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     ${paymentMethodsSection}
 
     <!-- ═══ SIGNATURE ═══ -->
-    <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:8px;">
+    <div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:10px;">
         <div style="text-align:center;">
-            ${receiptConfig?.signature_uri ? `<img src="${receiptConfig.signature_uri}" style="max-height:42px; margin-bottom:3px; display:block; margin-left:auto; margin-right:auto;" />` : '<div style="height:42px;"></div>'}
-            <div style="width:140px; border-top:1px solid #333; padding-top:3px; font-size:9px; color:#444;">Landlord's Signature</div>
-            <div style="font-size:8px; color:#777;">${property?.owner_name || ''}</div>
+            ${receiptConfig?.signature_uri ? `<img src="${receiptConfig.signature_uri}" style="max-height:48px; margin-bottom:4px; display:block; margin-left:auto; margin-right:auto;" />` : '<div style="height:48px;"></div>'}
+            <div style="width:150px; border-top:1px solid #333; padding-top:4px; font-size:11px; color:#444;">Landlord's Signature</div>
+            <div style="font-size:10px; color:#777;">${property?.owner_name || ''}</div>
         </div>
         <div style="text-align:center;">
-            <div style="height:42px;"></div>
-            <div style="width:140px; border-top:1px solid #333; padding-top:3px; font-size:9px; color:#444;">Tenant's Signature</div>
-            <div style="font-size:8px; color:#777;">${tenant?.name || ''}</div>
+            <div style="height:48px;"></div>
+            <div style="width:150px; border-top:1px solid #333; padding-top:4px; font-size:11px; color:#444;">Tenant's Signature</div>
+            <div style="font-size:10px; color:#777;">${tenant?.name || ''}</div>
         </div>
     </div>
 
     <!-- ═══ FOOTER ═══ -->
-    <div style="position:absolute; bottom:12px; left:20px; right:20px; border-top:1px solid #DDD6FE; padding-top:5px; display:flex; justify-content:space-between; align-items:center;">
-        <div style="font-size:8px; color:#555; font-weight:600;">RentVelo</div>
-        <div style="font-size:8px; color:#555;">This is a computer-generated receipt</div>
-        <div style="font-size:8px; color:#555;">${today}</div>
+    <div style="position:absolute; bottom:14px; left:24px; right:24px; border-top:1px solid #DDD6FE; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:10px; color:#555; font-weight:600;">RentVelo</div>
+        <div style="font-size:10px; color:#555;">This is a computer-generated receipt</div>
+        <div style="font-size:10px; color:#555;">${today}</div>
     </div>
 
 </div>
