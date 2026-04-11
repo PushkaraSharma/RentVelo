@@ -74,8 +74,8 @@ export const OTA_VERSION = 2;
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
-        "Added support bed system in Property type PG",
-        "Fixed issue where Android keyboard suggested text auto-filled the wrong inputs",
-        "Added Excel Import feature"
+        "Added Rent Increment feature",
+        "Resolve receipt related issue",
+        "Bug fixes"
     ]
 };
