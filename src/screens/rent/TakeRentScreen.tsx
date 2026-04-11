@@ -58,25 +58,59 @@ export default function TakeRentScreen({ navigation, route }: any) {
         }, [propertyId, month, year])
     );
 
+    const filterStateRef = React.useRef({
+        filter, search, month, year,
+        ids: new Set<number>()
+    });
+
     // Filtering
-    const filteredBills = bills.filter(item => {
-        // Search filter
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            const tenantName = item.tenant?.name?.toLowerCase() || '';
-            const unitName = item.unit?.name?.toLowerCase() || '';
-            const roomGroup = item.unit?.room_group?.toLowerCase() || '';
-            if (!tenantName.includes(q) && !unitName.includes(q) && !roomGroup.includes(q)) return false;
+    const filteredBills = useMemo(() => {
+        const isSameFilter =
+            filterStateRef.current.filter === filter &&
+            filterStateRef.current.search === search &&
+            filterStateRef.current.month === month &&
+            filterStateRef.current.year === year;
+
+        const result = bills.filter(item => {
+            const matchesSearch = () => {
+                if (!search.trim()) return true;
+                const q = search.toLowerCase();
+                const tenantName = item.tenant?.name?.toLowerCase() || '';
+                const unitName = item.unit?.name?.toLowerCase() || '';
+                const roomGroup = item.unit?.room_group?.toLowerCase() || '';
+                return tenantName.includes(q) || unitName.includes(q) || roomGroup.includes(q);
+            };
+
+            const matchesStatus = () => {
+                if (filter === 'all') return true;
+                if (filter === 'vacant') return item.isVacant;
+                if (filter === 'paid') return item.bill?.status === 'paid' || item.bill?.status === 'overpaid';
+                if (filter === 'partial') return item.bill?.status === 'partial';
+                if (filter === 'pending') return item.bill?.status === 'pending';
+                return true;
+            };
+
+            if (isSameFilter && filterStateRef.current.ids.has(item.unit.id)) {
+                // If it was already passing this filter session, keep it (unless search explicitly hides it)
+                return matchesSearch();
+            }
+
+            return matchesSearch() && matchesStatus();
+        });
+
+        if (!isSameFilter || (bills.length > 0 && filterStateRef.current.ids.size === 0)) {
+            filterStateRef.current = {
+                filter, search, month, year,
+                ids: new Set(result.map(b => b.unit.id))
+            };
+        } else if (isSameFilter && bills.length > 0) {
+            const newIds = new Set(filterStateRef.current.ids);
+            result.forEach(b => newIds.add(b.unit.id));
+            filterStateRef.current.ids = newIds;
         }
 
-        // Status filter
-        if (filter === 'all') return true;
-        if (filter === 'vacant') return item.isVacant;
-        if (filter === 'paid') return item.bill?.status === 'paid' || item.bill?.status === 'overpaid';
-        if (filter === 'partial') return item.bill?.status === 'partial';
-        if (filter === 'pending') return item.bill?.status === 'pending';
-        return true;
-    });
+        return result;
+    }, [bills, filter, search, month, year]);
 
     // Counts
     const counts = {
