@@ -37,6 +37,7 @@ try {
     // Properties
     patchTable('properties', 'auto_increment_rent_enabled', 'integer', '0');
     patchTable('properties', 'auto_increment_percent', 'real');
+    patchTable('properties', 'auto_increment_amount', 'real');
     patchTable('properties', 'auto_increment_frequency', 'text');
     patchTable('properties', 'last_increment_date', 'integer');
 

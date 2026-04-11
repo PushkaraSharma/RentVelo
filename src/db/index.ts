@@ -78,6 +78,8 @@ export {
     removePaymentFromBill,
     getBillPayments,
     resetBill,
+    resetFutureBills,
+    persistVirtualBill,
     syncPendingBillsWithUnitSettings,
     savePGUtilityReading,
 } from './billService';

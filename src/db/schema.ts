@@ -17,6 +17,7 @@ export const properties = sqliteTable('properties', {
     waive_penalty_on_partial_payment: integer('waive_penalty_on_partial_payment', { mode: 'boolean' }).default(false),
     auto_increment_rent_enabled: integer('auto_increment_rent_enabled', { mode: 'boolean' }).default(false),
     auto_increment_percent: real('auto_increment_percent'),
+    auto_increment_amount: real('auto_increment_amount'),
     auto_increment_frequency: text('auto_increment_frequency', { enum: ['yearly', 'half_yearly'] }),
     total_floors: integer('total_floors'),
     last_increment_date: integer('last_increment_date', { mode: 'timestamp' }),

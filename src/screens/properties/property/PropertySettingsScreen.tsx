@@ -33,7 +33,9 @@ export default function PropertySettingsScreen({ navigation, route }: any) {
     // Auto Increment
     const [autoIncrementEnabled, setAutoIncrementEnabled] = useState(false);
     const [autoIncrementPercent, setAutoIncrementPercent] = useState('');
+    const [autoIncrementAmount, setAutoIncrementAmount] = useState('');
     const [autoIncrementFrequency, setAutoIncrementFrequency] = useState('yearly');
+    const [lastIncrementDate, setLastIncrementDate] = useState<Date | null>(null);
 
     const [loading, setLoading] = useState(false);
     const [propertyName, setPropertyName] = useState('');
@@ -54,7 +56,10 @@ export default function PropertySettingsScreen({ navigation, route }: any) {
                 setAutoIncrementEnabled(data.auto_increment_rent_enabled ?? false);
                 const pct = data.auto_increment_percent;
                 setAutoIncrementPercent(pct != null && !isNaN(Number(pct)) ? String(pct) : '');
+                const amt = data.auto_increment_amount;
+                setAutoIncrementAmount(amt != null && !isNaN(Number(amt)) ? String(amt) : '');
                 setAutoIncrementFrequency(data.auto_increment_frequency || 'yearly');
+                setLastIncrementDate(data.last_increment_date ? new Date(data.last_increment_date) : null);
             }
         } catch (error) {
             console.error('Error loading property settings:', error);
@@ -71,7 +76,10 @@ export default function PropertySettingsScreen({ navigation, route }: any) {
                 waive_penalty_on_partial_payment: waivePenaltyOnPartialPayment,
                 auto_increment_rent_enabled: autoIncrementEnabled,
                 auto_increment_percent: autoIncrementEnabled && autoIncrementPercent ? parseFloat(autoIncrementPercent) : null,
+                auto_increment_amount: autoIncrementEnabled && autoIncrementAmount ? parseFloat(autoIncrementAmount) : null,
                 auto_increment_frequency: autoIncrementEnabled ? autoIncrementFrequency as any : null,
+                // If enabling for the first time, set last_increment_date to now so countdown starts now
+                last_increment_date: (autoIncrementEnabled && !lastIncrementDate) ? new Date() : (autoIncrementEnabled ? lastIncrementDate : null),
             });
             showToast({ type: 'success', title: 'Saved', message: 'Property settings updated successfully' });
             navigation.goBack();
@@ -145,13 +153,32 @@ export default function PropertySettingsScreen({ navigation, route }: any) {
 
                         {autoIncrementEnabled && (
                             <>
-                                <Input
-                                    label="INCREMENT PERCENTAGE"
-                                    placeholder="e.g. 5"
-                                    value={autoIncrementPercent}
-                                    onChangeText={setAutoIncrementPercent}
-                                    keyboardType="numeric"
-                                />
+                                <View style={styles.row}>
+                                    <View style={{ flex: 1, marginRight: theme.spacing.m }}>
+                                        <Input
+                                            label="INCREMENT %"
+                                            placeholder="e.g. 10"
+                                            value={autoIncrementPercent}
+                                            onChangeText={(val) => {
+                                                setAutoIncrementPercent(val);
+                                                if (val) setAutoIncrementAmount('');
+                                            }}
+                                            keyboardType="numeric"
+                                        />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Input
+                                            label="FIXED AMOUNT (₹)"
+                                            placeholder="e.g. 500"
+                                            value={autoIncrementAmount}
+                                            onChangeText={(val) => {
+                                                setAutoIncrementAmount(val);
+                                                if (val) setAutoIncrementPercent('');
+                                            }}
+                                            keyboardType="numeric"
+                                        />
+                                    </View>
+                                </View>
 
                                 <Text style={styles.fieldLabel}>FREQUENCY</Text>
                                 <View style={styles.optionsContainer}>

@@ -38,7 +38,7 @@ interface RentBillCardProps {
         isVacant: boolean;
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
-        nextBillStatus?: { hasChanges: boolean; id: number | null };
+        hasFuturePersistedBills?: boolean;
     };
     period: { start: string; end: string; days: number };
     onRefresh: (isSilent?: boolean) => void;
@@ -49,11 +49,10 @@ interface RentBillCardProps {
 }
 
 const RentBillCard = React.memo(({ item, period, onRefresh, navigation, propertyId, viewingMonth, viewingYear }: RentBillCardProps) => {
-    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired } = item;
+    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, hasFuturePersistedBills } = item;
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-    const nextBillStatus = item.nextBillStatus || { hasChanges: false, id: null };
 
     // B18: ALL HOOKS MUST BE AT THE TOP
     const [showRoomInfo, setShowRoomInfo] = useState(false);
@@ -77,6 +76,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [isReseting, setIsReseting] = useState(false);
     const [meterReadingError, setMeterReadingError] = useState('');
     const [waterReadingError, setWaterReadingError] = useState('');
+    const [showVirtualBillWarning, setShowVirtualBillWarning] = useState(false);
+    const [pendingVirtualAction, setPendingVirtualAction] = useState<(() => void) | null>(null);
+    const [isPersistingVirtual, setIsPersistingVirtual] = useState(false);
 
     const swipeAnim = useRef(new Animated.Value(0)).current;
     const viewShotRef = useRef<any>(null);
@@ -118,10 +120,8 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     // Derived locking state
     const isLocked = useMemo(() => {
         if (!bill) return false;
-        // 1. Hard lock if viewing an old month compared to current system month?
-        // Actually user said: "lock previous month if we have made user changes"
-        return nextBillStatus?.hasChanges;
-    }, [nextBillStatus?.hasChanges, bill]);
+        return hasFuturePersistedBills === true;
+    }, [hasFuturePersistedBills, bill]);
 
     const liveElectricityAmount = useMemo(() => {
         if (unit.electricity_rate === null || !bill) return bill?.electricity_amount ?? 0;
@@ -435,16 +435,15 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     };
 
     const handleResetBill = () => {
-        if (!nextBillStatus.id) return;
+        if (!hasFuturePersistedBills) return;
         setShowResetModal(true);
     };
 
     const confirmResetBill = async () => {
-        if (!nextBillStatus.id) return;
         try {
             setIsReseting(true);
-            const { resetBill } = require('../../db');
-            await resetBill(nextBillStatus.id);
+            const { resetFutureBills } = require('../../db');
+            await resetFutureBills(unit.id, viewingMonth, viewingYear);
             onRefresh();
         } catch (e) {
             console.error('Error resetting bill:', e);
@@ -452,6 +451,38 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         } finally {
             setIsReseting(false);
             setShowResetModal(false);
+        }
+    };
+
+    // Virtual Bill Actions Wrapper
+    const executeVirtualAction = (action: () => void) => {
+        if (bill?.id === null) {
+            setPendingVirtualAction(() => action);
+            setShowVirtualBillWarning(true);
+        } else {
+            action();
+        }
+    };
+
+    const handleConfirmVirtualAction = async () => {
+        if (!bill || bill.id !== null || !pendingVirtualAction) return;
+        setIsPersistingVirtual(true);
+        try {
+            const { persistVirtualBill } = require('../../db');
+            const newBillId = await persistVirtualBill(bill);
+
+            // Assign explicitly for instant access by pending action modals
+            bill.id = newBillId;
+
+            pendingVirtualAction();
+            onRefresh(true);
+        } catch (e) {
+            console.error('Error persisting virtual bill:', e);
+            showToast({ type: 'error', title: 'Error', message: 'Failed to persist bill' });
+        } finally {
+            setIsPersistingVirtual(false);
+            setShowVirtualBillWarning(false);
+            setPendingVirtualAction(null);
         }
     };
 
@@ -480,55 +511,63 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             else setWaterReadingError('');
         }
 
-        savingReading.current = true;
-        try {
-            const { hapticsLight } = require('../../utils/haptics');
-            hapticsLight();
+        const runSave = async () => {
+            savingReading.current = true;
+            try {
+                const { hapticsLight } = require('../../utils/haptics');
+                hapticsLight();
 
-            if (unit.room_group) {
-                // PG Room Group: Apply reading to all beds in the room and split cost
-                const { savePGUtilityReading } = require('../../db');
-                await savePGUtilityReading(
-                    bill.property_id,
-                    unit.room_group,
-                    bill.month,
-                    bill.year,
-                    type,
-                    newReading
-                );
-            } else {
-                // Standard Room: Calculate cost directly for this single bill
-                let unitsUsed = Math.max(0, newReading - prevReading);
-                const defaultUnits = isElec ? unit.electricity_default_units : unit.water_default_units;
-                if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
-                    unitsUsed = defaultUnits;
-                }
-                const rate = isElec ? (unit.electricity_rate ?? 0) : (unit.water_rate ?? 0);
-                const amt = unitsUsed * rate;
-
-                const { updateBill, recalculateBill } = require('../../db');
-                if (isElec) {
-                    await updateBill(bill.id, {
-                        curr_reading: newReading,
-                        prev_reading: prevReading,
-                        electricity_amount: amt,
-                    });
+                if (unit.room_group) {
+                    // PG Room Group: Apply reading to all beds in the room and split cost
+                    const { savePGUtilityReading } = require('../../db');
+                    await savePGUtilityReading(
+                        bill.property_id,
+                        unit.room_group,
+                        bill.month,
+                        bill.year,
+                        type,
+                        newReading
+                    );
                 } else {
-                    await updateBill(bill.id, {
-                        water_curr_reading: newReading,
-                        water_prev_reading: prevReading,
-                        water_amount: amt,
-                    });
-                }
-                await recalculateBill(bill.id);
-            }
+                    // Standard Room: Calculate cost directly for this single bill
+                    let unitsUsed = Math.max(0, newReading - prevReading);
+                    const defaultUnits = isElec ? unit.electricity_default_units : unit.water_default_units;
+                    if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
+                        unitsUsed = defaultUnits;
+                    }
+                    const rate = isElec ? (unit.electricity_rate ?? 0) : (unit.water_rate ?? 0);
+                    const amt = unitsUsed * rate;
 
-            trackEvent(AnalyticsEvents.METER_READING_SAVED, { type, mode: 'metered' });
-            onRefresh(true);
-        } catch (error) {
-            console.error('Error saving meter reading:', error);
-        } finally {
-            savingReading.current = false;
+                    const { updateBill, recalculateBill } = require('../../db');
+                    if (isElec) {
+                        await updateBill(bill.id, {
+                            curr_reading: newReading,
+                            prev_reading: prevReading,
+                            electricity_amount: amt,
+                        });
+                    } else {
+                        await updateBill(bill.id, {
+                            water_curr_reading: newReading,
+                            water_prev_reading: prevReading,
+                            water_amount: amt,
+                        });
+                    }
+                    await recalculateBill(bill.id);
+                }
+
+                trackEvent(AnalyticsEvents.METER_READING_SAVED, { type, mode: 'metered' });
+                onRefresh(true);
+            } catch (error) {
+                console.error('Error saving meter reading:', error);
+            } finally {
+                savingReading.current = false;
+            }
+        };
+
+        if (bill.id === null) {
+            executeVirtualAction(runSave);
+        } else {
+            runSave();
         }
     };
 
@@ -582,7 +621,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         if ((bill.paid_amount ?? 0) > 0) {
                             setShowPaidAmount(true);
                         } else if (!isLocked) {
-                            setShowReceivePayment(true);
+                            executeVirtualAction(() => setShowReceivePayment(true));
                         } else {
                             showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' });
                         }
@@ -624,7 +663,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'electricity' })}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'electricity' }))}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
@@ -670,7 +709,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'water' })}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'water' }))}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
@@ -690,7 +729,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             {/* === RENT + PREVIOUS BALANCE (tappable) === */}
             <Pressable
                 style={styles.rentSection}
-                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowTransactionInfo(true)}
+                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowTransactionInfo(true))}
             >
                 <View style={styles.rentRow}>
                     <View>
@@ -724,7 +763,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             <View style={styles.actionsRow}>
                 <Pressable
                     style={[styles.addRemoveBtn, isLocked && { opacity: 0.5 }]}
-                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowExpenseActions(true)}
+                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowExpenseActions(true))}
                 >
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>
@@ -936,11 +975,24 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 visible={showResetModal}
                 onClose={() => setShowResetModal(false)}
                 onConfirm={confirmResetBill}
-                title="Reset Future Bill?"
-                message="This will delete the bill for next month, including any payments or expenses. This will unlock the current month for editing."
-                confirmText="Reset Now"
+                title="Reset Future Bills?"
+                message="This will delete all future bill data (payments, expenses, readings) from this month onwards. This cannot be undone."
+                confirmText="Delete"
                 variant="danger"
                 loading={isReseting}
+            />
+            <ConfirmationModal
+                visible={showVirtualBillWarning}
+                onClose={() => {
+                    setShowVirtualBillWarning(false);
+                    setPendingVirtualAction(null);
+                }}
+                onConfirm={handleConfirmVirtualAction}
+                title="Modify Future Month?"
+                message="You're editing a future month. This will save your changes and lock all previous months."
+                confirmText="Proceed"
+                variant="danger"
+                loading={isPersistingVirtual}
             />
         </View >
     );
@@ -951,7 +1003,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     return (
         prevBill?.id === nextBill?.id &&
         prevBill?.updated_at?.getTime() === nextBill?.updated_at?.getTime() &&
-        prevProps.item.nextBillStatus?.hasChanges === nextProps.item.nextBillStatus?.hasChanges &&
+        prevProps.item.hasFuturePersistedBills === nextProps.item.hasFuturePersistedBills &&
         prevProps.period.start === nextProps.period.start &&
         prevProps.viewingMonth === nextProps.viewingMonth &&
         prevProps.viewingYear === nextProps.viewingYear

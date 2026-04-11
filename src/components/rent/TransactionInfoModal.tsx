@@ -63,7 +63,7 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
 
     // Auto calculate rent if dates change (only if unit rent is available)
     useEffect(() => {
-        if (visible && unit?.rent_amount && startDate && endDate && bill) {
+        if (visible && bill?.rent_amount && startDate && endDate && bill) {
             if (initialMount.current) {
                 // Skip the calculation on the very first render block when dates are just initialized
                 initialMount.current = false;
@@ -85,11 +85,11 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
                 const totalDaysInMonth = defaultEnd.getDate();
                 const selectedDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / msPerDay) + 1);
 
-                const calculatedRent = Math.round((unit.rent_amount / totalDaysInMonth) * selectedDays);
+                const calculatedRent = Math.round((bill.rent_amount / totalDaysInMonth) * selectedDays);
                 setRentAmount(calculatedRent.toString());
             } else {
                 // Restored back to full month, set back to unit's original fixed rent
-                setRentAmount((unit.rent_amount || 0).toString());
+                setRentAmount((bill.rent_amount || 0).toString());
             }
         }
     }, [startDate, endDate]);
@@ -168,7 +168,7 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
                         />
                     </View>
                     <Text style={styles.inputHint}>
-                        Rent Per Month: {CURRENCY}{unit?.rent_amount?.toLocaleString('en-IN')}
+                        Rent Per Month: {CURRENCY}{bill?.rent_amount?.toLocaleString('en-IN')}
                     </Text>
                 </View>
             </View>

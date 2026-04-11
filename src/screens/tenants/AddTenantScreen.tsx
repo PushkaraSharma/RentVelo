@@ -517,12 +517,12 @@ export default function AddTenantScreen({ navigation, route }: any) {
                         </View>
                     </View>
                     {/* Additional Info */}
-                    <Text style={styles.sectionLabel}>ADDITIONAL INFO</Text>
+                    <Text style={styles.sectionLabel}>EMERGENCY CONTACT INFO</Text>
                     <View style={styles.section}>
                         <View style={styles.row}>
                             <View style={{ flex: 1, marginRight: theme.spacing.m }}>
                                 <Input
-                                    label="Emergency Contact Name"
+                                    label="Name"
                                     placeholder="e.g. Father"
                                     value={emergencyName}
                                     onChangeText={setEmergencyName}
@@ -530,8 +530,8 @@ export default function AddTenantScreen({ navigation, route }: any) {
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Input
-                                    label="Emergency Phone"
-                                    placeholder="Ph. No."
+                                    label="Phone Number"
+                                    placeholder="Phone Number"
                                     value={emergencyPhone}
                                     onChangeText={setEmergencyPhone}
                                     keyboardType="phone-pad"
