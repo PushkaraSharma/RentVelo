@@ -1270,8 +1270,8 @@ export const resetFutureBills = async (
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    // Find all future persisted bills for this unit
-    const futureBills = await db.select().from(rentBills).where(
+    // Find all persisted bills for this unit from the requested starting point onwards
+    const billsToDelete = await db.select().from(rentBills).where(
         and(
             eq(rentBills.unit_id, unitId),
             or(
@@ -1280,11 +1280,6 @@ export const resetFutureBills = async (
             )
         )
     );
-
-    // Only delete bills that are in the future (not current or past)
-    const billsToDelete = futureBills.filter(b => {
-        return (b.year > currentYear) || (b.year === currentYear && b.month > currentMonth);
-    });
 
     for (const bill of billsToDelete) {
         // Delete associated expenses and payments
