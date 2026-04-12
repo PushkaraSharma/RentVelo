@@ -14,7 +14,6 @@ import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
-import { launchLibrary } from '../../utils/ImagePickerUtil';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';

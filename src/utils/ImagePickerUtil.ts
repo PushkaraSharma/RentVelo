@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
 
 export type ImageSelectionCallback = (uri: string) => void;
 
@@ -44,6 +45,7 @@ export const launchCamera = async (options: PickerOptions = {}): Promise<string 
 export const launchLibrary = async (options: PickerOptions = {}): Promise<string | null> => {
     const result = await ImagePicker.launchImageLibraryAsync({
         ...options,
+        allowsEditing: Platform.OS == 'ios',
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
