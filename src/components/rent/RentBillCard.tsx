@@ -41,6 +41,7 @@ interface RentBillCardProps {
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
         hasFuturePersistedBills?: boolean;
+        isStrictlyFuture?: boolean;
     };
     period: { start: string; end: string; days: number };
     onRefresh: (isSilent?: boolean) => void;
@@ -91,18 +92,28 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
 
     // Effect for reading continuity
     useEffect(() => {
-        if (!meterFocused && bill?.curr_reading !== undefined && bill?.curr_reading !== null) {
-            setMeterReading(bill.curr_reading.toString());
-        } else if (!meterFocused && bill?.curr_reading === null) {
-            setMeterReading('');
+        // Sync electricity
+        if (!meterFocused) {
+            const propReading = bill?.curr_reading?.toString() || '';
+            // Only sync from props if the bill is ALREADY persisted or if the value changed externally
+            // If it's a virtual bill and we have local text, don't wipe it!
+            if (bill?.id !== null || propReading !== '') {
+                if (propReading !== meterReading) {
+                    setMeterReading(propReading);
+                }
+            }
         }
 
-        if (!waterFocused && bill?.water_curr_reading !== undefined && bill?.water_curr_reading !== null) {
-            setWaterReading(bill.water_curr_reading.toString());
-        } else if (!waterFocused && bill?.water_curr_reading === null) {
-            setWaterReading('');
+        // Sync water
+        if (!waterFocused) {
+            const propWaterReading = bill?.water_curr_reading?.toString() || '';
+            if (bill?.id !== null || propWaterReading !== '') {
+                if (propWaterReading !== waterReading) {
+                    setWaterReading(propWaterReading);
+                }
+            }
         }
-    }, [bill?.curr_reading, bill?.water_curr_reading, meterFocused, waterFocused]);
+    }, [bill?.id, bill?.curr_reading, bill?.water_curr_reading, meterFocused, waterFocused]);
 
     // B17.1: Listen for keyboard hide to catch Android swipe-back (which doesn't fire onBlur reliably)
     useEffect(() => {
@@ -459,15 +470,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const isMetered = unit.electricity_rate !== null;
     const isWaterMetered = unit.water_rate !== null;
 
-    // B16: Lock historical bills (older than last month) to prevent invalidating balances
-    const isHistoricalLocked = (() => {
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
-        const diff = (currentYear * 12 + currentMonth) - (bill.year * 12 + bill.month);
-        return diff > 1;
-    })();
-
     const formatAmount = (amt: number) => {
         if (amt === undefined || amt === null) return `${CURRENCY}0`;
         return `${CURRENCY}${amt.toLocaleString('en-IN')}`;
@@ -493,30 +495,42 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    // Virtual Bill Actions Wrapper
     const executeVirtualAction = (action: () => void) => {
         if (bill?.id === null) {
-            setPendingVirtualAction(() => action);
-            setShowVirtualBillWarning(true);
+            if (item.isStrictlyFuture) {
+                Keyboard.dismiss();
+                setPendingVirtualAction(() => action);
+                setTimeout(() => {
+                    setShowVirtualBillWarning(true);
+                }, 100);
+            } else {
+                handleConfirmVirtualAction(action);
+            }
         } else {
             action();
         }
     };
 
-    const handleConfirmVirtualAction = async () => {
-        if (!bill || bill.id !== null || !pendingVirtualAction) return;
+    const handleConfirmVirtualAction = async (silentAction?: () => void) => {
+        const actionToRun = silentAction || pendingVirtualAction;
+        if (!bill || bill.id !== null || !actionToRun) {
+            return;
+        }
+
         setIsPersistingVirtual(true);
         try {
             const { persistVirtualBill } = require('../../db');
             const newBillId = await persistVirtualBill(bill);
 
-            // Assign explicitly for instant access by pending action modals
+            // Update local object bridge so that 'actionToRun' (like runSave) 
+            // has the ID it needs immediately before the refresh unmounts us.
             bill.id = newBillId;
 
-            pendingVirtualAction();
+            // Wait for the action (e.g., save reading) to complete BEFORE refreshing UI
+            await Promise.resolve(actionToRun());
             onRefresh(true);
         } catch (e) {
-            console.error('Error persisting virtual bill:', e);
+            console.error('[RentBillCard] Error persisting virtual bill:', e);
             showToast({ type: 'error', title: 'Error', message: 'Failed to persist bill' });
         } finally {
             setIsPersistingVirtual(false);
@@ -646,7 +660,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     <Text style={styles.tenantName}>{tenant?.name || '—'}</Text>
                     {isLocked && (
                         <Text style={styles.lockMessage}>
-                            Locked. To edit, long-press here to reset next month.
+                            Locked. To edit, long-press here to reset next months.
                         </Text>
                     )}
                 </View>

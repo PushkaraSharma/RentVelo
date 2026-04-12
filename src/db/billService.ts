@@ -55,7 +55,9 @@ export const generateBillsForProperty = async (
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
+    // Current/Future months (relative to today) are treated as virtual simulations until specialized action is taken
+    const isFutureMonth = (year > currentYear) || (year === currentYear && month >= currentMonth);
+    const isStrictlyFuture = (year > currentYear) || (year === currentYear && month > currentMonth);
     if (isFutureMonth) return;
 
     // Get property to check rent_payment_type
@@ -174,7 +176,13 @@ export const generateBillsForProperty = async (
             )
             .limit(1);
 
-        if (existingBill.length > 0) continue; // Already exists, don't overwrite manual changes
+        if (existingBill.length > 0) {
+            const bill = existingBill[0];
+            // If the bill is already fully paid, we don't want to touch it at all
+            if (bill.status === 'paid' || bill.status === 'overpaid') continue;
+            // Otherwise, we continue but we'll use an UPDATE instead of an INSERT later
+            // (The code below will recalculate prev_reading and previous_balance)
+        }
 
         // Calculate previous balance from last month's bill
         let previousBalance = 0;
@@ -242,7 +250,13 @@ export const generateBillsForProperty = async (
         const rentAmount = unit.rent_amount;
         const totalAmount = rentAmount + electricityAmount + waterAmount + previousBalance;
 
-        // Create the bill
+        // ── PERSISTENCE RULE: NEVER MODIFY EXISTING BILLS ──
+        // Only insert if missing. If it exists, we skip it entirely to preserve user data (readings/balances).
+        if (existingBill.length > 0) {
+            continue;
+        }
+
+        // Only reach here for NEW records that need to be created
         const result = await db.insert(rentBills).values({
             property_id: propertyId,
             unit_id: unit.id,
@@ -267,41 +281,32 @@ export const generateBillsForProperty = async (
 
         // Copy recurring expenses from previous month's bill
         if (prevBill.length > 0) {
-            const recurringExpenses = await db.select()
-                .from(billExpenses)
-                .where(
-                    and(
-                        eq(billExpenses.bill_id, prevBill[0].id),
-                        eq(billExpenses.is_recurring, true)
-                    )
-                );
-
-            let totalExp = 0;
-            for (const exp of recurringExpenses) {
+            const recurringExps = await db.select().from(billExpenses).where(
+                and(eq(billExpenses.bill_id, prevBill[0].id), eq(billExpenses.is_recurring, true))
+            );
+            for (const exp of recurringExps) {
                 await db.insert(billExpenses).values({
                     bill_id: newBillId,
-                    label: exp.label,
+                    property_id: propertyId,
+                    unit_id: unit.id,
+                    expense_name: exp.expense_name,
                     amount: exp.amount,
                     is_recurring: true,
+                    property_expense_id: exp.property_expense_id
                 });
-                totalExp += exp.amount;
             }
-
-            // Update bill totals if recurring expenses were added
-            if (totalExp > 0) {
-                const newTotal = totalAmount + totalExp;
-                await db.update(rentBills)
-                    .set({
-                        total_expenses: totalExp,
-                        total_amount: newTotal,
-                        balance: newTotal,
-                        updated_at: new Date(),
-                    })
-                    .where(eq(rentBills.id, newBillId));
+            if (recurringExps.length > 0) {
+                const totalExps = recurringExps.reduce((sum, e) => sum + (e.amount ?? 0), 0);
+                const finalTotal = totalAmount + totalExps;
+                await db.update(rentBills).set({
+                    total_expenses: totalExps,
+                    total_amount: finalTotal,
+                    balance: finalTotal
+                }).where(eq(rentBills.id, newBillId));
             }
         }
 
-        // ── Distribute Property Expenses to this unit's bill ──
+        // ── Distribute Property Expenses to this newly created bill ──
         const propExpenses = await db.select().from(propertyExpenses)
             .where(
                 and(
@@ -316,7 +321,6 @@ export const generateBillsForProperty = async (
 
         let distributedTotal = 0;
         for (const propExp of propExpenses) {
-            // Check if this unit is in the distribution list
             if (propExp.distributed_unit_ids) {
                 try {
                     const unitIds: number[] = JSON.parse(propExp.distributed_unit_ids);
@@ -331,9 +335,7 @@ export const generateBillsForProperty = async (
                         });
                         distributedTotal += splitAmount;
                     }
-                } catch (e) {
-                    // Invalid JSON, skip
-                }
+                } catch (e) { /* silent */ }
             }
         }
 
@@ -353,9 +355,9 @@ export const generateBillsForProperty = async (
                     .where(eq(rentBills.id, newBillId));
             }
         }
-    }
+    } // End of unit loop
 
-    // ── PG Utility Split: split fixed electricity/water across occupied beds ──
+    // ── PG Utility Split: split fixed electricity/water across occupied beds (Runs once per room group) ──
     if (property?.type === 'pg') {
         await splitPGUtilities(propertyId, month, year);
     }
@@ -606,7 +608,8 @@ export const getBillsForPropertyMonth = async (
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
+    const isFutureMonth = (year > currentYear) || (year === currentYear && month >= currentMonth);
+    const isStrictlyFuture = (year > currentYear) || (year === currentYear && month > currentMonth);
 
     // 1. Batch fetch all active tenants for these units
     const allActiveTenants = await db.select()
@@ -839,6 +842,7 @@ export const getBillsForPropertyMonth = async (
             isNotMovedIn,
             isLeaseExpired,
             hasFuturePersistedBills: hasFutureBills,
+            isStrictlyFuture,
         });
     }
 
@@ -1254,9 +1258,8 @@ export const persistVirtualBill = async (
 };
 
 /**
- * Reset/delete ALL persisted bills for a unit from a given month forward.
- * One-shot nuke: deletes bills, their payments, and their expenses.
- * Only deletes future bills (won't touch current or past month).
+ * Reset/delete persisted bills for a unit strictly after a given month.
+ * Used to unlock Month N by deleting Month N+1 and beyond while preserving Month N.
  */
 export const resetFutureBills = async (
     unitId: number,
@@ -1265,18 +1268,13 @@ export const resetFutureBills = async (
 ): Promise<void> => {
     const db = getDb();
 
-    // Guard: don't delete current or past month bills
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    // Find all persisted bills for this unit from the requested starting point onwards
+    // Find all persisted bills for this unit strictly after the requested month/year.
     const billsToDelete = await db.select().from(rentBills).where(
         and(
             eq(rentBills.unit_id, unitId),
             or(
                 sql`${rentBills.year} > ${fromYear}`,
-                and(eq(rentBills.year, fromYear), sql`${rentBills.month} >= ${fromMonth}`)
+                and(eq(rentBills.year, fromYear), sql`${rentBills.month} > ${fromMonth}`)
             )
         )
     );

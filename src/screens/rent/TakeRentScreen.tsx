@@ -124,6 +124,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const goMonth = (dir: number) => {
         hapticsHeavy();
         setLoading(true); // Immediate loader feedback
+        setBills([]); // Clear stale data instantly
         let newMonth = month + dir;
         let newYear = year;
         if (newMonth < 1) { newMonth = 12; newYear--; }
