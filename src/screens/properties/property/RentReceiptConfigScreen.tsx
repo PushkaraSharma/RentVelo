@@ -31,7 +31,8 @@ import {
 import Header from '../../../components/common/Header';
 import { getReceiptConfigByPropertyId, upsertReceiptConfig } from '../../../db';
 import { useFocusEffect } from '@react-navigation/native';
-import { launchLibrary } from '../../../utils/ImagePickerUtil';
+import { useImagePicker } from '../../../hooks/useImagePicker';
+import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import SignatureModal from '../../../components/common/SignatureModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { useToast } from '../../../hooks/useToast';
@@ -80,6 +81,14 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
     // Wallet Picker
     const [showWalletPicker, setShowWalletPicker] = useState(false);
 
+    const {
+        visible: showImagePicker,
+        openPicker,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker();
+
     useFocusEffect(
         useCallback(() => {
             loadConfig();
@@ -108,17 +117,8 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
         }
     };
 
-    const pickImage = async (setter: (uri: string) => void) => {
-        try {
-            const uri = await launchLibrary({
-                allowsEditing: true,
-                quality: 0.8,
-            });
-            if (uri) setter(uri);
-        } catch (error) {
-            console.error('Error picking image:', error);
-        }
-    };
+    const pickLogo = () => openPicker({ allowsEditing: true, quality: 0.8 }, setLogoUri);
+    const pickQrCode = () => openPicker({ allowsEditing: true, quality: 0.8 }, setPaymentQrUri);
 
     const handleSignatureSave = (filepath: string) => {
         setSignatureUri(filepath);
@@ -192,7 +192,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
-                                        onPress={() => pickImage(setLogoUri)}
+                                        onPress={pickLogo}
                                     >
                                         <Camera size={16} color={theme.colors.accent} />
                                         <Text style={styles.changeBtnText}>Change</Text>
@@ -207,7 +207,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                                 </View>
                             </View>
                         ) : (
-                            <Pressable style={styles.uploadBox} onPress={() => pickImage(setLogoUri)}>
+                            <Pressable style={styles.uploadBox} onPress={pickLogo}>
                                 <Upload size={28} color={theme.colors.accent} />
                                 <Text style={styles.uploadTitle}>Upload Logo</Text>
                                 <Text style={styles.uploadSubtitle}>This will appear on rent receipts</Text>
@@ -307,7 +307,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
-                                        onPress={() => pickImage(setPaymentQrUri)}
+                                        onPress={pickQrCode}
                                     >
                                         <Camera size={16} color={theme.colors.accent} />
                                         <Text style={styles.changeBtnText}>Change</Text>
@@ -322,7 +322,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                                 </View>
                             </View>
                         ) : (
-                            <Pressable style={styles.uploadBox} onPress={() => pickImage(setPaymentQrUri)}>
+                            <Pressable style={styles.uploadBox} onPress={pickQrCode}>
                                 <Upload size={28} color={theme.colors.accent} />
                                 <Text style={styles.uploadTitle}>Upload QR Code</Text>
                                 <Text style={styles.uploadSubtitle}>Payment QR will be shown on receipts</Text>
@@ -393,6 +393,13 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                 onClose={() => setShowSignatureModal(false)}
                 onSave={handleSignatureSave}
                 propertyId={propertyId}
+            />
+
+            <ImagePickerModal
+                visible={showImagePicker}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
             />
         </SafeAreaView>
     );

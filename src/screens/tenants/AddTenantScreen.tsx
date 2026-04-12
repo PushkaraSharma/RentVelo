@@ -15,6 +15,8 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
 import { launchLibrary } from '../../utils/ImagePickerUtil';
+import { useImagePicker } from '../../hooks/useImagePicker';
+import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
@@ -44,6 +46,14 @@ export default function AddTenantScreen({ navigation, route }: any) {
     const [currUnit, setCurrUnit] = useState<Unit | null>(null);
     const [currTenant, setCurrTenant] = useState<Tenant | null>(null);
     const [newlyCreatedId, setNewlyCreatedId] = useState<number | null>(null);
+
+    const {
+        visible: showImagePicker,
+        openPicker,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker();
 
     // Personal Info
     const [title, setTitle] = useState('Mr.');
@@ -142,18 +152,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
         }
     };
 
-    const pickPhoto = async () => {
-        try {
-            const uri = await launchLibrary({
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-            });
-            if (uri) setPhotoUri(uri);
-        } catch (error) {
-            console.error('Error picking photo:', error);
-        }
-    };
+    const pickPhoto = () => openPicker({ allowsEditing: true, aspect: [1, 1], quality: 0.8 }, setPhotoUri);
 
     const importFromContacts = async () => {
         const { status } = await Contacts.requestPermissionsAsync();
@@ -185,17 +184,9 @@ export default function AddTenantScreen({ navigation, route }: any) {
         if (contact.email) setEmail(contact.email);
     };
 
-    const pickDocument = async (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
-        try {
-            const uri = await launchLibrary({ quality: 0.8, allowsEditing: false });
-            if (uri) {
-                if (type === 'aadhaar_front') setAadhaarFrontUri(uri);
-                else if (type === 'aadhaar_back') setAadhaarBackUri(uri);
-                else setPanUri(uri);
-            }
-        } catch (error) {
-            console.error('Error picking document:', error);
-        }
+    const pickDocument = (type: 'aadhaar_front' | 'aadhaar_back' | 'pan') => {
+        const setter = type === 'aadhaar_front' ? setAadhaarFrontUri : type === 'aadhaar_back' ? setAadhaarBackUri : setPanUri;
+        openPicker({ quality: 0.8, allowsEditing: false }, setter);
     };
 
     const handleSubmit = async () => {
@@ -707,6 +698,13 @@ export default function AddTenantScreen({ navigation, route }: any) {
                     payments={[]} // New tenant has no payments yet
                 />
             )}
+
+            <ImagePickerModal
+                visible={showImagePicker}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
+            />
         </SafeAreaView>
     );
 }

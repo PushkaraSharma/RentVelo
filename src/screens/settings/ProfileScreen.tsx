@@ -10,7 +10,7 @@ import { login } from '../../redux/authSlice';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../utils/ImagePickerUtil';
+import { useImagePicker } from '../../hooks/useImagePicker';
 import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { storage } from '../../utils/storage';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
@@ -29,7 +29,15 @@ export default function ProfileScreen({ navigation }: any) {
     const [businessName, setBusinessName] = useState('');
     const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || null);
     const [loading, setLoading] = useState(false);
-    const [showImagePicker, setShowImagePicker] = useState(false);
+    const {
+        visible: showImagePicker,
+        openPicker: pickImage,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker((uri) => setPhotoUrl(uri));
+
+    const imageOptions = { allowsEditing: true, aspect: [1, 1] as [number, number], quality: 0.5 };
 
     useEffect(() => {
         loadProfileData();
@@ -42,30 +50,6 @@ export default function ProfileScreen({ navigation }: any) {
             setPhone(parsed.phone || '');
             setBusinessName(parsed.businessName || '');
         }
-    };
-
-    const handleSelectCamera = async () => {
-        const hasPermission = await requestCameraPermission();
-        if (!hasPermission) {
-            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need camera permissions to make this work!' });
-            return;
-        }
-        const uri = await launchCamera({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
-        if (uri) setPhotoUrl(uri);
-    };
-
-    const handleSelectGallery = async () => {
-        const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) {
-            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need gallery permissions to make this work!' });
-            return;
-        }
-        const uri = await launchLibrary({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
-        if (uri) setPhotoUrl(uri);
-    };
-
-    const pickImage = () => {
-        setShowImagePicker(true);
     };
 
     const handleSave = async () => {
@@ -106,7 +90,7 @@ export default function ProfileScreen({ navigation }: any) {
             >
                 <ScrollView contentContainerStyle={styles.content}>
                     <View style={styles.avatarSection}>
-                        <Pressable style={styles.avatarPlaceholder} onPress={pickImage}>
+                        <Pressable style={styles.avatarPlaceholder} onPress={() => pickImage(imageOptions)}>
                             {photoUrl ? (
                                 <Image source={{ uri: getFullImageUri(photoUrl) || photoUrl }} style={styles.avatarImage} />
                             ) : (
@@ -164,9 +148,9 @@ export default function ProfileScreen({ navigation }: any) {
             </KeyboardAvoidingView>
             <ImagePickerModal
                 visible={showImagePicker}
-                onClose={() => setShowImagePicker(false)}
-                onSelectCamera={handleSelectCamera}
-                onSelectGallery={handleSelectGallery}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
             />
         </SafeAreaView>
     );

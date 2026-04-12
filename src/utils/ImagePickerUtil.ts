@@ -51,3 +51,21 @@ export const launchLibrary = async (options: PickerOptions = {}): Promise<string
     }
     return null;
 };
+
+/**
+ * Launches the camera after checking permissions
+ */
+export const launchCameraWithPermission = async (options: PickerOptions = {}): Promise<string | null> => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) return null;
+    return launchCamera(options);
+};
+
+/**
+ * Launches the image library after checking permissions
+ */
+export const launchLibraryWithPermission = async (options: PickerOptions = {}): Promise<string | null> => {
+    const hasPermission = await requestLibraryPermission();
+    if (!hasPermission) return null;
+    return launchLibrary(options);
+};

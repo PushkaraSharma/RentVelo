@@ -7,7 +7,7 @@ import Button from '../../../components/common/Button';
 import Toggle from '../../../components/common/Toggle';
 import { ArrowLeft, Camera, Building, Layers, User, Phone, Mail, MapPin, Calendar } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
-import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
+import { useImagePicker } from '../../../hooks/useImagePicker';
 import { createProperty, updateProperty, getPropertyById, createUnit, updateUnit } from '../../../db';
 import SuccessModal from '../../../components/common/SuccessModal';
 import { PROPERTY_TYPES, AMENITIES, RENT_PAYMENT_TYPES, RENT_CYCLE_OPTIONS, METER_TYPES } from '../../../utils/Constants';
@@ -68,7 +68,13 @@ export default function AddPropertyScreen({ navigation, route }: any) {
     const [defaultUnitId, setDefaultUnitId] = useState<number | null>(null);
 
     // Custom UI Modals State
-    const [showImagePicker, setShowImagePicker] = useState(false);
+    const {
+        visible: showImagePicker,
+        openPicker: pickImage,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker((uri) => setImage(uri));
     const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
 
     React.useEffect(() => {
@@ -145,29 +151,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
         }
     };
 
-    const handleSelectCamera = async () => {
-        const hasPermission = await requestCameraPermission();
-        if (!hasPermission) {
-            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need camera permissions to make this work!' });
-            return;
-        }
-        const uri = await launchCamera({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
-        if (uri) setImage(uri);
-    };
-
-    const handleSelectGallery = async () => {
-        const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) {
-            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need gallery permissions to make this work!' });
-            return;
-        }
-        const uri = await launchLibrary({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
-        if (uri) setImage(uri);
-    };
-
-    const pickImage = () => {
-        setShowImagePicker(true);
-    };
+    const pickBuildingImage = () => pickImage({ allowsEditing: true, aspect: [16, 9], quality: 0.8 });
 
     const toggleAmenity = (id: string) => {
         if (selectedAmenities.includes(id)) {
@@ -390,7 +374,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <ScrollView contentContainerStyle={styles.content}>
                     {/* Image Upload */}
-                    <Pressable style={styles.imageUpload} onPress={pickImage}>
+                    <Pressable style={styles.imageUpload} onPress={pickBuildingImage}>
                         {image ? (
                             <Image source={{ uri: getFullImageUri(image) || image }} style={styles.uploadedImage} />
                         ) : (
@@ -827,9 +811,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
 
             <ImagePickerModal
                 visible={showImagePicker}
-                onClose={() => setShowImagePicker(false)}
-                onSelectCamera={handleSelectCamera}
-                onSelectGallery={handleSelectGallery}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
             />
 
             <PromptModal

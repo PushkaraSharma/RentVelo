@@ -18,10 +18,10 @@ import {
 } from '../../../db';
 import { CURRENCY } from '../../../utils/Constants';
 import { useToast } from '../../../hooks/useToast';
+import { useImagePicker } from '../../../hooks/useImagePicker';
 import {
     Plus, Trash2, ChevronDown, Camera, CreditCard, CalendarDays, Tag, ChevronLeft, ChevronRight
 } from 'lucide-react-native';
-import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../../utils/haptics';
 
@@ -55,13 +55,20 @@ export default function ExpensesScreen({ navigation, route }: any) {
     const [expenseAmount, setExpenseAmount] = useState('');
     const [expenseType, setExpenseType] = useState('');
     const [expenseFrequency, setExpenseFrequency] = useState<'one_time' | 'monthly'>('one_time');
-    const [expenseImage, setExpenseImage] = useState<string | null>(null);
     const [expenseRemarks, setExpenseRemarks] = useState('');
     const [distributeType, setDistributeType] = useState<'owner' | 'rooms'>('owner');
+    const [expenseImage, setExpenseImage] = useState<string | null>(null);
+
+    const {
+        visible: showImagePicker,
+        openPicker: pickImage,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker((uri) => setExpenseImage(uri));
     const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showMonthPicker, setShowMonthPicker] = useState(false);
-    const [showImagePicker, setShowImagePicker] = useState(false);
     const [addLoading, setAddLoading] = useState(false);
 
     // Delete
@@ -190,19 +197,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
         }
     };
 
-    const handleSelectCamera = async () => {
-        const hasPermission = await requestCameraPermission();
-        if (!hasPermission) return;
-        const uri = await launchCamera({ allowsEditing: true, quality: 0.7 });
-        if (uri) setExpenseImage(uri);
-    };
-
-    const handleSelectGallery = async () => {
-        const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) return;
-        const uri = await launchLibrary({ allowsEditing: true, quality: 0.7 });
-        if (uri) setExpenseImage(uri);
-    };
+    const pickReceipt = () => pickImage({ allowsEditing: true, quality: 0.7 });
 
     const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
     const ownerExpenses = expenses.filter(e => e.distribute_type === 'owner').reduce((s, e) => s + e.amount, 0);
@@ -392,7 +387,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
                 {/* Image */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Image (Optional)</Text>
-                    <Pressable style={styles.imageBtn} onPress={() => setShowImagePicker(true)}>
+                    <Pressable style={styles.imageBtn} onPress={pickReceipt}>
                         {expenseImage ? (
                             <Image
                                 source={{ uri: getFullImageUri(expenseImage) || expenseImage }}
@@ -516,9 +511,9 @@ export default function ExpensesScreen({ navigation, route }: any) {
             {/* Image Picker Modal */}
             <ImagePickerModal
                 visible={showImagePicker}
-                onClose={() => setShowImagePicker(false)}
-                onSelectCamera={handleSelectCamera}
-                onSelectGallery={handleSelectGallery}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
             />
 
             {/* Delete Confirmation */}

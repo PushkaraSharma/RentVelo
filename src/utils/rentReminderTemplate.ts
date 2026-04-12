@@ -203,9 +203,17 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
                 ${(bill.electricity_amount || 0) > 0 ? `
                 <tr>
                     <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">
-                        Electricity${bill.prev_reading != null && bill.curr_reading != null ? ` <span style="color:#888;">(${bill.prev_reading} → ${bill.curr_reading})</span>` : ''}
+                        Electricity${bill.prev_reading != null && bill.curr_reading != null ? ` <span style="color:#888; font-size:11px;">(${bill.curr_reading} - ${bill.prev_reading} = ${Number((bill.curr_reading - bill.prev_reading).toFixed(2))} units @ ${CURRENCY}${unit.electricity_rate || 0}/unit)</span>` : ''}
                     </td>
                     <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(bill.electricity_amount)}</td>
+                </tr>
+                ` : ''}
+                ${(bill.water_amount || 0) > 0 ? `
+                <tr>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">
+                        Water${bill.water_prev_reading != null && bill.water_curr_reading != null ? ` <span style="color:#888; font-size:11px;">(${bill.water_curr_reading} - ${bill.water_prev_reading} = ${Number((bill.water_curr_reading - bill.water_prev_reading).toFixed(2))} units @ ${CURRENCY}${unit.water_rate || 0}/unit)</span>` : ''}
+                    </td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(bill.water_amount)}</td>
                 </tr>
                 ` : ''}
                 ${filteredExpenses.length > 0 ? `

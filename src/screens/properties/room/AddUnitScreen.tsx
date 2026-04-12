@@ -10,7 +10,7 @@ import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import { Zap, Droplets, Camera, Trash2, Plus, User, Info, Layout } from 'lucide-react-native';
 import Header from '../../../components/common/Header';
 import { createUnit, updateUnit, getUnitById, getPropertyById, syncPendingBillsWithUnitSettings, createPGRoom, updatePGRoom, getBedsForRoom } from '../../../db';
-import { requestCameraPermission, requestLibraryPermission, launchCamera, launchLibrary } from '../../../utils/ImagePickerUtil';
+import { useImagePicker } from '../../../hooks/useImagePicker';
 import { RENT_CYCLE_OPTIONS, METER_TYPES, ROOM_TYPES, FURNISHING_TYPES } from '../../../utils/Constants';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { useToast } from '../../../hooks/useToast';
@@ -83,7 +83,13 @@ export default function AddUnitScreen({ navigation, route }: any) {
     const [images, setImages] = useState<string[]>([]);
 
     // Custom UI Modals State
-    const [showImagePicker, setShowImagePicker] = useState(false);
+    const {
+        visible: showImagePicker,
+        openPicker: pickImage,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker((uri) => setImages(prev => [...prev, uri]));
     const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
 
     // PG-specific state
@@ -224,29 +230,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
         }
     };
 
-    const handleSelectCamera = async () => {
-        const hasPermission = await requestCameraPermission();
-        if (!hasPermission) {
-            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need camera permissions to make this work!' });
-            return;
-        }
-        const uri = await launchCamera({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
-        if (uri) setImages(prev => [...prev, uri]);
-    };
-
-    const handleSelectGallery = async () => {
-        const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) {
-            showToast({ type: 'warning', title: 'Permission Required', message: 'Sorry, we need gallery permissions to make this work!' });
-            return;
-        }
-        const uri = await launchLibrary({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
-        if (uri) setImages(prev => [...prev, uri]);
-    };
-
-    const pickImage = () => {
-        setShowImagePicker(true);
-    };
+    const pickRoomPhoto = () => pickImage({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
 
     const removeImage = (index: number) => {
         const newImages = [...images];
@@ -798,7 +782,7 @@ export default function AddUnitScreen({ navigation, route }: any) {
                             {/* Photos */}
                             <Text style={styles.sectionLabel}>ROOM PHOTOS</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
-                                <Pressable style={styles.addPhotoBox} onPress={pickImage}>
+                                <Pressable style={styles.addPhotoBox} onPress={pickRoomPhoto}>
                                     <Camera size={24} color={theme.colors.textSecondary} />
                                     <Text style={styles.addPhotoText}>Add Photo</Text>
                                 </Pressable>
@@ -902,9 +886,9 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
             <ImagePickerModal
                 visible={showImagePicker}
-                onClose={() => setShowImagePicker(false)}
-                onSelectCamera={handleSelectCamera}
-                onSelectGallery={handleSelectGallery}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
             />
 
             <PromptModal

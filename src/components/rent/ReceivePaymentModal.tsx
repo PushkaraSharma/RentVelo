@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Image } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { Banknote, CreditCard, Building2, Landmark, Camera, Check } from 'lucide-react-native';
+import { Banknote, CreditCard, Building2, Landmark, Camera, Check, Image as ImageIcon, X } from 'lucide-react-native';
 import { addPaymentToBill } from '../../db/billService';
 import { syncNotificationSchedules } from '../../services/pushNotificationService';
-import { launchLibrary } from '../../utils/ImagePickerUtil';
+import { useImagePicker } from '../../hooks/useImagePicker';
 import { saveImageToPermanentStorage } from '../../services/imageService';
+import ImagePickerModal from '../common/ImagePickerModal';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
@@ -36,6 +37,14 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
     const [loading, setLoading] = useState(false);
     const [paymentDate, setPaymentDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
+
+    const {
+        visible: showImagePicker,
+        openPicker: openImagePicker,
+        closePicker: closeImagePicker,
+        handleCamera,
+        handleGallery
+    } = useImagePicker((uri) => setPhotoUri(uri));
 
     const currentBalance = bill?.balance ?? 0;
 
@@ -83,19 +92,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
         }
     };
 
-    const pickPhoto = async () => {
-        try {
-            const uri = await launchLibrary({
-                allowsEditing: true,
-                quality: 0.8,
-            });
-            if (uri) {
-                setPhotoUri(uri);
-            }
-        } catch (error) {
-            console.error('Error picking photo:', error);
-        }
-    };
+    const pickPhoto = () => openImagePicker({ allowsEditing: true, quality: 0.8 });
 
     const formatDate = (d: Date) => {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -152,12 +149,37 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 <Pressable style={styles.dateChip} onPress={() => setShowDatePicker(true)}>
                     <Text style={styles.dateText}>{formatDate(paymentDate)}</Text>
                 </Pressable>
-                <Pressable style={styles.photoChip} onPress={pickPhoto}>
-                    <Camera size={16} color={theme.colors.accent} />
-                    <Text style={styles.photoText}>{photoUri ? 'Photo Added' : 'Add Photo'}</Text>
-                    {photoUri && <Check size={16} color={theme.colors.accent} />}
+                <Pressable style={[styles.photoChip, photoUri && styles.photoChipActive]} onPress={pickPhoto}>
+                    {photoUri ? (
+                        <View style={styles.photoPreviewContainer}>
+                            <ImageIcon size={16} color={theme.colors.accent} />
+                            <Text style={styles.photoText}>Photo Added</Text>
+                            <Check size={16} color={theme.colors.success} />
+                        </View>
+                    ) : (
+                        <>
+                            <Camera size={16} color={theme.colors.accent} />
+                            <Text style={styles.photoText}>Add Photo</Text>
+                        </>
+                    )}
                 </Pressable>
             </View>
+
+            {photoUri && (
+                <View style={styles.imagePreviewWrapper}>
+                    <Image 
+                        source={{ uri: photoUri }} 
+                        style={styles.imagePreview} 
+                        resizeMode="cover"
+                    />
+                    <Pressable 
+                        style={styles.removePhotoOverlay} 
+                        onPress={() => setPhotoUri(null)}
+                    >
+                        <X size={14} color="#FFF" />
+                    </Pressable>
+                </View>
+            )}
 
             <DateTimePickerModal
                 isVisible={showDatePicker}
@@ -176,6 +198,13 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 maxLength={50}
             />
             <Text style={styles.charCount}>{remarks.length}/50</Text>
+
+            <ImagePickerModal
+                visible={showImagePicker}
+                onClose={closeImagePicker}
+                onSelectCamera={handleCamera}
+                onSelectGallery={handleGallery}
+            />
         </RentModalSheet>
     );
 }
@@ -265,6 +294,41 @@ const getStyles = (theme: any) => StyleSheet.create({
         fontSize: 13,
         fontWeight: theme.typography.semiBold,
         color: theme.colors.accent,
+    },
+    photoChipActive: {
+        backgroundColor: theme.colors.accent + '15',
+        borderColor: theme.colors.accent,
+        borderWidth: 1,
+    },
+    photoPreviewContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    imagePreviewWrapper: {
+        position: 'relative',
+        marginBottom: theme.spacing.m,
+        borderRadius: 12,
+        overflow: 'hidden',
+        height: 120,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    imagePreview: {
+        width: '100%',
+        height: '100%',
+    },
+    removePhotoOverlay: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     remarksInput: {
         backgroundColor: theme.colors.surface,
