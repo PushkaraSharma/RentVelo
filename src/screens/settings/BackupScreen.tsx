@@ -219,7 +219,7 @@ export default function BackupScreen({ navigation }: any) {
         const result = await restoreFromGoogleDrive();
         setRestoring(null);
         if (result.success) {
-            syncDatabaseSchema();
+            syncDatabaseSchema(true);
             trackEvent(AnalyticsEvents.BACKUP_RESTORED);
             showToast({
                 type: 'success',
@@ -264,7 +264,7 @@ export default function BackupScreen({ navigation }: any) {
         const result = await restoreFromLocalBackup();
         setRestoring(null);
         if (result.success) {
-            syncDatabaseSchema();
+            syncDatabaseSchema(true);
             trackEvent(AnalyticsEvents.BACKUP_RESTORED);
             showToast({
                 type: 'success',

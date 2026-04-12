@@ -1,5 +1,5 @@
 // Database initialization
-export { initDatabase, getDb } from './database';
+export { initDatabase, getDb, syncDatabaseSchema } from './database';
 
 // Property operations
 export {
