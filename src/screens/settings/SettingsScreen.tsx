@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert, Modal, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch, useSelector } from 'react-redux';
@@ -31,8 +31,10 @@ import { generateRealUsageData } from '../../../tests/seedDatabase';
 import { getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents, setAnalyticsUser } from '../../services/analyticsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PickerBottomSheet from '../../components/common/PickerBottomSheet';
 import { useToast } from '../../hooks/useToast';
 import { deleteAccountData } from '../../services/accountService';
+import { getReceiptDefaultFormat, getReceiptDefaultAction, setReceiptDefaultFormat, setReceiptDefaultAction, ReceiptDefaultFormat, ReceiptDefaultAction } from '../../utils/storage';
 
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -47,6 +49,24 @@ export default function SettingsScreen({ navigation }: any) {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteCloudBackup, setDeleteCloudBackup] = useState(true);
+
+    // App Preferences State
+    const [receiptFormat, setLocalReceiptFormat] = useState<ReceiptDefaultFormat>(getReceiptDefaultFormat());
+    const [receiptAction, setLocalReceiptAction] = useState<ReceiptDefaultAction>(getReceiptDefaultAction());
+    const [showFormatModal, setShowFormatModal] = useState(false);
+    const [showActionModal, setShowActionModal] = useState(false);
+
+    const handleSetFormat = (format: ReceiptDefaultFormat) => {
+        setReceiptDefaultFormat(format);
+        setLocalReceiptFormat(format);
+        setShowFormatModal(false);
+    };
+
+    const handleSetAction = (action: ReceiptDefaultAction) => {
+        setReceiptDefaultAction(action);
+        setLocalReceiptAction(action);
+        setShowActionModal(false);
+    };
 
     const handleLogout = () => {
         setShowLogoutModal(true);
@@ -151,7 +171,9 @@ export default function SettingsScreen({ navigation }: any) {
                 </View>
                 <Text style={styles.itemLabel}>{label}</Text>
             </View>
-            {right || <ChevronRight size={20} color={theme.colors.textTertiary} />}
+            <View style={styles.itemRight}>
+                {right || <ChevronRight size={20} color={theme.colors.textTertiary} />}
+            </View>
         </Pressable>
     );
 
@@ -199,7 +221,29 @@ export default function SettingsScreen({ navigation }: any) {
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Preferences</Text>
+                    <Text style={styles.sectionTitle}>App Preferences</Text>
+                    <View style={styles.sectionContent}>
+                        <SettingItem
+                            icon={FileText}
+                            label="Receipt Format"
+                            color="#3B82F6"
+                            onPress={() => setShowFormatModal(true)}
+                            right={<Text style={{ color: theme.colors.textSecondary, fontSize: 13, textAlign: 'right' }} numberOfLines={1}>{receiptFormat === 'ask' ? 'Ask Every Time' : receiptFormat === 'pdf' ? 'Always PDF' : 'Always Image'}</Text>}
+                        />
+                        {Platform.OS === 'android' && (
+                            <SettingItem
+                                icon={Share2}
+                                label="Share Action"
+                                color="#10B981"
+                                onPress={() => setShowActionModal(true)}
+                                right={<Text style={{ color: theme.colors.textSecondary, fontSize: 13, textAlign: 'right' }} numberOfLines={1}>{receiptAction === 'system' ? 'System Share' : 'WhatsApp Direct'}</Text>}
+                            />
+                        )}
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Device Settings</Text>
                     <View style={styles.sectionContent}>
                         <SettingItem
                             icon={Moon}
@@ -343,6 +387,33 @@ export default function SettingsScreen({ navigation }: any) {
                 </Pressable>
             </ConfirmationModal>
 
+            {/* Receipt Format Selector Modal */}
+            <PickerBottomSheet
+                visible={showFormatModal}
+                onClose={() => setShowFormatModal(false)}
+                title="Default Receipt Format"
+                selectedValue={receiptFormat}
+                options={[
+                    { label: 'Ask Every Time', value: 'ask' },
+                    { label: 'Always Default to Image', value: 'image' },
+                    { label: 'Always Default to PDF', value: 'pdf' }
+                ]}
+                onSelect={(val) => handleSetFormat(val as ReceiptDefaultFormat)}
+            />
+
+            {/* Receipt Action Selector Modal */}
+            <PickerBottomSheet
+                visible={showActionModal}
+                onClose={() => setShowActionModal(false)}
+                title="Default Share Action"
+                selectedValue={receiptAction}
+                options={[
+                    { label: 'System Default Picker', value: 'system' },
+                    { label: 'Direct to WhatsApp', value: 'whatsapp' }
+                ]}
+                onSelect={(val) => handleSetAction(val as ReceiptDefaultAction)}
+            />
+
         </View>
     );
 }
@@ -459,9 +530,16 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderBottomColor: theme.colors.border + '50',
     },
     itemLeft: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         gap: theme.spacing.m,
+    },
+    itemRight: {
+        flexShrink: 1,
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        paddingLeft: 12,
     },
     iconContainer: {
         width: 36,

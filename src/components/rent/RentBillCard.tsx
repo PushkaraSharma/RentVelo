@@ -18,6 +18,8 @@ import ViewShot from 'react-native-view-shot';
 import { hapticsLight, hapticsMedium, hapticsHeavy } from '../../utils/haptics';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
+import RNShare from 'react-native-share';
+import { getReceiptDefaultFormat, getReceiptDefaultAction } from '../../utils/storage';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -180,6 +182,57 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
+    const executeShareHelper = async (uri: string, mimeType: string, dialogTitle: string) => {
+        const defaultAction = getReceiptDefaultAction();
+        let skippedFallback = false;
+        let finalUri = uri;
+
+        try {
+            // Give the temporary file a human-readable name so WhatsApp/Files shows a pretty filename instead of a temporary hash UUID.
+            const safeFilename = dialogTitle.replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/ /g, '_').replace(/_+/g, '_');
+            const extension = mimeType === 'application/pdf' ? '.pdf' : '.png';
+            // cacheDirectory is guaranteed to have a trailing slash in Expo
+            const newUri = `${FileSystem.cacheDirectory}${safeFilename}${extension}`;
+            await FileSystem.copyAsync({ from: uri, to: newUri });
+            finalUri = newUri;
+        } catch (e) {
+            console.warn('Failed to rename file, using original uri', e);
+        }
+
+        if (Platform.OS === 'android' && defaultAction === 'whatsapp' && tenant?.phone) {
+            try {
+                let formattedNumber = tenant.phone.replace(/\D/g, '');
+                if (formattedNumber.length === 10) formattedNumber = '91' + formattedNumber;
+                const shareOptions: any = {
+                    social: RNShare.Social.WHATSAPP,
+                    url: finalUri,
+                    type: mimeType,
+                    whatsAppNumber: formattedNumber,
+                }
+                await RNShare.shareSingle(shareOptions);
+                return;
+            } catch (err: any) {
+                console.warn('WhatsApp share error:', err);
+                if (err?.message && err.message.includes('User did not share')) {
+                    skippedFallback = true;
+                    return; // user cancelled deliberately
+                }
+                showToast({ type: 'warning', title: 'WhatsApp fallback', message: 'Could not open WhatsApp directly. Using default share.' });
+            }
+        }
+        if (skippedFallback) return;
+
+        if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(finalUri, {
+                mimeType,
+                dialogTitle,
+                UTI: mimeType === 'application/pdf' ? 'com.adobe.pdf' : undefined,
+            });
+        } else {
+            showToast({ type: 'info', title: 'Sharing not available', message: 'File generated but sharing is not available on this device.' });
+        }
+    };
+
     const generateAndShareReceipt = async (format: 'PDF' | 'Image') => {
         setGeneratingReceipt(true);
         try {
@@ -218,15 +271,8 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_RECEIPT_GENERATED, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
 
-                if (await Sharing.isAvailableAsync()) {
-                    await Sharing.shareAsync(uri, {
-                        mimeType: 'application/pdf',
-                        dialogTitle: `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`,
-                        UTI: 'com.adobe.pdf',
-                    });
-                } else {
-                    showToast({ type: 'info', title: 'Sharing not available', message: 'PDF saved but sharing is not available on this device.' });
-                }
+                await executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
+
                 setGeneratingReceipt(false);
             } else {
                 setShareHtml({ html, action: 'receipt' });
@@ -274,15 +320,8 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_REMINDER_SENT, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
-                if (await Sharing.isAvailableAsync()) {
-                    await Sharing.shareAsync(uri, {
-                        mimeType: 'application/pdf',
-                        dialogTitle: `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`,
-                        UTI: 'com.adobe.pdf',
-                    });
-                } else {
-                    showToast({ type: 'info', title: 'Sharing not available', message: 'PDF saved but sharing is not available on this device.' });
-                }
+                await executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
+
                 setSendingReminder(false);
             } else {
                 setShareHtml({ html, action: 'reminder' });
@@ -310,13 +349,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 setTimeout(async () => {
                     try {
                         const uri = await viewShotRef.current.capture();
-                        if (await Sharing.isAvailableAsync()) {
-                            trackEvent(shareHtml?.action === 'receipt' ? AnalyticsEvents.RENT_RECEIPT_GENERATED : AnalyticsEvents.RENT_REMINDER_SENT, { format: 'Image', unit: unit.name });
-                            await Sharing.shareAsync(uri, {
-                                mimeType: 'image/png',
-                                dialogTitle: `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`,
-                            });
-                        }
+                        trackEvent(shareHtml?.action === 'receipt' ? AnalyticsEvents.RENT_RECEIPT_GENERATED : AnalyticsEvents.RENT_REMINDER_SENT, { format: 'Image', unit: unit.name });
+
+                        await executeShareHelper(
+                            uri,
+                            'image/png',
+                            `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`
+                        );
                     } catch (e) {
                         console.error('Image capture error:', e);
                         showToast({ type: 'error', title: 'Error', message: 'Failed to capture image.' });
@@ -817,12 +856,23 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     useNativeDriver: false,
                                 }).start(() => {
                                     swipeAnim.setValue(0);
-                                    if (hasPaid) {
-                                        setPendingAction('receipt');
+                                    const defaultFmt = getReceiptDefaultFormat();
+
+                                    if (defaultFmt === 'ask') {
+                                        if (hasPaid) {
+                                            setPendingAction('receipt');
+                                        } else {
+                                            setPendingAction('reminder');
+                                        }
+                                        setShareFormatPickerVisible(true);
                                     } else {
-                                        setPendingAction('reminder');
+                                        const autoFormat = defaultFmt === 'pdf' ? 'PDF' : 'Image';
+                                        if (hasPaid) {
+                                            generateAndShareReceipt(autoFormat);
+                                        } else {
+                                            generateAndShareReminder(autoFormat);
+                                        }
                                     }
-                                    setShareFormatPickerVisible(true);
                                 });
                             } else {
                                 Animated.spring(swipeAnim, {

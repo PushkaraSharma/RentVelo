@@ -30,3 +30,28 @@ export const storage: MMKV = {
     addOnValueChangedListener: (...args: Parameters<MMKV['addOnValueChangedListener']>) => getStorage().addOnValueChangedListener(...args),
     importAllFrom: (...args: Parameters<MMKV['importAllFrom']>) => getStorage().importAllFrom(...args),
 } as MMKV;
+
+// Application User Preference Types
+export type ReceiptDefaultFormat = 'ask' | 'pdf' | 'image';
+export type ReceiptDefaultAction = 'system' | 'whatsapp';
+
+// Type-safe convenience wrappers
+export function getReceiptDefaultFormat(): ReceiptDefaultFormat {
+    const val = getStorage().getString('receipt_default_format');
+    if (val === 'pdf' || val === 'image') return val as ReceiptDefaultFormat;
+    return 'ask';
+}
+
+export function setReceiptDefaultFormat(value: ReceiptDefaultFormat) {
+    getStorage().set('receipt_default_format', value);
+}
+
+export function getReceiptDefaultAction(): ReceiptDefaultAction {
+    const val = getStorage().getString('receipt_default_action');
+    if (val === 'whatsapp') return 'whatsapp';
+    return 'system';
+}
+
+export function setReceiptDefaultAction(value: ReceiptDefaultAction) {
+    getStorage().set('receipt_default_action', value);
+}

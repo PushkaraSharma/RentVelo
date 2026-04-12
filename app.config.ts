@@ -101,6 +101,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         {
           microphonePermission: false, // disables mic permission entirely
         }
+      ],
+      [
+        "react-native-share",
+        {
+          android: [
+            "com.whatsapp",
+            "com.whatsapp.w4b"
+          ],
+          enableBase64ShareAndroid: true
+        }
       ]
     ],
     "extra": {

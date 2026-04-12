@@ -23,31 +23,35 @@ try {
     // We do this by manually marking migration 0013 as "done" in Drizzle's internal table.
     expoDb.execSync(`CREATE TABLE IF NOT EXISTS __drizzle_migrations (id integer PRIMARY KEY AUTOINCREMENT, hash text NOT NULL, created_at integer);`);
     expoDb.execSync(`INSERT OR IGNORE INTO __drizzle_migrations (hash, created_at) VALUES ('', ${MIGRATION_0013_TIMESTAMP});`);
-
-    // 2. Since 0013 is now "skipped", we must manually ensure all its other changes (ALTER TABLEs) are applied.
-    const patchTable = (tableName: string, col: string, type: string, def?: string) => {
-      const columns = expoDb.getAllSync(`PRAGMA table_info(\`${tableName}\`)`) as any[];
-      const exists = columns.some((c: any) => c.name === col);
-      if (!exists) {
-        const d = def !== undefined ? ` DEFAULT ${def}` : '';
-        expoDb.execSync(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${col}\` ${type}${d};`);
-      }
-    };
-
-    // Properties
-    patchTable('properties', 'auto_increment_rent_enabled', 'integer', '0');
-    patchTable('properties', 'auto_increment_percent', 'real');
-    patchTable('properties', 'auto_increment_amount', 'real');
-    patchTable('properties', 'auto_increment_frequency', 'text');
-    patchTable('properties', 'last_increment_date', 'integer');
-
-    // Units
-    patchTable('units', 'room_group', 'text');
-    patchTable('units', 'bed_number', 'text');
-
-    // Bill Expenses
-    patchTable('bill_expenses', 'property_expense_id', 'integer');
   }
+
+  // Since we've had schema sync issues across different test devices, we aggressively patch missing columns individually.
+  const patchTable = (tableName: string, col: string, type: string, def?: string) => {
+    const tablesInfo = expoDb.getAllSync(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`) as any[];
+    if (tablesInfo.length === 0) return; // Table not created yet
+    
+    const columns = expoDb.getAllSync(`PRAGMA table_info(\`${tableName}\`)`) as any[];
+    const exists = columns.some((c: any) => c.name === col);
+    if (!exists) {
+      const d = def !== undefined ? ` DEFAULT ${def}` : '';
+      expoDb.execSync(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${col}\` ${type}${d};`);
+    }
+  };
+
+  // Properties
+  patchTable('properties', 'auto_increment_rent_enabled', 'integer', '0');
+  patchTable('properties', 'auto_increment_percent', 'real');
+  patchTable('properties', 'auto_increment_amount', 'real');
+  patchTable('properties', 'auto_increment_frequency', 'text');
+  patchTable('properties', 'last_increment_date', 'integer');
+
+  // Units
+  patchTable('units', 'room_group', 'text');
+  patchTable('units', 'bed_number', 'text');
+
+  // Bill Expenses
+  patchTable('bill_expenses', 'property_expense_id', 'integer');
+    
 } catch (e) {
   console.warn('Database defensive repair failed, but continuing...', e);
 }
@@ -69,12 +73,12 @@ export const getDatabase = () => {
 };
 
 export const closeDatabase = () => {
-    try {
-        expoDb.closeSync();
-        console.log('✅ SQLite Database connection closed');
-    } catch (e) {
-        console.error('Failed to close SQLite Database:', e);
-    }
+  try {
+    expoDb.closeSync();
+    console.log('✅ SQLite Database connection closed');
+  } catch (e) {
+    console.error('Failed to close SQLite Database:', e);
+  }
 };
 
 // Export migrations
