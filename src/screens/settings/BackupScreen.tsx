@@ -11,6 +11,7 @@ import { RootState } from '../../redux/store';
 import { linkGoogleAccount, unlinkGoogleAccount } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn, requestDriveScopes } from '../../services/googleAuthService';
 import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive, restoreFromLocalBackup, verifyDrivePermissions } from '../../services/backupService';
+import { syncDatabaseSchema } from '../../db';
 import { storage } from '../../utils/storage';
 import { Platform } from 'react-native';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -26,8 +27,8 @@ export default function BackupScreen({ navigation }: any) {
     const dispatch = useDispatch();
     const { isGoogleLinked, googleEmail } = useSelector((state: RootState) => state.auth);
 
-    const [backingUp, setBackingUp] = useState(false);
-    const [restoring, setRestoring] = useState(false);
+    const [backingUp, setBackingUp] = useState<'local' | 'google' | null>(null);
+    const [restoring, setRestoring] = useState<'local' | 'google' | null>(null);
     const [lastSync, setLastSync] = useState<string>('Never');
     const [isAutoBackupEnabled, setIsAutoBackupEnabled] = useState(false);
 
@@ -55,9 +56,9 @@ export default function BackupScreen({ navigation }: any) {
     };
 
     const handleLocalBackup = async () => {
-        setBackingUp(true);
+        setBackingUp('local');
         const result = await performLocalBackup();
-        setBackingUp(false);
+        setBackingUp(null);
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
             updateLastSync();
@@ -155,9 +156,9 @@ export default function BackupScreen({ navigation }: any) {
                 return;
             }
         }
-        setBackingUp(true);
+        setBackingUp('google');
         const result = await backupToGoogleDrive();
-        setBackingUp(false);
+        setBackingUp(null);
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
             updateLastSync();
@@ -214,10 +215,11 @@ export default function BackupScreen({ navigation }: any) {
 
     const confirmRestore = async () => {
         setShowRestoreModal(false);
-        setRestoring(true);
+        setRestoring('google');
         const result = await restoreFromGoogleDrive();
-        setRestoring(false);
+        setRestoring(null);
         if (result.success) {
+            syncDatabaseSchema();
             trackEvent(AnalyticsEvents.BACKUP_RESTORED);
             showToast({
                 type: 'success',
@@ -258,10 +260,11 @@ export default function BackupScreen({ navigation }: any) {
 
     const confirmLocalRestore = async () => {
         setShowLocalRestoreModal(false);
-        setRestoring(true);
+        setRestoring('local');
         const result = await restoreFromLocalBackup();
-        setRestoring(false);
+        setRestoring(null);
         if (result.success) {
+            syncDatabaseSchema();
             trackEvent(AnalyticsEvents.BACKUP_RESTORED);
             showToast({
                 type: 'success',
@@ -296,7 +299,7 @@ export default function BackupScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Backup Options</Text>
                     <View style={styles.card}>
-                        <Pressable style={styles.item} onPress={handleLocalBackup} disabled={backingUp || restoring}>
+                        <Pressable style={styles.item} onPress={handleLocalBackup} disabled={!!backingUp || !!restoring}>
                             <View style={styles.itemLeft}>
                                 <HardDrive size={20} color={theme.colors.accent} />
                                 <View>
@@ -304,9 +307,10 @@ export default function BackupScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Save a copy to your phone</Text>
                                 </View>
                             </View>
+                            {backingUp === 'local' && <ActivityIndicator size="small" color={theme.colors.accent} />}
                         </Pressable>
                         <View style={styles.divider} />
-                        <Pressable style={styles.item} onPress={handleGoogleToggle} disabled={backingUp || restoring}>
+                        <Pressable style={styles.item} onPress={handleGoogleToggle} disabled={!!backingUp || !!restoring}>
                             <View style={styles.itemLeft}>
                                 <Cloud size={20} color={isGoogleLinked ? theme.colors.success : "#6366F1"} />
                                 <View>
@@ -336,7 +340,7 @@ export default function BackupScreen({ navigation }: any) {
                                     <Toggle value={isAutoBackupEnabled} onValueChange={toggleAutoBackup} />
                                 </View>
                                 <View style={styles.divider} />
-                                <Pressable style={styles.item} onPress={handleGoogleBackup} disabled={backingUp || restoring}>
+                                <Pressable style={styles.item} onPress={handleGoogleBackup} disabled={!!backingUp || !!restoring}>
                                     <View style={styles.itemLeft}>
                                         <CloudUpload size={20} color={theme.colors.accent} />
                                         <View>
@@ -344,7 +348,7 @@ export default function BackupScreen({ navigation }: any) {
                                             <Text style={styles.itemSubLabel}>Manually upload database to Google Drive</Text>
                                         </View>
                                     </View>
-                                    {backingUp && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                                    {backingUp === 'google' && <ActivityIndicator size="small" color={theme.colors.accent} />}
                                 </Pressable>
                             </>
                         )}
@@ -354,7 +358,7 @@ export default function BackupScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Restore</Text>
                     <View style={styles.card}>
-                        <Pressable style={styles.item} onPress={() => setShowLocalRestoreModal(true)} disabled={backingUp || restoring}>
+                        <Pressable style={styles.item} onPress={() => setShowLocalRestoreModal(true)} disabled={!!backingUp || !!restoring}>
                             <View style={styles.itemLeft}>
                                 <HardDrive size={20} color={theme.colors.textPrimary} />
                                 <View>
@@ -362,10 +366,10 @@ export default function BackupScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Restore from latest local backup</Text>
                                 </View>
                             </View>
-                            {restoring && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                            {restoring === 'local' && <ActivityIndicator size="small" color={theme.colors.accent} />}
                         </Pressable>
                         <View style={styles.divider} />
-                        <Pressable style={styles.item} onPress={handleRestore} disabled={backingUp || restoring}>
+                        <Pressable style={styles.item} onPress={handleRestore} disabled={!!backingUp || !!restoring}>
                             <View style={styles.itemLeft}>
                                 <RotateCcw size={20} color={theme.colors.textPrimary} />
                                 <View>
@@ -373,7 +377,7 @@ export default function BackupScreen({ navigation }: any) {
                                     <Text style={styles.itemSubLabel}>Import data from Google Drive</Text>
                                 </View>
                             </View>
-                            {restoring && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                            {restoring === 'google' && <ActivityIndicator size="small" color={theme.colors.accent} />}
                         </Pressable>
                     </View>
                 </View>
@@ -404,7 +408,7 @@ export default function BackupScreen({ navigation }: any) {
                 confirmText="Restore"
                 cancelText="Cancel"
                 variant="warning"
-                loading={restoring}
+                loading={!!restoring}
             />
 
             <ConfirmationModal
@@ -416,7 +420,7 @@ export default function BackupScreen({ navigation }: any) {
                 confirmText="Restore"
                 cancelText="Cancel"
                 variant="warning"
-                loading={restoring}
+                loading={!!restoring}
             />
         </SafeAreaView>
     );
