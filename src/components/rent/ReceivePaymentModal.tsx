@@ -12,6 +12,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
+import { incrementActionAndReview } from '../../services/storeReviewService';
 
 interface ReceivePaymentModalProps {
     visible: boolean;
@@ -78,6 +79,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
 
             trackEvent(AnalyticsEvents.RENT_COLLECTED, { amount: amt, method: method });
             await syncNotificationSchedules();
+            incrementActionAndReview(); // Trigger logic for store review
             hapticsMedium();
             setAmount('');
             setRemarks('');

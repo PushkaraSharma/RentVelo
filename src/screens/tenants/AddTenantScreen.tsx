@@ -17,6 +17,7 @@ import * as Contacts from 'expo-contacts';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
+import { incrementActionAndReview } from '../../services/storeReviewService';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
 
@@ -248,6 +249,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                 const id = await createTenant(tenantData);
                 setNewlyCreatedId(id);
                 trackEvent(AnalyticsEvents.TENANT_ADDED, { lease_type: leaseType });
+                incrementActionAndReview(); // Trigger logic for store review
                 setShowSuccessModal(true);
             }
         } catch (error) {
