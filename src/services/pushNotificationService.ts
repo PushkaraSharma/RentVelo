@@ -195,16 +195,42 @@ export const syncNotificationSchedules = async () => {
             }
 
             // Overdue notifications (After 1st)
-            if (prefs.overdueEnabled && prefs.overdueDaysAfter > 0) {
-                for (let i = 1; i <= prefs.overdueDaysAfter; i++) {
-                    const notifyDate = new Date(dueDate);
-                    notifyDate.setDate(dueDate.getDate() + i);
-                    notifyDate.setHours(targetHour, targetMinute, 0, 0);
+            if (prefs.overdueEnabled) {
+                // 1. Original logic: Schedule for the specific days after the 1st
+                if (prefs.overdueDaysAfter > 0) {
+                    for (let i = 1; i <= prefs.overdueDaysAfter; i++) {
+                        const notifyDate = new Date(dueDate);
+                        notifyDate.setDate(dueDate.getDate() + i);
+                        notifyDate.setHours(targetHour, targetMinute, 0, 0);
 
-                    if (notifyDate > now) {
-                        const key = `${notifyDate.toISOString()}_${bill.property_id}`;
-                        if (!schedules.has(key)) schedules.set(key, { date: notifyDate, propertyName: pName, propertyId: bill.property_id, due: false, overdue: false });
-                        schedules.get(key)!.overdue = true;
+                        if (notifyDate > now) {
+                            const key = `${notifyDate.toISOString()}_${bill.property_id}`;
+                            if (!schedules.has(key)) schedules.set(key, { date: notifyDate, propertyName: pName, propertyId: bill.property_id, due: false, overdue: false });
+                            schedules.get(key)!.overdue = true;
+                        }
+                    }
+                }
+
+                // 2. Catch-up logic: If the bill is already overdue and notify date has passed,
+                // schedule a reminder for the next available preferred time.
+                if (dueDate <= now) {
+                    const nextNotify = new Date();
+                    nextNotify.setHours(targetHour, targetMinute, 0, 0);
+
+                    // If preferred time for today has already passed, schedule for tomorrow
+                    if (nextNotify <= now) {
+                        nextNotify.setDate(nextNotify.getDate() + 1);
+                    }
+
+                    const key = `${nextNotify.toISOString()}_${bill.property_id}`;
+                    if (!schedules.has(key)) {
+                        schedules.set(key, {
+                            date: nextNotify,
+                            propertyName: pName,
+                            propertyId: bill.property_id,
+                            due: false,
+                            overdue: true
+                        });
                     }
                 }
             }
@@ -218,9 +244,17 @@ export const syncNotificationSchedules = async () => {
 
             if (info.due) {
                 await scheduleLocalNotification(
-                    'Upcoming Rent Collection',
+                    `Upcoming Rent Collect: ${info.propertyName}`,
                     `Rent collection is coming up for ${info.propertyName}.`,
-                    { type: 'date', date: info.date } as any,
+                    {
+                        type: 'calendar',
+                        year: info.date.getFullYear(),
+                        month: info.date.getMonth() + 1,
+                        day: info.date.getDate(),
+                        hour: info.date.getHours(),
+                        minute: info.date.getMinutes(),
+                        repeats: false,
+                    } as any,
                     { route: 'TakeRent', propertyId: info.propertyId },
                     { requestPermission: false }
                 );
@@ -229,9 +263,17 @@ export const syncNotificationSchedules = async () => {
 
             if (info.overdue && scheduledCount < 60) {
                 await scheduleLocalNotification(
-                    'Overdue Rent',
+                    `Overdue Rent: ${info.propertyName}`,
                     `You have pending rent collections for ${info.propertyName}. Tap to collect.`,
-                    { type: 'date', date: info.date } as any,
+                    {
+                        type: 'calendar',
+                        year: info.date.getFullYear(),
+                        month: info.date.getMonth() + 1,
+                        day: info.date.getDate(),
+                        hour: info.date.getHours(),
+                        minute: info.date.getMinutes(),
+                        repeats: false,
+                    } as any,
                     { route: 'TakeRent', propertyId: info.propertyId },
                     { requestPermission: false }
                 );
@@ -242,19 +284,18 @@ export const syncNotificationSchedules = async () => {
         console.log(`[PushNotifications] Successfully queued ${scheduledCount} local notifications.`);
 
         // Debug: Print what the OS actually holds
-        // const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-        // console.log(`[PushNotifications] OS currently holds ${scheduled.length} scheduled notifications.`);
-        // if (scheduled.length > 0) {
-        //     console.log('[PushNotifications] Next few scheduled times:');
-        //     scheduled.slice(0, 3).forEach((n, i) => {
-        //         const trigger = n.trigger as any;
-        //         if (trigger?.date || trigger?.value) {
-        //             console.log(`  ${i + 1}: ${new Date(trigger.date || trigger.value).toLocaleString()}`);
-        //         } else {
-        //             console.log(`  ${i + 1}: ${JSON.stringify(trigger)}`);
-        //         }
-        //     });
-        // }
+        const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+        console.log(`[PushNotifications] OS currently holds ${scheduled.length} scheduled notifications.`);
+        if (scheduled.length > 0) {
+            scheduled.slice(0, 5).forEach((n, i) => {
+                const trigger = n.trigger as any;
+                let dateStr = 'unknown';
+                if (trigger?.date) dateStr = new Date(trigger.date).toLocaleString();
+                else if (trigger?.value) dateStr = new Date(trigger.value).toLocaleString();
+                else if (trigger?.year) dateStr = new Date(trigger.year, trigger.month - 1, trigger.day, trigger.hour, trigger.minute).toLocaleString();
+                else if (trigger?.seconds) dateStr = `in ${trigger.seconds}s`;
+            });
+        }
 
     } catch (error) {
         console.error('[PushNotifications] Failed to sync notification schedules', error);

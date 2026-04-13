@@ -98,7 +98,7 @@ export default function NotificationsScreen({ navigation }: any) {
     const handleTestNotification = async () => {
         try {
             const id = await scheduleLocalNotification(
-                'Upcoming Rent Collection',
+                'Test: Upcoming Rent Collect',
                 'Rent collection is coming up for Apartment 101, Apartment 102.',
                 {
                     type: 'timeInterval',
