@@ -507,7 +507,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         height: 120,
         borderRadius: theme.borderRadius.l,
         resizeMode: 'contain',
-        backgroundColor: theme.colors.surface,
         borderWidth: 1,
         borderColor: theme.colors.border,
     },

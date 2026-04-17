@@ -67,6 +67,9 @@ export const syncDatabaseSchema = (forceRefresh = false) => {
     patchTable('properties', 'auto_increment_frequency', 'text');
     patchTable('properties', 'last_increment_date', 'integer');
     patchTable('properties', 'total_floors', 'integer');
+    patchTable('properties', 'total_units', 'integer');
+    patchTable('properties', 'build_date', 'text');
+    patchTable('properties', 'owner_email', 'text');
 
     // Units
     patchTable('units', 'room_group', 'text');

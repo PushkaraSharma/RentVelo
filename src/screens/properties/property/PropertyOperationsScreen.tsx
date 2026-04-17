@@ -201,6 +201,7 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
                     </View>
                     {/* Edit indicator */}
                     <View style={styles.editBadge}>
+                        <Text style={styles.editBadgeText}>Edit</Text>
                         <Pencil size={14} color="#FFF" />
                     </View>
                 </Pressable>
@@ -328,12 +329,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         position: 'absolute',
         top: 12,
         right: 12,
-        width: 32,
-        height: 32,
+        padding: theme.spacing.s,
         borderRadius: 16,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+        flexDirection: 'row',
+        gap: theme.spacing.xs
     },
     heroImg: {
         width: '100%',
@@ -477,5 +479,9 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         color: theme.colors.textSecondary,
         marginTop: 4
+    },
+    editBadgeText: {
+        fontSize: 12,
+        color: '#fff'
     }
 });

@@ -102,6 +102,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 setPenaltyAmountPerDay(data.penalty_amount_per_day?.toString() || '');
                 setWaivePenaltyOnPartialPayment(data.waive_penalty_on_partial_payment ?? false);
                 setTotalFloors(data.total_floors?.toString() || '');
+                setTotalUnits(data.total_units?.toString() || '');
+                setBuildDate(data.build_date || '');
+                setEmail(data.owner_email || '');
 
                 // If it's a single unit and edit mode, load the unit details
                 if (data.is_multi_unit === false && isEditMode) {
@@ -251,6 +254,9 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 penalty_amount_per_day: penaltyAmountPerDay ? parseFloat(penaltyAmountPerDay) : null,
                 waive_penalty_on_partial_payment: waivePenaltyOnPartialPayment,
                 total_floors: totalFloors ? parseInt(totalFloors) : null,
+                total_units: totalUnits ? parseInt(totalUnits) : null,
+                build_date: buildDate || null,
+                owner_email: email || null,
             };
 
             if (isEditMode) {
@@ -464,6 +470,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                         label="BUILD DATE (Optional)"
                         placeholder="e.g. 2020 or Jan 2020"
                         value={buildDate}
+                        keyboardType="numeric"
                         onChangeText={setBuildDate}
                         icon={<Calendar size={20} color={theme.colors.textSecondary} />}
                     />
@@ -710,6 +717,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                     </View>
 
                     <View style={styles.amenitiesGrid}>
+                        {/* Standard Amenities */}
                         {AMENITIES.map((item) => {
                             const isSelected = selectedAmenities.includes(item.id);
                             return (
@@ -732,6 +740,33 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                                         ]}
                                     >
                                         {item.label}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+
+                        {/* Custom Amenities */}
+                        {selectedAmenities.filter(id => !AMENITIES.some(a => a.id === id)).map((customId) => {
+                            return (
+                                <Pressable
+                                    key={customId}
+                                    style={[
+                                        styles.amenityCard,
+                                        styles.activeAmenityCard,
+                                    ]}
+                                    onPress={() => toggleAmenity(customId)}
+                                >
+                                    <Layers
+                                        size={24}
+                                        color={theme.colors.accent}
+                                    />
+                                    <Text
+                                        style={[
+                                            styles.amenityText,
+                                            styles.activeAmenityText,
+                                        ]}
+                                    >
+                                        {customId}
                                     </Text>
                                 </Pressable>
                             );
