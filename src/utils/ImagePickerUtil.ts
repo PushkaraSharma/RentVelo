@@ -30,6 +30,7 @@ export const requestLibraryPermission = async (): Promise<boolean> => {
  */
 export const launchCamera = async (options: PickerOptions = {}): Promise<string | null> => {
     const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true, // Default
         ...options,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
@@ -44,8 +45,8 @@ export const launchCamera = async (options: PickerOptions = {}): Promise<string 
  */
 export const launchLibrary = async (options: PickerOptions = {}): Promise<string | null> => {
     const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true, // Default
         ...options,
-        allowsEditing: Platform.OS == 'ios',
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
