@@ -34,6 +34,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useImagePicker } from '../../../hooks/useImagePicker';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import SignatureModal from '../../../components/common/SignatureModal';
+import ImagePreviewModal from '../../../components/common/ImagePreviewModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { useToast } from '../../../hooks/useToast';
 
@@ -81,6 +82,13 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
     // Wallet Picker
     const [showWalletPicker, setShowWalletPicker] = useState(false);
 
+    // Image Preview
+    const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+    const [showImagePreview, setShowImagePreview] = useState(false);
+    const [previewImageTitle, setPreviewImageTitle] = useState('');
+    const [previewEditAction, setPreviewEditAction] = useState<(() => void) | undefined>(undefined);
+    const [previewDeleteAction, setPreviewDeleteAction] = useState<(() => void) | undefined>(undefined);
+
     const {
         visible: showImagePicker,
         openPicker,
@@ -119,6 +127,14 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
 
     const pickLogo = () => openPicker({ allowsEditing: true, quality: 0.8 }, setLogoUri);
     const pickQrCode = () => openPicker({ allowsEditing: true, quality: 0.8 }, setPaymentQrUri);
+
+    const openPreview = (uri: string, title: string, editFn: () => void, deleteFn: () => void) => {
+        setPreviewImageUri(getFullImageUri(uri) || uri);
+        setPreviewImageTitle(title);
+        setPreviewEditAction(() => editFn);
+        setPreviewDeleteAction(() => deleteFn);
+        setShowImagePreview(true);
+    };
 
     const handleSignatureSave = (filepath: string) => {
         setSignatureUri(filepath);
@@ -188,7 +204,11 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                     <View style={styles.section}>
                         {logoUri ? (
                             <View style={styles.imagePreviewContainer}>
-                                <Image source={{ uri: getFullImageUri(logoUri) || logoUri }} style={styles.logoPreview} />
+                                <Pressable onPress={() => openPreview(logoUri, 'Business Logo', pickLogo, () => setLogoUri(null))}>
+                                    <View>
+                                        <Image source={{ uri: getFullImageUri(logoUri) || logoUri }} style={styles.logoPreview} />
+                                    </View>
+                                </Pressable>
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
@@ -303,7 +323,11 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                         </View>
                         {paymentQrUri ? (
                             <View style={styles.imagePreviewContainer}>
-                                <Image source={{ uri: getFullImageUri(paymentQrUri) || paymentQrUri }} style={styles.qrPreview} />
+                                <Pressable onPress={() => openPreview(paymentQrUri, 'Payment QR Code', pickQrCode, () => setPaymentQrUri(null))}>
+                                    <View>
+                                        <Image source={{ uri: getFullImageUri(paymentQrUri) || paymentQrUri }} style={styles.qrPreview} />
+                                    </View>
+                                </Pressable>
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
@@ -338,7 +362,9 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                         </View>
                         {signatureUri ? (
                             <View style={styles.imagePreviewContainer}>
-                                <Image source={{ uri: getFullImageUri(signatureUri) || signatureUri }} style={styles.signaturePreview} />
+                                <Pressable onPress={() => openPreview(signatureUri, 'Authorized Signatory', () => setShowSignatureModal(true), () => setSignatureUri(null))}>
+                                    <Image source={{ uri: getFullImageUri(signatureUri) || signatureUri }} style={styles.signaturePreview} />
+                                </Pressable>
                                 <View style={styles.imageActions}>
                                     <Pressable
                                         style={styles.changeBtn}
@@ -400,6 +426,15 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                 onClose={closeImagePicker}
                 onSelectCamera={handleCamera}
                 onSelectGallery={handleGallery}
+            />
+
+            <ImagePreviewModal
+                visible={showImagePreview}
+                imageUri={previewImageUri}
+                onClose={() => setShowImagePreview(false)}
+                title={previewImageTitle}
+                onEdit={() => { setShowImagePreview(false); previewEditAction?.(); }}
+                onDelete={() => { setShowImagePreview(false); previewDeleteAction?.(); }}
             />
         </SafeAreaView>
     );

@@ -17,6 +17,7 @@ import { trackEvent, AnalyticsEvents } from '../../../services/analyticsService'
 import { useToast } from '../../../hooks/useToast';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import PromptModal from '../../../components/common/PromptModal';
+import ImagePreviewModal from '../../../components/common/ImagePreviewModal';
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
@@ -75,6 +76,10 @@ export default function AddPropertyScreen({ navigation, route }: any) {
         handleCamera,
         handleGallery
     } = useImagePicker((uri) => setImage(uri));
+
+    // Image Preview
+    const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+    const [showImagePreview, setShowImagePreview] = useState(false);
     const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
 
     React.useEffect(() => {
@@ -380,7 +385,10 @@ export default function AddPropertyScreen({ navigation, route }: any) {
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <ScrollView contentContainerStyle={styles.content}>
                     {/* Image Upload */}
-                    <Pressable style={styles.imageUpload} onPress={pickBuildingImage}>
+                    <Pressable style={styles.imageUpload} onPress={image ? () => {
+                        setPreviewImageUri(getFullImageUri(image) || image);
+                        setShowImagePreview(true);
+                    } : pickBuildingImage}>
                         {image ? (
                             <Image source={{ uri: getFullImageUri(image) || image }} style={styles.uploadedImage} />
                         ) : (
@@ -849,6 +857,15 @@ export default function AddPropertyScreen({ navigation, route }: any) {
                 onClose={closeImagePicker}
                 onSelectCamera={handleCamera}
                 onSelectGallery={handleGallery}
+            />
+
+            <ImagePreviewModal
+                visible={showImagePreview}
+                imageUri={previewImageUri}
+                onClose={() => setShowImagePreview(false)}
+                title="Property Image"
+                onEdit={() => { setShowImagePreview(false); pickBuildingImage(); }}
+                onDelete={() => { setShowImagePreview(false); setImage(null); }}
             />
 
             <PromptModal

@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Image } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { Banknote, CreditCard, Building2, Landmark, Camera, Check, Image as ImageIcon, X } from 'lucide-react-native';
+import { Banknote, CreditCard, Building2, Landmark, Camera, Check, Image as ImageIcon, X, Edit2 } from 'lucide-react-native';
 import { addPaymentToBill } from '../../db/billService';
 import { syncNotificationSchedules } from '../../services/pushNotificationService';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import { saveImageToPermanentStorage } from '../../services/imageService';
 import ImagePickerModal from '../common/ImagePickerModal';
+import ImagePreviewModal from '../common/ImagePreviewModal';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import RentModalSheet from './RentModalSheet';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
@@ -38,6 +39,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
     const [loading, setLoading] = useState(false);
     const [paymentDate, setPaymentDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showPhotoPreview, setShowPhotoPreview] = useState(false);
 
     const {
         visible: showImagePicker,
@@ -169,13 +171,19 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
 
             {photoUri && (
                 <View style={styles.imagePreviewWrapper}>
-                    <Image 
-                        source={{ uri: photoUri }} 
-                        style={styles.imagePreview} 
+                    <Image
+                        source={{ uri: photoUri }}
+                        style={styles.imagePreview}
                         resizeMode="cover"
                     />
-                    <Pressable 
-                        style={styles.removePhotoOverlay} 
+                    <Pressable
+                        style={[styles.imagePreviewTapOverlay, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.25)' }]}
+                        onPress={() => setShowPhotoPreview(true)}
+                    >
+                        <Edit2 size={28} color="#FFF" />
+                    </Pressable>
+                    <Pressable
+                        style={styles.removePhotoOverlay}
                         onPress={() => setPhotoUri(null)}
                     >
                         <X size={14} color="#FFF" />
@@ -206,6 +214,15 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 onClose={closeImagePicker}
                 onSelectCamera={handleCamera}
                 onSelectGallery={handleGallery}
+            />
+
+            <ImagePreviewModal
+                visible={showPhotoPreview}
+                imageUri={photoUri}
+                onClose={() => setShowPhotoPreview(false)}
+                title="Payment Photo"
+                onEdit={() => { setShowPhotoPreview(false); pickPhoto(); }}
+                onDelete={() => { setShowPhotoPreview(false); setPhotoUri(null); }}
             />
         </RentModalSheet>
     );
@@ -320,6 +337,9 @@ const getStyles = (theme: any) => StyleSheet.create({
     imagePreview: {
         width: '100%',
         height: '100%',
+    },
+    imagePreviewTapOverlay: {
+        ...StyleSheet.absoluteFillObject,
     },
     removePhotoOverlay: {
         position: 'absolute',

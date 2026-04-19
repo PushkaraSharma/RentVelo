@@ -19,12 +19,18 @@ export default function ExpenseListModal({ visible, onClose, bill, unit }: Expen
     const [expenses, setExpenses] = useState<any[]>([]);
 
     useEffect(() => {
-        if (visible && bill?.id) loadExpenses();
-    }, [visible, bill?.id]);
+        if (visible && bill) loadExpenses();
+    }, [visible, bill]);
 
     const loadExpenses = async () => {
-        const data = await getBillExpenses(bill.id);
-        setExpenses(data);
+        if (bill.id) {
+            const data = await getBillExpenses(bill.id);
+            setExpenses(data.filter((e: any) => e.label !== 'Late Payment Penalty (Waived)'));
+        } else if (bill.virtual_expenses) {
+            setExpenses(bill.virtual_expenses.filter((e: any) => e.label !== 'Late Payment Penalty (Waived)'));
+        } else {
+            setExpenses([]);
+        }
     };
 
     const handleDelete = async (expenseId: number) => {
@@ -72,9 +78,11 @@ export default function ExpenseListModal({ visible, onClose, bill, unit }: Expen
                                 <Text style={[styles.expenseAmount, item.amount < 0 && { color: theme.colors.danger }]}>
                                     {item.amount < 0 ? '−' : ''}{CURRENCY}{Math.abs(item.amount).toLocaleString('en-IN')}
                                 </Text>
-                                <Pressable style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
-                                    <Trash2 size={18} color={theme.colors.danger} />
-                                </Pressable>
+                                {bill.id && (
+                                    <Pressable style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
+                                        <Trash2 size={18} color={theme.colors.danger} />
+                                    </Pressable>
+                                )}
                             </View>
                         </View>
                     )}

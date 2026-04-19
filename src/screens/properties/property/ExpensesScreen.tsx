@@ -11,6 +11,7 @@ import RentModalSheet from '../../../components/rent/RentModalSheet';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import MonthPickerModal from '../../../components/rent/MonthPickerModal';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
+import ImagePreviewModal from '../../../components/common/ImagePreviewModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import {
     getPropertyById, getUnitsByPropertyId,
@@ -20,7 +21,8 @@ import { CURRENCY } from '../../../utils/Constants';
 import { useToast } from '../../../hooks/useToast';
 import { useImagePicker } from '../../../hooks/useImagePicker';
 import {
-    Plus, Trash2, ChevronDown, Camera, CreditCard, CalendarDays, Tag, ChevronLeft, ChevronRight
+    Plus, Trash2, ChevronDown, Camera, CreditCard, CalendarDays, Tag, ChevronLeft, ChevronRight,
+    Image as ImageIcon
 } from 'lucide-react-native';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/imageService';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../../utils/haptics';
@@ -74,6 +76,12 @@ export default function ExpensesScreen({ navigation, route }: any) {
     // Delete
     const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+    // Image Preview
+    const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+    const [showImagePreview, setShowImagePreview] = useState(false);
+    const [previewEditAction, setPreviewEditAction] = useState<(() => void) | undefined>(undefined);
+    const [previewDeleteAction, setPreviewDeleteAction] = useState<(() => void) | undefined>(undefined);
 
     useFocusEffect(
         useCallback(() => {
@@ -270,6 +278,14 @@ export default function ExpensesScreen({ navigation, route }: any) {
                             <Pressable
                                 key={expense.id}
                                 style={styles.expenseItem}
+                                onPress={() => {
+                                    if (expense.image_uri) {
+                                        setPreviewImageUri(getFullImageUri(expense.image_uri) || expense.image_uri);
+                                        setPreviewEditAction(undefined);
+                                        setPreviewDeleteAction(undefined);
+                                        setShowImagePreview(true);
+                                    }
+                                }}
                                 onLongPress={() => {
                                     setDeleteTarget(expense.id);
                                     setShowDeleteModal(true);
@@ -303,6 +319,9 @@ export default function ExpensesScreen({ navigation, route }: any) {
                                     </View>
                                 </View>
                                 <View style={{ alignItems: 'flex-end', gap: 12, flexDirection: 'row' }}>
+                                    {expense.image_uri && (
+                                        <ImageIcon size={16} color={theme.colors.accent} />
+                                    )}
                                     <Text style={styles.expenseAmount}>{CURRENCY}{expense.amount.toLocaleString()}</Text>
                                     <Pressable
                                         onPress={() => {
@@ -387,12 +406,22 @@ export default function ExpensesScreen({ navigation, route }: any) {
                 {/* Image */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Image (Optional)</Text>
-                    <Pressable style={styles.imageBtn} onPress={pickReceipt}>
+                    <Pressable
+                        style={styles.imageBtn}
+                        onPress={expenseImage ? () => {
+                            setPreviewImageUri(getFullImageUri(expenseImage) || expenseImage);
+                            setPreviewEditAction(() => pickReceipt);
+                            setPreviewDeleteAction(() => () => setExpenseImage(null));
+                            setShowImagePreview(true);
+                        } : pickReceipt}
+                    >
                         {expenseImage ? (
-                            <Image
-                                source={{ uri: getFullImageUri(expenseImage) || expenseImage }}
-                                style={styles.imagePreview}
-                            />
+                            <View style={{ width: '100%', height: '100%' }}>
+                                <Image
+                                    source={{ uri: getFullImageUri(expenseImage) || expenseImage }}
+                                    style={[styles.imagePreview, { width: '100%', height: '100%' }]}
+                                />
+                            </View>
                         ) : (
                             <>
                                 <Camera size={20} color={theme.colors.textSecondary} />
@@ -485,6 +514,14 @@ export default function ExpensesScreen({ navigation, route }: any) {
                     selectedValue={expenseType}
                     onSelect={(cat: string) => setExpenseType(cat)}
                 />
+
+                {/* Image Picker Modal — inside RentModalSheet so it stacks on iOS */}
+                <ImagePickerModal
+                    visible={showImagePicker}
+                    onClose={closeImagePicker}
+                    onSelectCamera={handleCamera}
+                    onSelectGallery={handleGallery}
+                />
             </RentModalSheet>
 
             {/* FAB */}
@@ -508,12 +545,14 @@ export default function ExpensesScreen({ navigation, route }: any) {
                 onClose={() => setShowMonthPicker(false)}
             />
 
-            {/* Image Picker Modal */}
-            <ImagePickerModal
-                visible={showImagePicker}
-                onClose={closeImagePicker}
-                onSelectCamera={handleCamera}
-                onSelectGallery={handleGallery}
+            {/* Image Preview Modal */}
+            <ImagePreviewModal
+                visible={showImagePreview}
+                imageUri={previewImageUri}
+                onClose={() => setShowImagePreview(false)}
+                title="Expense Receipt"
+                onEdit={previewEditAction ? () => { setShowImagePreview(false); previewEditAction(); } : undefined}
+                onDelete={previewDeleteAction ? () => { setShowImagePreview(false); previewDeleteAction(); } : undefined}
             />
 
             {/* Delete Confirmation */}

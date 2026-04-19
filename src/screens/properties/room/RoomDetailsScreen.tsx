@@ -53,6 +53,7 @@ import MoveTenantModal from '../../../components/modals/MoveTenantModal';
 import RentLedgerModal from '../../../components/modals/RentLedgerModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { getFullImageUri } from '../../../services/imageService';
+import ImagePreviewModal from '../../../components/common/ImagePreviewModal';
 import { useToast } from '../../../hooks/useToast';
 
 export default function RoomDetailsScreen({ navigation, route }: any) {
@@ -85,6 +86,10 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     const [showLedgerModal, setShowLedgerModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Image Preview
+    const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+    const [showImagePreview, setShowImagePreview] = useState(false);
 
     const isPGBed = !!unit?.room_group;
 
@@ -248,7 +253,14 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
         >
             <View style={styles.tenantPhotoContainer}>
                 {tenant.photo_uri ? (
-                    <Image source={{ uri: getFullImageUri(tenant.photo_uri) || tenant.photo_uri }} style={styles.tenantPhoto} />
+                    <Pressable onPress={() => {
+                        setPreviewImageUri(getFullImageUri(tenant.photo_uri) || tenant.photo_uri);
+                        setShowImagePreview(true);
+                    }}>
+                        <View>
+                            <Image source={{ uri: getFullImageUri(tenant.photo_uri) || tenant.photo_uri }} style={styles.tenantPhoto} />
+                        </View>
+                    </Pressable>
                 ) : (
                     <View style={styles.tenantPhotoPlaceholder}>
                         <User size={24} color={theme.colors.textTertiary} />
@@ -569,6 +581,13 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 title="Delete Room"
                 message={`Are you sure you want to delete ${unit?.name}? This action cannot be undone.`}
                 loading={isDeleting}
+            />
+
+            <ImagePreviewModal
+                visible={showImagePreview}
+                imageUri={previewImageUri}
+                onClose={() => setShowImagePreview(false)}
+                title="Tenant Photo"
             />
         </SafeAreaView>
     );

@@ -8,7 +8,7 @@ import SuccessModal from '../../components/common/SuccessModal';
 import PickerBottomSheet from '../../components/common/PickerBottomSheet';
 import RentLedgerModal from '../../components/modals/RentLedgerModal';
 import ContactPickerModal from '../../components/modals/ContactPickerModal';
-import { UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2, Layout } from 'lucide-react-native';
+import { UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2 } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, Property, Unit, Tenant } from '../../db';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -17,6 +17,7 @@ import * as Contacts from 'expo-contacts';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
+import ImagePreviewModal from '../../components/common/ImagePreviewModal';
 import { incrementActionAndReview } from '../../services/storeReviewService';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
@@ -93,6 +94,13 @@ export default function AddTenantScreen({ navigation, route }: any) {
     const [aadhaarFrontUri, setAadhaarFrontUri] = useState<string | null>(null);
     const [aadhaarBackUri, setAadhaarBackUri] = useState<string | null>(null);
     const [panUri, setPanUri] = useState<string | null>(null);
+
+    // Image Preview
+    const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+    const [showImagePreview, setShowImagePreview] = useState(false);
+    const [previewImageTitle, setPreviewImageTitle] = useState('');
+    const [previewEditAction, setPreviewEditAction] = useState<(() => void) | undefined>(undefined);
+    const [previewDeleteAction, setPreviewDeleteAction] = useState<(() => void) | undefined>(undefined);
     React.useEffect(() => {
         if (tenantId) {
             setIsEditMode(true);
@@ -189,6 +197,14 @@ export default function AddTenantScreen({ navigation, route }: any) {
         openPicker({ quality: 0.8, allowsEditing: false }, setter);
     };
 
+    const openPreview = (uri: string, title: string, editFn: () => void, deleteFn: () => void) => {
+        setPreviewImageUri(getFullImageUri(uri) || uri);
+        setPreviewImageTitle(title);
+        setPreviewEditAction(() => editFn);
+        setPreviewDeleteAction(() => deleteFn);
+        setShowImagePreview(true);
+    };
+
     const handleSubmit = async () => {
         if (!fullName.trim()) {
             showToast({ type: 'error', title: 'Error', message: 'Please enter tenant name' });
@@ -283,9 +299,11 @@ export default function AddTenantScreen({ navigation, route }: any) {
                     {/* Photo Selection */}
                     <View style={styles.photoSection}>
                         <View>
-                            <Pressable style={styles.photoContainer} onPress={pickPhoto}>
+                            <Pressable style={styles.photoContainer} onPress={photoUri ? () => openPreview(photoUri, 'Tenant Photo', pickPhoto, () => setPhotoUri(null)) : pickPhoto}>
                                 {photoUri ? (
-                                    <Image source={{ uri: getFullImageUri(photoUri) || photoUri }} style={styles.tenantPhoto} />
+                                    <>
+                                        <Image source={{ uri: getFullImageUri(photoUri) || photoUri }} style={styles.tenantPhoto} />
+                                    </>
                                 ) : (
                                     <View style={styles.photoPlaceholder}>
                                         <Camera size={32} color={theme.colors.textTertiary} />
@@ -293,9 +311,9 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                     </View>
                                 )}
                             </Pressable>
-                            <View style={styles.photoEditIcon}>
+                            <Pressable style={styles.photoEditIcon} onPress={pickPhoto}>
                                 <Edit2 size={16} color="#FFF" />
-                            </View>
+                            </Pressable>
                         </View>
                     </View>
 
@@ -538,7 +556,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                         <View style={styles.row}>
                             <View style={{ flex: 1, marginRight: theme.spacing.m }}>
                                 <Text style={styles.docLabel}>AADHAAR FRONT</Text>
-                                <Pressable style={styles.uploadBox} onPress={() => pickDocument('aadhaar_front')}>
+                                <Pressable style={styles.uploadBox} onPress={() => aadhaarFrontUri ? openPreview(aadhaarFrontUri, 'Aadhaar Front', () => pickDocument('aadhaar_front'), () => setAadhaarFrontUri(null)) : pickDocument('aadhaar_front')}>
                                     {aadhaarFrontUri ? (
                                         <Image source={{ uri: getFullImageUri(aadhaarFrontUri) || aadhaarFrontUri }} style={styles.docImg} />
                                     ) : (
@@ -556,7 +574,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.docLabel}>AADHAAR BACK</Text>
-                                <Pressable style={styles.uploadBox} onPress={() => pickDocument('aadhaar_back')}>
+                                <Pressable style={styles.uploadBox} onPress={() => aadhaarBackUri ? openPreview(aadhaarBackUri, 'Aadhaar Back', () => pickDocument('aadhaar_back'), () => setAadhaarBackUri(null)) : pickDocument('aadhaar_back')}>
                                     {aadhaarBackUri ? (
                                         <Image source={{ uri: getFullImageUri(aadhaarBackUri) || aadhaarBackUri }} style={styles.docImg} />
                                     ) : (
@@ -576,7 +594,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                         <View style={[styles.row, { marginTop: theme.spacing.m }]}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.docLabel}>PAN CARD</Text>
-                                <Pressable style={styles.uploadBox} onPress={() => pickDocument('pan')}>
+                                <Pressable style={styles.uploadBox} onPress={() => panUri ? openPreview(panUri, 'PAN Card', () => pickDocument('pan'), () => setPanUri(null)) : pickDocument('pan')}>
                                     {panUri ? (
                                         <Image source={{ uri: getFullImageUri(panUri) || panUri }} style={styles.docImg} />
                                     ) : (
@@ -705,6 +723,15 @@ export default function AddTenantScreen({ navigation, route }: any) {
                 onClose={closeImagePicker}
                 onSelectCamera={handleCamera}
                 onSelectGallery={handleGallery}
+            />
+
+            <ImagePreviewModal
+                visible={showImagePreview}
+                imageUri={previewImageUri}
+                onClose={() => setShowImagePreview(false)}
+                title={previewImageTitle}
+                onEdit={() => { setShowImagePreview(false); previewEditAction?.(); }}
+                onDelete={() => { setShowImagePreview(false); previewDeleteAction?.(); }}
             />
         </SafeAreaView>
     );
