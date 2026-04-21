@@ -545,6 +545,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                     value={emergencyPhone}
                                     onChangeText={setEmergencyPhone}
                                     keyboardType="phone-pad"
+                                    maxLength={10}
                                 />
                             </View>
                         </View>

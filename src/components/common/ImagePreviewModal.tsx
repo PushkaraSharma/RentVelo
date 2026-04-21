@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, Image, Pressable, Dimensions, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { X, Trash2, Edit3 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ImageView from 'react-native-image-viewing';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,17 +28,13 @@ export default function ImagePreviewModal({
     if (!imageUri) return null;
 
     return (
-        <Modal
+        <ImageView
+            images={[{ uri: imageUri }]}
+            imageIndex={0}
             visible={visible}
-            transparent
-            animationType="fade"
             onRequestClose={onClose}
-            statusBarTranslucent
-        >
-            <View style={styles.overlay}>
-                <StatusBar barStyle="light-content" />
-
-                {/* Top Bar */}
+            animationType="fade"
+            HeaderComponent={() => (
                 <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
                     <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={12}>
                         <X size={24} color="#FFF" />
@@ -47,18 +44,9 @@ export default function ImagePreviewModal({
                     ) : <View />}
                     <View style={{ width: 40 }} />
                 </View>
-
-                {/* Image */}
-                <View style={styles.imageContainer}>
-                    <Image
-                        source={{ uri: imageUri }}
-                        style={styles.image}
-                        resizeMode="contain"
-                    />
-                </View>
-
-                {/* Bottom Actions */}
-                {(onEdit || onDelete) && (
+            )}
+            FooterComponent={() => (
+                (onEdit || onDelete) ? (
                     <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
                         {onEdit && (
                             <Pressable style={styles.actionBtn} onPress={onEdit}>
@@ -73,23 +61,21 @@ export default function ImagePreviewModal({
                             </Pressable>
                         )}
                     </View>
-                )}
-            </View>
-        </Modal>
+                ) : <View />
+            )}
+        />
     );
 }
 
 const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.95)',
-    },
     topBar: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingBottom: 12,
+        // Since ImageView has a dark background by default, 
+        // we can add a subtle gradient or just padding.
     },
     closeBtn: {
         width: 40,
@@ -106,16 +92,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#FFF',
         marginHorizontal: 12,
-    },
-    imageContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 16,
-    },
-    image: {
-        width: width - 32,
-        height: height * 0.65,
     },
     bottomBar: {
         flexDirection: 'row',

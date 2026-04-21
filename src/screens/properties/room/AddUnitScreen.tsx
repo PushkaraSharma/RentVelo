@@ -16,6 +16,7 @@ import { saveImageToPermanentStorage, getFullImageUri } from '../../../services/
 import { useToast } from '../../../hooks/useToast';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import PromptModal from '../../../components/common/PromptModal';
+import ImagePreviewModal from '../../../components/common/ImagePreviewModal';
 
 const generateFloorOptions = (totalFloors: number) => {
     const options = ['Basement 2', 'Basement 1', 'Ground Floor']
@@ -91,6 +92,8 @@ export default function AddUnitScreen({ navigation, route }: any) {
         handleGallery
     } = useImagePicker((uri) => setImages(prev => [...prev, uri]));
     const [showAmenityPrompt, setShowAmenityPrompt] = useState(false);
+    const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+    const [showImagePreview, setShowImagePreview] = useState(false);
 
     // PG-specific state
     const [bedCount, setBedCount] = useState('2');
@@ -789,7 +792,12 @@ export default function AddUnitScreen({ navigation, route }: any) {
 
                                 {images.map((uri, index) => (
                                     <View key={index} style={styles.photoWrapper}>
-                                        <Image source={{ uri: getFullImageUri(uri) || uri }} style={styles.bottomPhoto} />
+                                        <Pressable onPress={() => {
+                                            setPreviewImageUri(getFullImageUri(uri) || uri);
+                                            setShowImagePreview(true);
+                                        }}>
+                                            <Image source={{ uri: getFullImageUri(uri) || uri }} style={styles.bottomPhoto} />
+                                        </Pressable>
                                         <Pressable style={styles.removePhotoBtn} onPress={() => removeImage(index)}>
                                             <Trash2 size={12} color="#FFF" />
                                         </Pressable>
@@ -902,6 +910,13 @@ export default function AddUnitScreen({ navigation, route }: any) {
                 title="Add Amenity"
                 message="Enter amenity name (e.g. Attached Balcony)"
                 placeholder="e.g. Attached Balcony"
+            />
+
+            <ImagePreviewModal
+                visible={showImagePreview}
+                imageUri={previewImageUri}
+                onClose={() => setShowImagePreview(false)}
+                title="Room Photo"
             />
         </SafeAreaView>
     );
