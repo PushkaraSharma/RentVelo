@@ -361,7 +361,7 @@ export default function RentReceiptConfigScreen({ navigation, route }: any) {
                             <Text style={styles.sectionIconText}>SIGNATURE / WATERMARK</Text>
                         </View>
                         {signatureUri ? (
-                            <View style={styles.imagePreviewContainer}>
+                            <View style={{}}>
                                 <Pressable onPress={() => openPreview(signatureUri, 'Authorized Signatory', () => setShowSignatureModal(true), () => setSignatureUri(null))}>
                                     <Image source={{ uri: getFullImageUri(signatureUri) || signatureUri }} style={styles.signaturePreview} />
                                 </Pressable>
