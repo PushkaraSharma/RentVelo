@@ -82,6 +82,8 @@ export {
     persistVirtualBill,
     syncPendingBillsWithUnitSettings,
     savePGUtilityReading,
+    getBillsByTenantId,
+    getBillSummaryByUnitId,
 } from './billService';
 
 // Notification operations

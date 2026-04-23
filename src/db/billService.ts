@@ -1653,3 +1653,45 @@ const syncPropertyExpensesLazily = async (
         await recalculateBill(billId, true); // skip penalty check to avoid double work
     }
 };
+
+// ===== TENANT & UNIT QUERIES =====
+
+/**
+ * Get all bills for a given tenant, ordered by year DESC, month DESC.
+ * Used to display payment history on the Tenant Detail screen.
+ */
+export const getBillsByTenantId = async (tenantId: number): Promise<RentBill[]> => {
+    const db = getDb();
+    return await db.select()
+        .from(rentBills)
+        .where(eq(rentBills.tenant_id, tenantId))
+        .orderBy(desc(rentBills.year), desc(rentBills.month));
+};
+
+/**
+ * Get aggregated bill summary for a given unit.
+ * Returns total revenue collected, outstanding dues, and bill count.
+ * Used for Room/Bed statistics on the Room Info tab.
+ */
+export const getBillSummaryByUnitId = async (unitId: number): Promise<{
+    totalRevenue: number;
+    outstandingDues: number;
+    billCount: number;
+}> => {
+    const db = getDb();
+    const bills = await db.select()
+        .from(rentBills)
+        .where(eq(rentBills.unit_id, unitId));
+
+    const totalRevenue = bills.reduce((sum, b) => sum + (b.paid_amount ?? 0), 0);
+    const outstandingDues = bills.reduce((sum, b) => {
+        const bal = b.balance ?? 0;
+        return sum + (bal > 0 ? bal : 0);
+    }, 0);
+
+    return {
+        totalRevenue,
+        outstandingDues,
+        billCount: bills.length,
+    };
+};

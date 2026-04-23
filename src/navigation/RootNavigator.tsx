@@ -34,6 +34,7 @@ import NotificationsScreen from '../screens/settings/NotificationsScreen';
 import NotificationsCenterScreen from '../screens/notifications/NotificationsCenterScreen';
 import TakeRentScreen from '../screens/rent/TakeRentScreen';
 import ExcelImportScreen from '../screens/settings/ExcelImportScreen';
+import TenantDetailScreen from '../screens/tenants/TenantDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -83,6 +84,7 @@ export default function RootNavigator() {
                         <Stack.Screen name="PropertySettings" component={PropertySettingsScreen} />
                         <Stack.Screen name="Expenses" component={ExpensesScreen} />
                         <Stack.Screen name="ExcelImport" component={ExcelImportScreen} />
+                        <Stack.Screen name="TenantDetail" component={TenantDetailScreen} />
                     </>
                 )}
             </Stack.Navigator>

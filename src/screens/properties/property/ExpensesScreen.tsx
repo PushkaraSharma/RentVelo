@@ -194,6 +194,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
         setExpenseRemarks('');
         setDistributeType('owner');
         setSelectedUnitIds([]);
+        closeImagePicker();
     };
 
     const toggleUnitSelection = (unitId: number) => {
@@ -406,29 +407,32 @@ export default function ExpensesScreen({ navigation, route }: any) {
                 {/* Image */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Image (Optional)</Text>
-                    <Pressable
-                        style={styles.imageBtn}
-                        onPress={expenseImage ? () => {
-                            setPreviewImageUri(getFullImageUri(expenseImage) || expenseImage);
-                            setPreviewEditAction(() => pickReceipt);
-                            setPreviewDeleteAction(() => () => setExpenseImage(null));
-                            setShowImagePreview(true);
-                        } : pickReceipt}
-                    >
-                        {expenseImage ? (
-                            <View style={{ width: '100%', height: '100%' }}>
-                                <Image
-                                    source={{ uri: getFullImageUri(expenseImage) || expenseImage }}
-                                    style={[styles.imagePreview, { width: '100%', height: '100%' }]}
-                                />
-                            </View>
-                        ) : (
-                            <>
-                                <Camera size={20} color={theme.colors.textSecondary} />
-                                <Text style={styles.imageBtnText}>Add Photo</Text>
-                            </>
-                        )}
-                    </Pressable>
+                    {expenseImage ? (
+                        <View style={styles.imageContainer}>
+                            <Image
+                                source={{ uri: getFullImageUri(expenseImage) || expenseImage }}
+                                style={styles.imageFull}
+                                resizeMode="cover"
+                            />
+                            <Pressable 
+                                style={styles.removeImageBtn}
+                                onPress={() => {
+                                    hapticsSelection();
+                                    setExpenseImage(null);
+                                }}
+                            >
+                                <Trash2 size={16} color="#FFF" />
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <Pressable
+                            style={styles.imageBtn}
+                            onPress={pickReceipt}
+                        >
+                            <Camera size={20} color={theme.colors.textSecondary} />
+                            <Text style={styles.imageBtnText}>Add Photo</Text>
+                        </Pressable>
+                    )}
                 </View>
 
                 {/* Remarks */}
@@ -515,7 +519,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
                     onSelect={(cat: string) => setExpenseType(cat)}
                 />
 
-                {/* Image Picker Modal — inside RentModalSheet so it stacks on iOS */}
+                {/* Image Picker Modal */}
                 <ImagePickerModal
                     visible={showImagePicker}
                     onClose={closeImagePicker}
@@ -803,17 +807,41 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        paddingVertical: 14,
+        height: 120,
         borderRadius: 14,
         backgroundColor: theme.colors.surface,
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderStyle: 'dashed',
-        overflow: 'hidden',
     },
     imageBtnText: {
         fontSize: 14,
         color: theme.colors.textSecondary,
+        fontWeight: theme.typography.medium,
+    },
+    imageContainer: {
+        width: '100%',
+        height: 200,
+        borderRadius: 14,
+        overflow: 'hidden',
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    imageFull: {
+        width: '100%',
+        height: '100%',
+    },
+    removeImageBtn: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     imagePreview: {
         width: '100%',

@@ -41,8 +41,10 @@ import {
     updateTenant,
     getAllProperties,
     getUnitsByPropertyId,
-    deleteUnit
+    deleteUnit,
+    getBillSummaryByUnitId
 } from '../../../db';
+import { CURRENCY } from '../../../utils/Constants';
 import { useFocusEffect } from '@react-navigation/native';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
@@ -93,16 +95,21 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
 
     const isPGBed = !!unit?.room_group;
 
+    // Room Statistics
+    const [roomStats, setRoomStats] = useState<{ totalRevenue: number; outstandingDues: number; billCount: number } | null>(null);
+
     const loadData = async () => {
         try {
-            const [propData, unitData, tenantsData] = await Promise.all([
+            const [propData, unitData, tenantsData, statsData] = await Promise.all([
                 getPropertyById(propertyId),
                 getUnitById(unitId),
-                getTenantsByUnitId(unitId)
+                getTenantsByUnitId(unitId),
+                getBillSummaryByUnitId(unitId)
             ]);
             setProperty(propData);
             setUnit(unitData);
             setTenants(tenantsData);
+            setRoomStats(statsData);
         } catch (error) {
             console.error('Error loading room details:', error);
         }
@@ -247,8 +254,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
             key={tenant.id}
             style={[styles.tenantCard, !isActive && styles.pastTenantCard]}
             onPress={() => {
-                // Navigate to profile for both active and past tenants
-                navigation.navigate('AddTenant', { tenantId: tenant.id, propertyId, unitId });
+                // Navigate to tenant detail screen for both active and past tenants
+                navigation.navigate('TenantDetail', { tenantId: tenant.id, propertyId, unitId });
             }}
         >
             <View style={styles.tenantPhotoContainer}>
@@ -363,7 +370,16 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 {activeTab === 'info' && property?.is_multi_unit !== false ? (
                     <View style={styles.infoSection}>
                         <View style={styles.infoCard}>
-                            <Text style={styles.infoLabel}>Details</Text>
+                            <View style={styles.cardHeaderRow}>
+                                <Text style={[styles.infoLabel, { marginBottom: 0, borderBottomWidth: 0, paddingBottom: 0 }]}>Details</Text>
+                                <Pressable
+                                    style={styles.editDetailBtn}
+                                    onPress={() => navigation.navigate('AddUnit', { propertyId, unitId, propertyType: property?.type })}
+                                >
+                                    <Edit3 size={14} color="#FFFFFF" />
+                                    <Text style={styles.editDetailText}>Edit</Text>
+                                </Pressable>
+                            </View>
                             {unit?.room_group && (
                                 <>
                                     <View style={styles.infoRow}>
@@ -475,12 +491,65 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                             )}
                         </View>
 
-                        <Button
-                            title={isPGBed ? 'Update Bed Details' : 'Update Room Details'}
-                            onPress={() => navigation.navigate('AddUnit', { propertyId, unitId, propertyType: property?.type })}
-                            variant='primary'
-                            style={{ marginTop: 20 }}
-                        />
+                        {/* Room/Bed Statistics */}
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>{isPGBed ? 'Bed Statistics' : 'Room Statistics'}</Text>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoKey}>Occupancy</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <View style={{
+                                        width: 8, height: 8, borderRadius: 4,
+                                        backgroundColor: currentTenant ? '#10B981' : '#EF4444'
+                                    }} />
+                                    <Text style={[styles.infoValue, {
+                                        color: currentTenant ? '#10B981' : '#EF4444'
+                                    }]}>{currentTenant ? 'Occupied' : 'Vacant'}</Text>
+                                </View>
+                            </View>
+                            {currentTenant && (
+                                <View style={styles.infoRow}>
+                                    <Text style={styles.infoKey}>Current Tenant Since</Text>
+                                    <Text style={styles.infoValue}>
+                                        {currentTenant.move_in_date
+                                            ? new Date(currentTenant.move_in_date).toLocaleDateString()
+                                            : '—'}
+                                    </Text>
+                                </View>
+                            )}
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoKey}>Total Tenants</Text>
+                                <Text style={styles.infoValue}>{tenants.length}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoKey}>Total Revenue</Text>
+                                <Text style={[styles.infoValue, { color: '#10B981', fontWeight: 'bold' }]}>
+                                    {CURRENCY}{(roomStats?.totalRevenue ?? 0).toLocaleString('en-IN')}
+                                </Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoKey}>Outstanding Dues</Text>
+                                <Text style={[styles.infoValue, {
+                                    color: (roomStats?.outstandingDues ?? 0) > 0 ? '#EF4444' : theme.colors.textPrimary,
+                                    fontWeight: (roomStats?.outstandingDues ?? 0) > 0 ? 'bold' : theme.typography.medium
+                                }]}>
+                                    {CURRENCY}{(roomStats?.outstandingDues ?? 0).toLocaleString('en-IN')}
+                                </Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoKey}>Bills Generated</Text>
+                                <Text style={styles.infoValue}>{roomStats?.billCount ?? 0}</Text>
+                            </View>
+                            {pastTenants.length > 0 && (
+                                <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                                    <Text style={styles.infoKey}>Last Vacancy</Text>
+                                    <Text style={styles.infoValue}>
+                                        {pastTenants[0].move_out_date
+                                            ? new Date(pastTenants[0].move_out_date).toLocaleDateString()
+                                            : '—'}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
                 ) : (
                     <View style={styles.tenantsSection}>
@@ -823,5 +892,31 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         textAlign: 'center',
         color: theme.colors.textSecondary,
         padding: 20
-    }
+    },
+
+    // Card header with inline edit
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: theme.spacing.m,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+        paddingBottom: 8,
+    },
+    editDetailBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: theme.colors.accent,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 20,
+        ...theme.shadows.small,
+    },
+    editDetailText: {
+        fontSize: 13,
+        fontWeight: theme.typography.bold,
+        color: '#FFFFFF',
+    },
 });
