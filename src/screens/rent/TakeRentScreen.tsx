@@ -121,7 +121,10 @@ export default function TakeRentScreen({ navigation, route }: any) {
         vacant: bills.filter(b => b.isVacant).length,
     };
 
+    const isCurrentOrFutureMonth = (year > now.getFullYear()) || (year === now.getFullYear() && month >= now.getMonth() + 1);
+
     const goMonth = (dir: number) => {
+        if (dir === 1 && isCurrentOrFutureMonth) return;
         hapticsHeavy();
         setLoading(true); // Immediate loader feedback
         setBills([]); // Clear stale data instantly
@@ -173,7 +176,11 @@ export default function TakeRentScreen({ navigation, route }: any) {
                             <Text style={styles.monthText}>{MONTHS[month - 1]}</Text>
                             <Text style={styles.yearLabel}>{year}</Text>
                         </Pressable>
-                        <Pressable onPress={() => goMonth(1)} style={styles.monthArrow}>
+                        <Pressable 
+                            onPress={() => goMonth(1)} 
+                            style={[styles.monthArrow, isCurrentOrFutureMonth && { opacity: 0.3 }]}
+                            disabled={isCurrentOrFutureMonth}
+                        >
                             <ChevronRight size={20} color={theme.colors.accent} />
                         </Pressable>
                     </View>
@@ -259,6 +266,8 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 visible={showMonthPicker}
                 month={month}
                 year={year}
+                maxMonth={now.getMonth() + 1}
+                maxYear={now.getFullYear()}
                 onSelect={(m, y) => {
                     setMonth(m);
                     setYear(y);

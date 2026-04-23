@@ -213,9 +213,9 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 
     <!-- ═══ RENT PERIOD BAR ═══ -->
     <div style="background:#7C3AED; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <div style="color:#EDE9FE; font-size:12px;">Rent Period</div>
+        <div style="color:#EDE9FE; font-size:12px; font-weight:500;">Rent Period</div>
         <div style="color:#FFF; font-weight:700; font-size:12px;">${startStr} — ${endStr}</div>
-        <div style="color:#EDE9FE; font-size:12px;">${period.days} Days</div>
+        <div style="color:#EDE9FE; font-size:12px; font-weight:500;">${period.days} Days</div>
     </div>
 
     <!-- ═══ BILL BREAKDOWN ═══ -->
@@ -250,7 +250,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
                 </tr>
                 ` : ''}
                 ${filteredExpenses.length > 0 ? `
-                <tr><td colspan="2" style="padding:4px 10px; font-size:12px; color:#7C3AED; font-weight:700; background:#F8F5FF;">Additional Charges / Discounts</td></tr>
+                <tr><td colspan="2" style="padding:4px 10px; font-size:14px; color:#7C3AED; font-weight:700; background:#F8F5FF;">Additional Charges / Discounts</td></tr>
                 ${expenseRows}
                 ` : ''}
                 ${prevBalance !== 0 ? `

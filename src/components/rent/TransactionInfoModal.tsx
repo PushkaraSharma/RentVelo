@@ -12,10 +12,11 @@ interface TransactionInfoModalProps {
     onClose: () => void;
     bill: any;
     unit: any;
+    tenant: any;
     period: { start: string; end: string; days: number };
 }
 
-export default function TransactionInfoModal({ visible, onClose, bill, unit, period }: TransactionInfoModalProps) {
+export default function TransactionInfoModal({ visible, onClose, bill, unit, tenant, period }: TransactionInfoModalProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const [rentAmount, setRentAmount] = useState('');
@@ -48,7 +49,20 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
             const endParts = period.end.split(' ');
             const pMonth = endParts.length >= 2 ? (monthAbbrMap[endParts[1]] ?? (bill.month - 1)) : (bill.month - 1);
             const pYear = endParts.length >= 3 ? parseInt(endParts[2]) : bill.year;
-            setStartDate(bill.period_start ? new Date(bill.period_start) : new Date(pYear, pMonth, 1));
+
+            let finalStart = bill.period_start ? new Date(bill.period_start) : new Date(pYear, pMonth, 1);
+
+            // Smarter fallback for move-in month if DB field is missing
+            if (!bill.period_start && tenant?.rent_start_date) {
+                const rsd = new Date(tenant.rent_start_date);
+                const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
+                const currentUsageMonthStart = new Date(pYear, pMonth, 1);
+                if (rsdMonthStart.getTime() === currentUsageMonthStart.getTime()) {
+                    finalStart = rsd;
+                }
+            }
+
+            setStartDate(finalStart);
             setEndDate(bill.period_end ? new Date(bill.period_end) : new Date(pYear, pMonth + 1, 0));
         }
     }, [visible, bill]);
@@ -168,7 +182,7 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, per
                         />
                     </View>
                     <Text style={styles.inputHint}>
-                        Rent Per Month: {CURRENCY}{bill?.rent_amount?.toLocaleString('en-IN')}
+                        Rent Per Month: {CURRENCY}{unit?.rent_amount?.toLocaleString('en-IN')}
                     </Text>
                 </View>
             </View>

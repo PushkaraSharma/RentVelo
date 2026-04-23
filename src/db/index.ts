@@ -79,7 +79,6 @@ export {
     getBillPayments,
     resetBill,
     resetFutureBills,
-    persistVirtualBill,
     syncPendingBillsWithUnitSettings,
     savePGUtilityReading,
     getBillsByTenantId,

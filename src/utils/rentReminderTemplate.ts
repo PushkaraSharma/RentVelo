@@ -180,9 +180,9 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
 
     <!-- ═══ RENT PERIOD ═══ -->
     <div style="background:#E53E3E; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <div style="color:#FECACA; font-size:12px;">Rent Period</div>
+        <div style="color:#FECACA; font-size:12px; font-weight:500;">Rent Period</div>
         <div style="color:#FFF; font-weight:700; font-size:12px;">${startStr} — ${endStr}</div>
-        <div style="color:#FECACA; font-size:12px;">${period.days} Days</div>
+        <div style="color:#FECACA; font-size:12px; font-weight:500;">${period.days} Days</div>
     </div>
 
     <!-- ═══ BILL BREAKDOWN ═══ -->
@@ -217,7 +217,7 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
                 </tr>
                 ` : ''}
                 ${filteredExpenses.length > 0 ? `
-                <tr><td colspan="2" style="padding:4px 10px; font-size:12px; color:#E53E3E; font-weight:700; background:#FFF5F5;">Additional Charges / Discounts</td></tr>
+                <tr><td colspan="2" style="padding:4px 10px; font-size:14px; color:#E53E3E; font-weight:700; background:#FFF5F5;">Additional Charges / Discounts</td></tr>
                 ${expenseRows}
                 ` : ''}
                 ${(bill.previous_balance || 0) !== 0 ? `

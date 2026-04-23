@@ -233,15 +233,6 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                                 </Pressable>
                             </>
                         ) : null}
-                        {tenant.email ? (
-                            <Pressable
-                                style={[styles.contactBtn, { backgroundColor: isDark ? '#7C3AED20' : '#F3E8FF', flex: tenant.phone ? 0 : 1 }]}
-                                onPress={() => Linking.openURL(`mailto:${tenant.email}`)}
-                            >
-                                <Mail size={16} color="#7C3AED" />
-                                <Text style={[styles.contactBtnText, { color: '#7C3AED' }]}>Email</Text>
-                            </Pressable>
-                        ) : null}
                     </View>
                 </View>
 
@@ -568,13 +559,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     contactActions: {
         flexDirection: 'row',
-        gap: 10,
         borderTopWidth: 1,
         borderTopColor: theme.colors.border + '60',
         paddingTop: theme.spacing.m,
+        justifyContent: 'space-between',
     },
     contactBtn: {
-        flex: 1,
+        width: '48%',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',

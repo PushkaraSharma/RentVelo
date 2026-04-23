@@ -41,7 +41,6 @@ interface RentBillCardProps {
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
         hasFuturePersistedBills?: boolean;
-        isStrictlyFuture?: boolean;
     };
     period: { start: string; end: string; days: number };
     onRefresh: (isSilent?: boolean) => void;
@@ -79,9 +78,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [isReseting, setIsReseting] = useState(false);
     const [meterReadingError, setMeterReadingError] = useState('');
     const [waterReadingError, setWaterReadingError] = useState('');
-    const [showVirtualBillWarning, setShowVirtualBillWarning] = useState(false);
-    const [pendingVirtualAction, setPendingVirtualAction] = useState<(() => void) | null>(null);
-    const [isPersistingVirtual, setIsPersistingVirtual] = useState(false);
 
     const swipeAnim = useRef(new Animated.Value(0)).current;
     const viewShotRef = useRef<any>(null);
@@ -495,49 +491,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    const executeVirtualAction = (action: () => void) => {
-        if (bill?.id === null) {
-            if (item.isStrictlyFuture) {
-                Keyboard.dismiss();
-                setPendingVirtualAction(() => action);
-                setTimeout(() => {
-                    setShowVirtualBillWarning(true);
-                }, 100);
-            } else {
-                handleConfirmVirtualAction(action);
-            }
-        } else {
-            action();
-        }
-    };
 
-    const handleConfirmVirtualAction = async (silentAction?: () => void) => {
-        const actionToRun = silentAction || pendingVirtualAction;
-        if (!bill || bill.id !== null || !actionToRun) {
-            return;
-        }
-
-        setIsPersistingVirtual(true);
-        try {
-            const { persistVirtualBill } = require('../../db');
-            const newBillId = await persistVirtualBill(bill);
-
-            // Update local object bridge so that 'actionToRun' (like runSave) 
-            // has the ID it needs immediately before the refresh unmounts us.
-            bill.id = newBillId;
-
-            // Wait for the action (e.g., save reading) to complete BEFORE refreshing UI
-            await Promise.resolve(actionToRun());
-            onRefresh(true);
-        } catch (e) {
-            console.error('[RentBillCard] Error persisting virtual bill:', e);
-            showToast({ type: 'error', title: 'Error', message: 'Failed to persist bill' });
-        } finally {
-            setIsPersistingVirtual(false);
-            setShowVirtualBillWarning(false);
-            setPendingVirtualAction(null);
-        }
-    };
 
     const handleMeterReadingSave = async (type: 'electricity' | 'water') => {
         if (!bill || savingReading.current) return;
@@ -617,11 +571,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         };
 
-        if (bill.id === null) {
-            executeVirtualAction(runSave);
-        } else {
-            runSave();
-        }
+        runSave();
     };
 
     const formattedDate = () => {
@@ -674,7 +624,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         if ((bill.paid_amount ?? 0) > 0) {
                             setShowPaidAmount(true);
                         } else if (!isLocked) {
-                            executeVirtualAction(() => setShowReceivePayment(true));
+                            setShowReceivePayment(true);
                         } else {
                             showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' });
                         }
@@ -716,7 +666,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'electricity' }))}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'electricity' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
@@ -762,7 +712,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'water' }))}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'water' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
@@ -782,7 +732,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             {/* === RENT + PREVIOUS BALANCE (tappable) === */}
             <Pressable
                 style={styles.rentSection}
-                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowTransactionInfo(true))}
+                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowTransactionInfo(true)}
             >
                 <View style={styles.rentRow}>
                     <View>
@@ -816,7 +766,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             <View style={styles.actionsRow}>
                 <Pressable
                     style={[styles.addRemoveBtn, isLocked && { opacity: 0.5 }]}
-                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowExpenseActions(true))}
+                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowExpenseActions(true)}
                 >
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>
@@ -1044,19 +994,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 confirmText="Delete"
                 variant="danger"
                 loading={isReseting}
-            />
-            <ConfirmationModal
-                visible={showVirtualBillWarning}
-                onClose={() => {
-                    setShowVirtualBillWarning(false);
-                    setPendingVirtualAction(null);
-                }}
-                onConfirm={handleConfirmVirtualAction}
-                title="Modify Future Month?"
-                message="You're editing a future month. This will save your changes and lock all previous months."
-                confirmText="Proceed"
-                variant="danger"
-                loading={isPersistingVirtual}
             />
         </View >
     );
