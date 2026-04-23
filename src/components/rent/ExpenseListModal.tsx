@@ -25,9 +25,15 @@ export default function ExpenseListModal({ visible, onClose, bill, unit }: Expen
     const loadExpenses = async () => {
         if (bill.id) {
             const data = await getBillExpenses(bill.id);
-            setExpenses(data.filter((e: any) => e.label !== 'Late Payment Penalty (Waived)'));
+            setExpenses(data.filter((e: any) => 
+                e.label !== 'Late Payment Penalty (Waived)' && 
+                !e.label.endsWith('(Removed)')
+            ));
         } else if (bill.virtual_expenses) {
-            setExpenses(bill.virtual_expenses.filter((e: any) => e.label !== 'Late Payment Penalty (Waived)'));
+            setExpenses(bill.virtual_expenses.filter((e: any) => 
+                e.label !== 'Late Payment Penalty (Waived)' && 
+                !e.label.endsWith('(Removed)')
+            ));
         } else {
             setExpenses([]);
         }

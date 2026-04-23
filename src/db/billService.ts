@@ -310,9 +310,7 @@ export const generateBillsForProperty = async (
             for (const exp of recurringExps) {
                 await db.insert(billExpenses).values({
                     bill_id: newBillId,
-                    property_id: propertyId,
-                    unit_id: unit.id,
-                    expense_name: exp.expense_name,
+                    label: exp.label,
                     amount: exp.amount,
                     is_recurring: true,
                     property_expense_id: exp.property_expense_id
@@ -1146,8 +1144,10 @@ export const resetFutureBills = async (
 ): Promise<void> => {
     const db = getDb();
 
-    // Find all persisted bills for this unit strictly after the requested month/year
-    const billsToReset = await db.select().from(rentBills).where(
+    // Delete all future bills for this unit. 
+    // This effectively "unlocks" previous months by removing any complex persisted state.
+    // Deleting rent_bills will cascade-delete expenses and payments due to schema constraints.
+    await db.delete(rentBills).where(
         and(
             eq(rentBills.unit_id, unitId),
             or(
@@ -1155,33 +1155,7 @@ export const resetFutureBills = async (
                 and(eq(rentBills.year, fromYear), sql`${rentBills.month} > ${fromMonth}`)
             )
         )
-    ).orderBy(rentBills.year, rentBills.month);
-
-    for (const bill of billsToReset) {
-        // Delete manual local expenses (keep property-level and recurring ones)
-        await db.delete(billExpenses).where(
-            and(
-                eq(billExpenses.bill_id, bill.id),
-                eq(billExpenses.is_recurring, false),
-                sql`${billExpenses.property_expense_id} IS NULL`
-            )
-        );
-        // Delete payments
-        await db.delete(payments).where(eq(payments.bill_id, bill.id));
-
-        // Reset manual readings (recalculateBill will handle falling back to fixed amounts if applicable)
-        await db.update(rentBills)
-            .set({
-                curr_reading: null,
-                water_curr_reading: null,
-                updated_at: new Date()
-            })
-            .where(eq(rentBills.id, bill.id));
-
-        // Recalculate bill completely, which will naturally cascade its new balance and prev_reading 
-        // down to the next bill in the sequence loop.
-        await recalculateBill(bill.id);
-    }
+    );
 };
 
 /**

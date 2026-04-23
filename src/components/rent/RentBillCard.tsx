@@ -4,7 +4,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
 import {
-    updateBill, recalculateBill,
+    updateBill, recalculateBill, resetFutureBills,
     getBillExpenses, getBillPayments,
     getReceiptConfigByPropertyId, getPropertyById, getTenantById, getUnitById
 } from '../../db';
@@ -479,7 +479,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const confirmResetBill = async () => {
         try {
             setIsReseting(true);
-            const { resetFutureBills } = require('../../db');
             await resetFutureBills(unit.id, viewingMonth, viewingYear);
             onRefresh();
         } catch (e) {
@@ -964,6 +963,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowTransactionInfo(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                tenant={tenant}
                 period={period}
             />
             <ExpenseActionsModal
