@@ -4,6 +4,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { getFullImageUri } from '../../services/imageService';
 import { X, Phone, Mail, MapPin, User, Calendar, Shield, ExternalLink, MessageCircle } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 interface RoomInfoModalProps {
     visible: boolean;
@@ -90,9 +91,9 @@ export default function RoomInfoModal({ visible, onClose, tenant, unit, navigati
                                         Linking.openURL(`whatsapp://send?phone=${whatsappPhone}`);
                                     }}
                                 >
-                                    <Text style={styles.whatsappIcon}>💬</Text>
+                                    <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                                     <Text style={styles.whatsappText}>WhatsApp</Text>
-                                </Pressable >
+                                </Pressable>
                             </View >
                         ) : null}
                         {

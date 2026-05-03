@@ -46,7 +46,7 @@ export const syncDatabaseSchema = (forceRefresh = false) => {
     // Since we've had schema sync issues across different test devices, we aggressively patch missing columns individually.
     const patchTable = (tableName: string, col: string, type: string, def?: string) => {
       try {
-        const columns = expoDb.getAllSync(`PRAGMA table_info(\`${tableName}\`)`) as any[];
+        const columns = expoDb.getAllSync(`PRAGMA table_info('${tableName}')`) as any[];
         if (columns.length === 0) return; // Table not created yet
         
         const exists = columns.some((c: any) => c.name === col);

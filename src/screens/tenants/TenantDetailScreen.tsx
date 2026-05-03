@@ -30,6 +30,7 @@ import {
     Building,
     Receipt,
 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Header from '../../components/common/Header';
 import {
     getTenantById,
@@ -228,7 +229,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                                         Linking.openURL(`whatsapp://send?phone=${whatsappPhone}`);
                                     }}
                                 >
-                                    <Text style={{ fontSize: 15 }}>💬</Text>
+                                    <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                                     <Text style={[styles.contactBtnText, { color: '#25D366' }]}>WhatsApp</Text>
                                 </Pressable>
                             </>
