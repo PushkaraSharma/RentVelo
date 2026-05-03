@@ -25,6 +25,12 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const insets = useSafeAreaInsets();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
     const propertyId = route?.params?.propertyId;
+    
+    const ADVANCE_DAYS = 3;
+    const effectiveNow = new Date();
+    effectiveNow.setDate(effectiveNow.getDate() + ADVANCE_DAYS);
+    
+    // Default open month remains the strict CURRENT month
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
@@ -121,7 +127,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
         vacant: bills.filter(b => b.isVacant).length,
     };
 
-    const isCurrentOrFutureMonth = (year > now.getFullYear()) || (year === now.getFullYear() && month >= now.getMonth() + 1);
+    const isCurrentOrFutureMonth = (year > effectiveNow.getFullYear()) || (year === effectiveNow.getFullYear() && month >= effectiveNow.getMonth() + 1);
 
     const goMonth = (dir: number) => {
         if (dir === 1 && isCurrentOrFutureMonth) return;
@@ -266,8 +272,8 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 visible={showMonthPicker}
                 month={month}
                 year={year}
-                maxMonth={now.getMonth() + 1}
-                maxYear={now.getFullYear()}
+                maxMonth={effectiveNow.getMonth() + 1}
+                maxYear={effectiveNow.getFullYear()}
                 onSelect={(m, y) => {
                     setMonth(m);
                     setYear(y);
