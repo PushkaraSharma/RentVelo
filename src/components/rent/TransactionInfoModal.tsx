@@ -32,6 +32,12 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, ten
         return `${d.getDate()} ${months[d.getMonth()]}`;
     };
 
+    const getDaysDifference = (start: Date, end: Date) => {
+        const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    };
+
     useEffect(() => {
         if (visible && bill) {
             setRentAmount(bill.rent_amount?.toString() || '0');
@@ -95,9 +101,8 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, ten
             // If the user hasn't customized dates, use original rent, 
             // otherwise calculate prorated rent based on days
             if (startDate.getTime() !== defaultStart.getTime() || endDate.getTime() !== defaultEnd.getTime()) {
-                const msPerDay = 1000 * 60 * 60 * 24;
                 const totalDaysInMonth = defaultEnd.getDate();
-                const selectedDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / msPerDay) + 1);
+                const selectedDays = Math.max(1, getDaysDifference(startDate, endDate));
 
                 const calculatedRent = Math.round((bill.rent_amount / totalDaysInMonth) * selectedDays);
                 setRentAmount(calculatedRent.toString());
@@ -145,7 +150,7 @@ export default function TransactionInfoModal({ visible, onClose, bill, unit, ten
                         <Text style={styles.dateValue}>{formatDate(startDate)}</Text>
                     </Pressable>
                     <View style={styles.daysLabel}>
-                        <Text style={styles.daysText}>{Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1} Days</Text>
+                        <Text style={styles.daysText}>{getDaysDifference(startDate, endDate)} Days</Text>
                         <ChevronRight size={16} color={theme.colors.textTertiary} />
                     </View>
                     <Pressable style={styles.dateChip} onPress={() => setShowEndPicker(true)}>
