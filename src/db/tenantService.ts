@@ -10,6 +10,16 @@ export const createTenant = async (tenant: NewTenant): Promise<number> => {
     const db = getDb();
     let finalTenant = { ...tenant };
 
+    if (!finalTenant.phone || finalTenant.phone.trim() === '') {
+        throw new Error("Phone number is required and cannot be empty.");
+    }
+    finalTenant.phone = finalTenant.phone.trim();
+
+    const existingTenant = await db.select().from(tenants).where(eq(tenants.phone, finalTenant.phone)).limit(1);
+    if (existingTenant.length > 0) {
+        throw new Error("A tenant with this phone number already exists.");
+    }
+
     // If tenant has no unit_id, check if property is single_unit. 
     // If so, get or create the "Main Property" unit.
     if (!finalTenant.unit_id && finalTenant.property_id) {
@@ -72,7 +82,7 @@ export const getTenantById = async (id: number): Promise<Tenant | null> => {
     return result[0] || null;
 };
 
-// Update Tenant (with global profile sync)
+// Update Tenant (without global profile sync to prevent duplicate update bugs)
 export const updateTenant = async (id: number, tenant: Partial<NewTenant>): Promise<void> => {
     const db = getDb();
 
@@ -80,33 +90,27 @@ export const updateTenant = async (id: number, tenant: Partial<NewTenant>): Prom
     const currentTenant = await getTenantById(id);
     if (!currentTenant) return;
 
-    // 2. Define profile fields that should be synchronized globally
-    const profileFields = [
-        'name', 'phone', 'email', 'profession', 'guest_count',
-        'work_address', 'id_proof_type', 'id_proof_number',
-        'emergency_contact_name', 'emergency_contact_phone',
-        'photo_uri', 'aadhaar_front_uri', 'aadhaar_back_uri', 'pan_uri'
-    ];
+    let finalTenant = { ...tenant };
 
-    // 3. Extract profile-specific updates
-    const profileUpdates: any = {};
-    Object.keys(tenant).forEach(key => {
-        if (profileFields.includes(key)) {
-            profileUpdates[key] = (tenant as any)[key];
+    // 2. Validate phone if it is being updated
+    if (finalTenant.phone !== undefined && finalTenant.phone !== null) {
+        finalTenant.phone = finalTenant.phone.trim();
+        if (finalTenant.phone === '') {
+            throw new Error("Phone number cannot be empty.");
         }
-    });
 
-    // 4. Update the specific record (includes rent/stay specific fields)
-    await db.update(tenants)
-        .set({ ...tenant, updated_at: new Date() })
-        .where(eq(tenants.id, id));
-
-    // 5. If profile fields changed, sync them across all records with the same phone number
-    if (Object.keys(profileUpdates).length > 0) {
-        await db.update(tenants)
-            .set({ ...profileUpdates, updated_at: new Date() })
-            .where(eq(tenants.phone, currentTenant.phone));
+        if (finalTenant.phone !== currentTenant.phone) {
+            const existingTenant = await db.select().from(tenants).where(eq(tenants.phone, finalTenant.phone)).limit(1);
+            if (existingTenant.length > 0) {
+                throw new Error("A tenant with this phone number already exists.");
+            }
+        }
     }
+
+    // 3. Update the specific record
+    await db.update(tenants)
+        .set({ ...finalTenant, updated_at: new Date() })
+        .where(eq(tenants.id, id));
 };
 
 // Archive Tenant (Soft Delete)

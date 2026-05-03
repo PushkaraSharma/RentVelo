@@ -268,9 +268,9 @@ export default function AddTenantScreen({ navigation, route }: any) {
                 incrementActionAndReview(); // Trigger logic for store review
                 setShowSuccessModal(true);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving tenant:', error);
-            showToast({ type: 'error', title: 'Error', message: 'Failed to save tenant. Please try again.' });
+            showToast({ type: 'error', title: 'Error', message: error.message || 'Failed to save tenant. Please try again.' });
         } finally {
             setLoading(false);
         }
