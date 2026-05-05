@@ -116,7 +116,8 @@ export default function DashboardScreen({ navigation }: any) {
                         <FinancialSummary
                             expected={data.expected}
                             collected={data.collected}
-                            onPress={() => (navigation as any).navigate('Payments')}
+                            onPressExpected={() => (navigation as any).navigate('ExpectedRevenue')}
+                            onPressCollected={() => (navigation as any).navigate('Payments')}
                             isPrivacyMode={isPrivacyMode}
                         />
 

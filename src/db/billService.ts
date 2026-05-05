@@ -1734,3 +1734,131 @@ export const getBillSummaryByUnitId = async (unitId: number): Promise<{
         billCount: bills.length,
     };
 };
+
+export interface ExpectedRevenueBreakdown {
+    totalExpected: number;
+    composition: {
+        rent: number;
+        utilities: number;
+        pastDues: number;
+        otherExpenses: number;
+    };
+    properties: {
+        id: number;
+        name: string;
+        expectedAmount: number;
+        collectedAmount: number;
+        activeTenants: number;
+    }[];
+    highRiskTenants: {
+        tenantId: number;
+        tenantName: string;
+        unitName: string;
+        propertyName: string;
+        pastDues: number;
+    }[];
+}
+
+export const getExpectedRevenueBreakdown = async (month: number, year: number): Promise<ExpectedRevenueBreakdown> => {
+    const db = getDb();
+
+    // Fetch all properties
+    const allProps = await db.select().from(properties);
+    const propertyMap = new Map(allProps.map(p => [p.id, p]));
+
+    // Fetch all current month bills
+    const allBills = await db.select()
+        .from(rentBills)
+        .leftJoin(units, eq(rentBills.unit_id, units.id))
+        .leftJoin(tenants, eq(rentBills.tenant_id, tenants.id))
+        .where(
+            and(
+                eq(rentBills.month, month),
+                eq(rentBills.year, year)
+            )
+        );
+
+    const composition = {
+        rent: 0,
+        utilities: 0,
+        pastDues: 0,
+        otherExpenses: 0,
+    };
+
+    let totalExpected = 0;
+    const propertyStats = new Map<number, { expected: number; collected: number; activeTenants: Set<number> }>();
+    allProps.forEach(p => {
+        propertyStats.set(p.id, { expected: 0, collected: 0, activeTenants: new Set() });
+    });
+
+    const tenantDues = new Map<number, any>();
+
+    allBills.forEach(row => {
+        const bill = row.rent_bills;
+        const unit = row.units;
+        const tenant = row.tenants;
+
+        if (!bill) return;
+
+        // Calculate composition
+        const rent = bill.rent_amount ?? 0;
+        const elec = bill.electricity_amount ?? 0;
+        const water = bill.water_amount ?? 0;
+        const pastDues = bill.previous_balance ?? 0;
+        const expenses = bill.total_expenses ?? 0;
+        const expected = bill.total_amount ?? 0;
+
+        composition.rent += rent;
+        composition.utilities += (elec + water);
+        composition.pastDues += pastDues;
+        composition.otherExpenses += expenses;
+        totalExpected += expected;
+
+        // Collect high-risk tenants
+        if (tenant && unit && pastDues > 0) {
+            tenantDues.set(tenant.id, {
+                tenantId: tenant.id,
+                tenantName: tenant.name || 'Unknown',
+                unitName: unit.name || 'Unknown',
+                propertyName: propertyMap.get(unit.property_id)?.name || 'Unknown',
+                pastDues: pastDues,
+            });
+        }
+
+        // Property breakdown
+        if (unit) {
+            const stats = propertyStats.get(unit.property_id);
+            if (stats) {
+                stats.expected += expected;
+                stats.collected += (bill.paid_amount ?? 0);
+                if (tenant && tenant.status === 'active') {
+                    stats.activeTenants.add(tenant.id);
+                }
+            }
+        }
+    });
+
+    // Formatting property breakdown
+    const propertiesData = Array.from(propertyStats.entries()).map(([id, stats]) => {
+        const p = propertyMap.get(id);
+        return {
+            id,
+            name: p?.name || 'Unknown Property',
+            expectedAmount: stats.expected,
+            collectedAmount: stats.collected,
+            activeTenants: stats.activeTenants.size,
+        };
+    }).filter(p => p.expectedAmount > 0).sort((a, b) => b.expectedAmount - a.expectedAmount);
+
+    // Get Top 3 high-risk tenants
+    const highRiskTenants = Array.from(tenantDues.values())
+        .sort((a, b) => b.pastDues - a.pastDues)
+        .slice(0, 3);
+
+    return {
+        totalExpected,
+        composition,
+        properties: propertiesData,
+        highRiskTenants,
+    };
+};

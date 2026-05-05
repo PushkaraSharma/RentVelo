@@ -84,6 +84,8 @@ export {
     getBillsByTenantId,
     getBillSummaryByUnitId,
     adjustBillForMoveOut,
+    getExpectedRevenueBreakdown,
+    type ExpectedRevenueBreakdown
 } from './billService';
 
 // Notification operations

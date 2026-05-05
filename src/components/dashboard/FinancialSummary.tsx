@@ -9,19 +9,20 @@ const { width } = Dimensions.get('window');
 interface FinancialSummaryProps {
     expected: number;
     collected: number;
-    onPress?: () => void;
+    onPressExpected?: () => void;
+    onPressCollected?: () => void;
     isPrivacyMode?: boolean;
 }
 
-export default function FinancialSummary({ expected, collected, onPress, isPrivacyMode }: FinancialSummaryProps) {
+export default function FinancialSummary({ expected, collected, onPressExpected, onPressCollected, isPrivacyMode }: FinancialSummaryProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const progress = expected ? Math.min((collected / expected) * 100, 100) : 0;
 
     return (
-        <Pressable style={styles.container} onPress={onPress}>
+        <View style={styles.container}>
             {/* Expected Card */}
-            <View style={styles.card}>
+            <Pressable style={styles.card} onPress={onPressExpected}>
                 <Text style={styles.label}>EXPECTED</Text>
                 <Text style={styles.amount}>
                     {isPrivacyMode ? `${CURRENCY} •••••` : `${CURRENCY}${expected.toLocaleString()}`}
@@ -30,12 +31,12 @@ export default function FinancialSummary({ expected, collected, onPress, isPriva
                     <TrendingUp size={12} color={theme.colors.accent} />
                     <Text style={styles.badgeText}>Monthly Target</Text>
                 </View>
-            </View>
+            </Pressable>
 
             <View style={styles.spacer} />
 
             {/* Collected Card */}
-            <View style={styles.card}>
+            <Pressable style={styles.card} onPress={onPressCollected}>
                 <Text style={styles.label}>COLLECTED</Text>
                 <Text style={styles.amount}>
                     {isPrivacyMode ? `${CURRENCY} •••••` : `${CURRENCY}${collected.toLocaleString()}`}
@@ -46,8 +47,8 @@ export default function FinancialSummary({ expected, collected, onPress, isPriva
                 <View style={styles.progressBarBg}>
                     <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
                 </View>
-            </View>
-        </Pressable>
+            </Pressable>
+        </View>
 
     );
 }
