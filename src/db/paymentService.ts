@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { payments, tenants, units, meterReadings, properties, rentBills, type Payment, type NewPayment, type MeterReading, type NewMeterReading } from './schema';
 import { eq, desc, and, gte, sum } from 'drizzle-orm';
+import { generateBillsForProperty } from './billService';
 
 // Re-export types
 export { Payment, MeterReading };
@@ -111,6 +112,12 @@ export const getDashboardData = async (): Promise<DashboardData> => {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
+    // --- Pre-computation: Ensure bills are generated for the current month ---
+    const allProps = await db.select().from(properties);
+    await Promise.all(
+        allProps.map(prop => generateBillsForProperty(prop.id, currentMonth, currentYear))
+    );
+
     // --- Current month bills ---
     const allBills = await db.select().from(rentBills)
         .where(and(eq(rentBills.month, currentMonth), eq(rentBills.year, currentYear)));
@@ -123,7 +130,6 @@ export const getDashboardData = async (): Promise<DashboardData> => {
     const pendingTenantCount = new Set(pendingBills.map(b => b.tenant_id)).size;
 
     // --- Pending properties (for property picker) ---
-    const allProps = await db.select().from(properties);
     const pendingProperties: { id: number; name: string; pendingCount: number }[] = [];
 
     // --- Occupancy ---
