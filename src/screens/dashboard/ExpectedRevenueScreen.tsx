@@ -61,7 +61,7 @@ export default function ExpectedRevenueScreen({ navigation }: any) {
             <Header title="Expected Revenue" onBack={() => navigation.goBack()} />
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                
+
                 {/* Grand Total Summary */}
                 <View style={styles.summaryHeader}>
                     <Text style={styles.summaryLabel}>TOTAL EXPECTED REVENUE</Text>
@@ -95,7 +95,7 @@ export default function ExpectedRevenueScreen({ navigation }: any) {
                             <Text style={[styles.sectionTitle, { color: '#EF4444', marginBottom: 0, marginLeft: 8 }]}>Pending from Previous Months</Text>
                         </View>
                         <Text style={styles.sectionSub}>Top tenants with unpaid dues from earlier periods</Text>
-                        
+
                         {highRiskTenants.map((tenant, idx) => (
                             <View key={idx} style={styles.riskItem}>
                                 <View style={styles.riskInfo}>
@@ -115,13 +115,13 @@ export default function ExpectedRevenueScreen({ navigation }: any) {
                 <View style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>Breakdown by Property</Text>
                     {properties.map((prop, idx) => {
-                        const collectedPercent = prop.expectedAmount > 0 
-                            ? Math.min((prop.collectedAmount / prop.expectedAmount) * 100, 100) 
+                        const collectedPercent = prop.expectedAmount > 0
+                            ? Math.min((prop.collectedAmount / prop.expectedAmount) * 100, 100)
                             : 0;
-                        
+
                         return (
-                            <Pressable 
-                                key={idx} 
+                            <Pressable
+                                key={idx}
                                 style={styles.propertyItem}
                                 onPress={() => navigation.navigate('TakeRent', { propertyId: prop.id })}
                             >
@@ -366,5 +366,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         color: theme.colors.textSecondary,
         width: 30,
         textAlign: 'right',
+        flex: 0.15
     }
 });

@@ -69,13 +69,13 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 4;
+export const OTA_VERSION = 5;
 
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
-        "Showing bill card 3 days earlier",
-        "Fixed issue of not showing 32 days in rent transaction info modal",
-        "Fixed tenant update issue",
+        "Added Expected Revenue Section",
+        "Tenant move out & new tenant move in flow handled",
+        "Fixed other issues",
     ]
 };
