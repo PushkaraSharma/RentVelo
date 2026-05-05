@@ -42,8 +42,8 @@ export default function MonthPickerModal({ visible, month, year, maxMonth, maxYe
                     <Text style={styles.yearText}>{displayYear}</Text>
                     <Pressable 
                         onPress={() => setDisplayYear(displayYear + 1)} 
-                        style={[styles.chevronBtn, (maxYear && displayYear >= maxYear) && { opacity: 0.3 }]}
-                        disabled={(maxYear && displayYear >= maxYear) ? true : false}
+                        style={[styles.chevronBtn, (maxYear && displayYear >= maxYear) ? { opacity: 0.3 } : null]}
+                        disabled={!!(maxYear && displayYear >= maxYear)}
                     >
                         <ChevronRight size={22} color={theme.colors.textPrimary} />
                     </Pressable>
@@ -62,9 +62,9 @@ export default function MonthPickerModal({ visible, month, year, maxMonth, maxYe
                                 key={name}
                                 style={[
                                     styles.monthCell,
-                                    isSelected && styles.selectedCell,
-                                    isCurrent && !isSelected && styles.currentCell,
-                                    isFuture && { opacity: 0.3 }
+                                    isSelected ? styles.selectedCell : null,
+                                    isCurrent && !isSelected ? styles.currentCell : null,
+                                    isFuture ? { opacity: 0.3 } : null
                                 ]}
                                 onPress={() => {
                                     if (!isFuture) onSelect(m, displayYear);
@@ -73,8 +73,8 @@ export default function MonthPickerModal({ visible, month, year, maxMonth, maxYe
                             >
                                 <Text style={[
                                     styles.monthText,
-                                    isSelected && styles.selectedText,
-                                    isCurrent && !isSelected && styles.currentText,
+                                    isSelected ? styles.selectedText : null,
+                                    isCurrent && !isSelected ? styles.currentText : null,
                                 ]}>
                                     {name.substring(0, 3)}
                                 </Text>
