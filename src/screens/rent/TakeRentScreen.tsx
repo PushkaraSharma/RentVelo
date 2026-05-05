@@ -252,7 +252,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 )}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
-                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `bill-${item.unit.id}`}
+                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `bill-${item.bill?.id ?? `u${item.unit.id}-t${item.tenant?.id ?? 'vacant'}`}`}
                 initialNumToRender={10}
                 maxToRenderPerBatch={10}
                 windowSize={5}

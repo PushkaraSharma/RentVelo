@@ -83,6 +83,7 @@ export {
     savePGUtilityReading,
     getBillsByTenantId,
     getBillSummaryByUnitId,
+    adjustBillForMoveOut,
 } from './billService';
 
 // Notification operations

@@ -40,6 +40,7 @@ interface RentBillCardProps {
         isVacant: boolean;
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
+        isMovedOut?: boolean;
         hasFuturePersistedBills?: boolean;
     };
     period: { start: string; end: string; days: number };
@@ -51,7 +52,7 @@ interface RentBillCardProps {
 }
 
 const RentBillCard = React.memo(({ item, period, onRefresh, navigation, propertyId, viewingMonth, viewingYear }: RentBillCardProps) => {
-    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, hasFuturePersistedBills } = item;
+    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, isMovedOut, hasFuturePersistedBills } = item;
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
@@ -581,7 +582,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     };
 
     return (
-        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard]}>
+        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard, isMovedOut && { borderLeftWidth: 3, borderLeftColor: '#F59E0B' }]}>
             {isLocked && (
                 <View style={styles.lockedBanner}>
                     <Lock size={12} color={theme.colors.textSecondary} />
@@ -603,6 +604,11 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                 <Text style={styles.leaseBadgeText}>
                                     {tenant.lease_type === 'fixed' ? 'Fixed' : 'Monthly'}
                                 </Text>
+                            </View>
+                        )}
+                        {isMovedOut && (
+                            <View style={[styles.leaseBadge, { backgroundColor: isDark ? '#78350F40' : '#FEF3C7' }]}>
+                                <Text style={[styles.leaseBadgeText, { color: '#D97706' }]}>Moved Out</Text>
                             </View>
                         )}
                     </View>

@@ -25,6 +25,7 @@ interface RemoveTenantModalProps {
     refundAmount: string;
     onRefundAmountChange: (amount: string) => void;
     onSubmit: () => void;
+    liveBalance?: number;
 }
 
 const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
@@ -35,7 +36,8 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
     onDateChange,
     refundAmount,
     onRefundAmountChange,
-    onSubmit
+    onSubmit,
+    liveBalance,
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
@@ -70,9 +72,9 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                                     <Text style={styles.statValue}>₹ {tenant?.security_deposit || 0}</Text>
                                 </View>
                                 <View style={styles.statBox}>
-                                    <Text style={styles.statLabel}>Balance Left</Text>
-                                    <Text style={[styles.statValue, { color: (tenant?.balance_amount || 0) > 0 ? '#EF4444' : '#10B981' }]}>
-                                        ₹ {tenant?.balance_amount || 0}
+                                    <Text style={styles.statLabel}>{(liveBalance ?? 0) < 0 ? 'Advance Balance' : 'Balance Due'}</Text>
+                                    <Text style={[styles.statValue, { color: (liveBalance ?? 0) > 0 ? '#EF4444' : '#10B981' }]}>
+                                        ₹ {Math.abs(liveBalance ?? 0)}
                                     </Text>
                                 </View>
                             </View>

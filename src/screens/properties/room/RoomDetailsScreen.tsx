@@ -42,7 +42,9 @@ import {
     getAllProperties,
     getUnitsByPropertyId,
     deleteUnit,
-    getBillSummaryByUnitId
+    getBillSummaryByUnitId,
+    adjustBillForMoveOut,
+    getBillsByTenantId,
 } from '../../../db';
 import { CURRENCY } from '../../../utils/Constants';
 import { useFocusEffect } from '@react-navigation/native';
@@ -77,6 +79,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     // Form states
     const [moveOutDate, setMoveOutDate] = useState(new Date());
     const [refundAmount, setRefundAmount] = useState('');
+    const [liveBalance, setLiveBalance] = useState<number>(0);
 
     // Move Tenant Form
     const [targetPropertyId, setTargetPropertyId] = useState<number | null>(null);
@@ -136,8 +139,17 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
             await updateTenant(selectedTenant.id, {
                 status: 'inactive',
                 move_out_date: moveOutDate,
-                // In a real app, record the refund in payments/transaction log
             });
+
+            // Pro-rate the current month's bill to end on moveOutDate
+            if (moveOutDate && selectedTenant.unit_id) {
+                await adjustBillForMoveOut(
+                    selectedTenant.id,
+                    selectedTenant.unit_id,
+                    new Date(moveOutDate)
+                );
+            }
+
             setShowRemoveModal(false);
             loadData();
             showToast({ type: 'success', title: 'Success', message: 'Tenant moved out successfully.' });
@@ -288,10 +300,18 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                     <View style={styles.activeActions}>
                         <Pressable
                             style={[styles.actionChip, { backgroundColor: isDark ? '#EF444420' : '#FEE2E2' }]}
-                            onPress={(e) => {
+                            onPress={async (e) => {
                                 e.stopPropagation();
                                 setSelectedTenant(tenant);
                                 setRefundAmount(tenant.security_deposit?.toString() || '0');
+                                // Fetch live balance from latest bill
+                                try {
+                                    const bills = await getBillsByTenantId(tenant.id);
+                                    const latestBill = bills[0];
+                                    setLiveBalance(latestBill?.balance ?? 0);
+                                } catch {
+                                    setLiveBalance(tenant.balance_amount ?? 0);
+                                }
                                 setShowRemoveModal(true);
                             }}
                         >
@@ -590,6 +610,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 refundAmount={refundAmount}
                 onRefundAmountChange={setRefundAmount}
                 onSubmit={handleRemoveTenant}
+                liveBalance={liveBalance}
             />
 
             <MoveTenantModal
