@@ -135,6 +135,7 @@ export default function PlacesListScreen({ navigation }: any) {
 
             {/* Floating Action Button */}
             <Pressable
+                testID="add-property-fab"
                 style={styles.fab}
                 onPress={() => navigation.navigate('AddProperty')}
             >
