@@ -16,7 +16,8 @@ import { storage } from '../../utils/storage';
 import { Platform } from 'react-native';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
-import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
+import { trackEvent, AnalyticsEvents, setEnrichedUserProperties } from '../../services/analyticsService';
+import { logCrashlyticsError } from '../../services/crashlyticsService';
 import { useToast } from '../../hooks/useToast';
 
 export default function BackupScreen({ navigation }: any) {
@@ -61,6 +62,7 @@ export default function BackupScreen({ navigation }: any) {
         setBackingUp(null);
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
+            setEnrichedUserProperties({ hasBackup: true });
             updateLastSync();
             showToast({ type: 'success', title: 'Success', message: 'Local backup saved successfully' });
         } else {
@@ -161,6 +163,7 @@ export default function BackupScreen({ navigation }: any) {
         setBackingUp(null);
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
+            setEnrichedUserProperties({ hasBackup: true });
             updateLastSync();
             showToast({ type: 'success', title: 'Success', message: 'Backup uploaded to Google Drive.' });
         } else {

@@ -3,6 +3,7 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSelector } from 'react-redux';
 import { trackScreenView, trackEvent, AnalyticsEvents } from '../services/analyticsService';
+import { initCrashlytics } from '../services/crashlyticsService';
 
 export const navigationRef = createNavigationContainerRef<any>();
 import { RootState } from '../redux/store';
@@ -44,6 +45,7 @@ export default function RootNavigator() {
 
     React.useEffect(() => {
         trackEvent(AnalyticsEvents.APP_OPENED);
+        initCrashlytics();
     }, []);
 
     return (
