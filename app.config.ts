@@ -59,6 +59,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       "expo-web-browser",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
+      "@react-native-firebase/crashlytics",
       "@react-native-google-signin/google-signin",
       [
         "expo-local-authentication",
