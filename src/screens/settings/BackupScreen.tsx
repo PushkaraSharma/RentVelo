@@ -105,23 +105,14 @@ export default function BackupScreen({ navigation }: any) {
             setShowDisconnectModal(true);
         } else {
             try {
-                if (Platform.OS === 'ios') {
-                    // On iOS, we first ensure the user is signed in, then request Drive scopes
-                    const user = await signInWithGoogle();
-                    if (user) {
-                        const granted = await requestDriveScopes();
-                        if (granted) {
-                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                            showToast({ type: 'success', title: 'Success', message: 'Google account linked with Drive successfully!' });
-                        } else {
-                            showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
-                        }
-                    }
-                } else {
-                    const user = await signInWithGoogle();
-                    if (user) {
+                const user = await signInWithGoogle();
+                if (user) {
+                    const granted = await requestDriveScopes();
+                    if (granted) {
                         dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        showToast({ type: 'success', title: 'Success', message: 'Google account linked successfully!' });
+                        showToast({ type: 'success', title: 'Success', message: 'Google account linked with Drive successfully!' });
+                    } else {
+                        showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
                     }
                 }
             } catch (error) {
@@ -133,25 +124,16 @@ export default function BackupScreen({ navigation }: any) {
     const handleGoogleBackup = async () => {
         if (!isGoogleLinked) {
             try {
-                if (Platform.OS === 'ios') {
-                    const user = await signInWithGoogle();
-                    if (user) {
-                        const granted = await requestDriveScopes();
-                        if (granted) {
-                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        } else {
-                            return;
-                        }
-                    } else {
-                        return;
-                    }
-                } else {
-                    const user = await signInWithGoogle();
-                    if (user) {
+                const user = await signInWithGoogle();
+                if (user) {
+                    const granted = await requestDriveScopes();
+                    if (granted) {
                         dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
                     } else {
                         return;
                     }
+                } else {
+                    return;
                 }
             } catch (error) {
                 showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
@@ -241,7 +223,7 @@ export default function BackupScreen({ navigation }: any) {
                 try {
                     const user = await signInWithGoogle();
                     if (user) {
-                        const granted = Platform.OS === 'ios' ? await requestDriveScopes() : true;
+                        const granted = await requestDriveScopes();
                         if (granted) {
                             dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
                             // Try restore again
