@@ -55,12 +55,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           "color": "#3B82F6"
         }
       ],
+      "expo-font",
       "expo-sqlite",
       "expo-web-browser",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/crashlytics",
       "@react-native-google-signin/google-signin",
+      "@react-native-community/datetimepicker",
       [
         "expo-local-authentication",
         {

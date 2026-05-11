@@ -20,6 +20,9 @@ import { syncNotificationSchedules } from './src/services/pushNotificationServic
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from './src/navigation/RootNavigator';
 
+// @ts-expect-error
+globalThis.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true
+
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
   const [isUpdating, setIsUpdating] = React.useState(false);

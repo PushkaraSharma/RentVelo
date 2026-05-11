@@ -2,16 +2,18 @@ appId: com.indieroots.rentVelo
 ---
 # 02_add_property.yaml
 - launchApp:
-    clearState: false # We want to stay logged in from the previous step
+      clearState: false # We want to stay logged in from the previous step
 
 # Ensure we are on Dashboard
 - assertVisible: "WELCOME BACK"
 
 # Navigate to Properties
-- tapOn: "Properties, tab, 2 of 3" # Assuming there's a bottom tab or a button called Properties
+- tapOn: "Properties, tab, 2 of 3"
+- waitForAnimationToEnd
 
 # Tap the Add Property button (+)
-- tapOn: "Add Property" # Or you can use testID if it's an icon: tapOn: { id: "add-property-btn" }
+- tapOn:
+    id: "add-property-fab"
 
 # Wait for screen to load
 - assertVisible: "Create New Property"
@@ -26,8 +28,8 @@ appId: com.indieroots.rentVelo
 - hideKeyboard
 
 - swipe:
-    direction: UP
-    duration: 500
+      direction: UP
+      duration: 500
 
 - tapOn: "TOTAL FLOORS"
 - inputText: "2"
@@ -40,7 +42,7 @@ appId: com.indieroots.rentVelo
 - tapOn: "Create Property"
 
 # Verify Success modal
-- assertVisible: "Property Created!"
+- assertVisible: ".*Property Created!.*"
 
 # Close modal
-- tapOn: "Got it" # Or whatever the close button text is
+- tapOn: "Done, Go Back"
