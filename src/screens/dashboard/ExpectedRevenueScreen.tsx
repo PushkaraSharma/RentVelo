@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Dimensions } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Dimensions, Animated, Easing } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import Header from '../../components/common/Header';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { getExpectedRevenueBreakdown, ExpectedRevenueBreakdown } from '../../db'
 import { useFocusEffect } from '@react-navigation/native';
 import { CURRENCY } from '../../utils/Constants';
 import { Building2, Users, AlertTriangle, ChevronRight, Wallet, Zap, Clock, Banknote } from 'lucide-react-native';
+import AnimatedPieChart from '../../components/statistics/AnimatedPieChart';
 
 const { width } = Dimensions.get('window');
 
@@ -36,6 +37,32 @@ export default function ExpectedRevenueScreen({ navigation }: any) {
         }, [loadData])
     );
 
+    // Entrance animation
+    const fadeAnim = useState(new Animated.Value(0))[0];
+    const scaleAnim = useState(new Animated.Value(0.8))[0];
+
+    useEffect(() => {
+        if (!loading && data) {
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true,
+                }),
+                Animated.timing(scaleAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    easing: Easing.out(Easing.back(1.5)),
+                    useNativeDriver: true,
+                })
+            ]).start();
+        } else {
+            fadeAnim.setValue(0);
+            scaleAnim.setValue(0.8);
+        }
+    }, [loading, data, fadeAnim, scaleAnim]);
+
     if (loading || !data) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -62,29 +89,38 @@ export default function ExpectedRevenueScreen({ navigation }: any) {
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
-                {/* Grand Total Summary */}
-                <View style={styles.summaryHeader}>
-                    <Text style={styles.summaryLabel}>TOTAL EXPECTED REVENUE</Text>
-                    <Text style={styles.summaryValue}>{CURRENCY}{Math.round(totalExpected).toLocaleString()}</Text>
-                    <View style={styles.summaryDivider} />
+                {/* Summary Cards */}
+                <View style={styles.summaryRow}>
+                    <View style={[styles.summaryCard, { borderLeftColor: theme.colors.accent }]}>
+                        <Text style={styles.summaryLabel}>TOTAL EXPECTED REVENUE</Text>
+                        <Text style={styles.summaryAmount}>{CURRENCY}{Math.round(totalExpected).toLocaleString()}</Text>
+                    </View>
                 </View>
 
                 {/* Composition Breakdown */}
-                <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Composition Breakdown</Text>
-                    <View style={styles.compositionGrid}>
-                        {compositionItems.map((item, index) => (
-                            <View key={index} style={styles.compositionItem}>
-                                <View style={[styles.compositionIcon, { backgroundColor: item.color + '15' }]}>
-                                    {item.icon}
-                                </View>
-                                <View style={styles.compositionInfo}>
-                                    <Text style={styles.compositionLabel}>{item.label}</Text>
-                                    <Text style={styles.compositionValue}>{CURRENCY}{Math.round(item.value).toLocaleString()}</Text>
-                                </View>
+                <AnimatedPieChart
+                    title="Composition Breakdown"
+                    data={[
+                        { value: composition.rent, color: '#0EA5E9', text: 'Rent' },
+                        { value: composition.utilities, color: '#F59E0B', text: 'Utilities' },
+                        { value: composition.pastDues, color: '#EF4444', text: 'Past Dues' },
+                        { value: composition.otherExpenses, color: '#8B5CF6', text: 'Other' },
+                    ]}
+                    fadeAnim={fadeAnim}
+                    scaleAnim={scaleAnim}
+                    centerSubLabel="Revenue"
+                />
+
+                <View style={styles.breakdownList}>
+                    {compositionItems.map((item, index) => (
+                        <View key={index} style={[styles.listItem, index === compositionItems.length - 1 && { borderBottomWidth: 0 }]}>
+                            <View style={styles.listLeft}>
+                                {item.icon}
+                                <Text style={styles.listLabel}>{item.label}</Text>
                             </View>
-                        ))}
-                    </View>
+                            <Text style={styles.listAmount}>{CURRENCY}{Math.round(item.value).toLocaleString()}</Text>
+                        </View>
+                    ))}
                 </View>
 
                 {/* High Dues Section */}
@@ -180,29 +216,30 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         padding: theme.spacing.m,
         paddingBottom: 40,
     },
-    summaryHeader: {
-        alignItems: 'center',
-        paddingVertical: 20,
-        marginBottom: 10,
+    summaryRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.s,
+        marginBottom: theme.spacing.l,
+    },
+    summaryCard: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.m,
+        padding: theme.spacing.m,
+        borderLeftWidth: 3,
+        ...theme.shadows.small,
     },
     summaryLabel: {
-        fontSize: 11,
-        fontWeight: 'bold',
+        fontSize: 10,
+        fontWeight: theme.typography.bold,
         color: theme.colors.textSecondary,
-        letterSpacing: 1.2,
+        letterSpacing: 0.5,
+        marginBottom: 4,
     },
-    summaryValue: {
+    summaryAmount: {
         fontSize: 32,
-        fontWeight: 'bold',
+        fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-        marginTop: 8,
-    },
-    summaryDivider: {
-        width: 40,
-        height: 4,
-        backgroundColor: theme.colors.accent,
-        borderRadius: 2,
-        marginTop: 12,
     },
     sectionCard: {
         backgroundColor: theme.colors.surface,
@@ -229,39 +266,37 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         marginBottom: 8,
     },
-    compositionGrid: {
-        gap: 16,
-    },
-    compositionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: isDark ? '#1A1A1A' : '#FAFAFA',
-        padding: 12,
-        borderRadius: 16,
+    breakdownList: {
+        marginBottom: theme.spacing.xl,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.borderRadius.l,
+        padding: theme.spacing.m,
         borderWidth: 1,
         borderColor: theme.colors.border,
+        ...theme.shadows.small,
     },
-    compositionIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        justifyContent: 'center',
+    listItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        marginRight: 12,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
     },
-    compositionInfo: {
-        flex: 1,
+    listLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
     },
-    compositionLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
+    listLabel: {
+        fontSize: 14,
         fontWeight: '500',
+        color: theme.colors.textPrimary,
     },
-    compositionValue: {
-        fontSize: 16,
+    listAmount: {
+        fontSize: 15,
         fontWeight: 'bold',
         color: theme.colors.textPrimary,
-        marginTop: 2,
     },
     riskItem: {
         flexDirection: 'row',
