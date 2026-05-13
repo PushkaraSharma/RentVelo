@@ -148,13 +148,18 @@ export default function BulkPdfReceiptsModal({
                 period,
             });
             const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
-            await sharePdf(uri);
-            showToast({ type: 'success', title: 'PDF ready', message: `${selectedRows.length} receipt${selectedRows.length === 1 ? '' : 's'} generated.` });
+            setGenerating(false);
             onClose();
+            showToast({ type: 'success', title: 'PDF ready', message: `${selectedRows.length} receipt${selectedRows.length === 1 ? '' : 's'} generated.` });
+            setTimeout(() => {
+                sharePdf(uri).catch(error => {
+                    console.error('Bulk PDF receipts share error:', error);
+                    showToast({ type: 'error', title: 'Share failed', message: 'PDF was generated, but sharing failed.' });
+                });
+            }, 150);
         } catch (error) {
             console.error('Bulk PDF receipts generation error:', error);
             showToast({ type: 'error', title: 'Error', message: 'Failed to generate PDF receipts. Please try again.' });
-        } finally {
             setGenerating(false);
         }
     };

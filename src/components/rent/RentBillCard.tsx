@@ -279,9 +279,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_RECEIPT_GENERATED, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
 
-                await executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
-
                 setGeneratingReceipt(false);
+                executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`)
+                    .catch((shareError) => {
+                        console.error('Receipt share error:', shareError);
+                        showToast({ type: 'error', title: 'Share failed', message: 'Receipt generated, but sharing failed.' });
+                    });
             } else {
                 setShareHtml({ html, action: 'receipt' });
             }
@@ -328,9 +331,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_REMINDER_SENT, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
-                await executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
-
                 setSendingReminder(false);
+                executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`)
+                    .catch((shareError) => {
+                        console.error('Reminder share error:', shareError);
+                        showToast({ type: 'error', title: 'Share failed', message: 'Reminder generated, but sharing failed.' });
+                    });
             } else {
                 setShareHtml({ html, action: 'reminder' });
             }
