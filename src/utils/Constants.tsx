@@ -74,8 +74,9 @@ export const OTA_VERSION = 1;
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
+        "Bulk Receipts generation added",
+        "Property statistics added",
         "Added Expected Revenue Section",
         "Tenant move out & new tenant move in flow handled",
-        "Fixed other issues",
     ]
 };
