@@ -4,13 +4,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, MoreVertical, Search, X } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
 import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById } from '../../db';
 import MonthPickerModal from '../../components/rent/MonthPickerModal';
 import RentBillCard from '../../components/rent/RentBillCard';
 import RentBillSkeleton from '../../components/rent/RentBillSkeleton';
+import PickerBottomSheet from '../../components/common/PickerBottomSheet';
+import BulkPdfReceiptsModal from '../../components/rent/BulkPdfReceiptsModal';
 import { hapticsHeavy } from '../../utils/haptics';
 
 const MONTHS = [
@@ -35,6 +37,8 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [showMonthPicker, setShowMonthPicker] = useState(false);
+    const [showMoreActions, setShowMoreActions] = useState(false);
+    const [showBulkPdfReceipts, setShowBulkPdfReceipts] = useState(false);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<FilterType>(route?.params?.initialFilter || 'all');
     const [bills, setBills] = useState<any[]>([]);
@@ -191,6 +195,11 @@ export default function TakeRentScreen({ navigation, route }: any) {
                         </Pressable>
                     </View>
                 }
+                rightAction={
+                    <Pressable style={styles.moreBtn} onPress={() => setShowMoreActions(true)}>
+                        <MoreVertical size={24} color={theme.colors.textPrimary} />
+                    </Pressable>
+                }
             />
 
             {/* Bills List (search + filters scroll with it) */}
@@ -281,6 +290,25 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 }}
                 onClose={() => setShowMonthPicker(false)}
             />
+
+            <PickerBottomSheet
+                visible={showMoreActions}
+                onClose={() => setShowMoreActions(false)}
+                title="More Options"
+                options={[{ label: 'PDF Receipts', value: 'pdf_receipts' }]}
+                onSelect={() => {
+                    setShowMoreActions(false);
+                    setTimeout(() => setShowBulkPdfReceipts(true), 200);
+                }}
+            />
+
+            <BulkPdfReceiptsModal
+                visible={showBulkPdfReceipts}
+                onClose={() => setShowBulkPdfReceipts(false)}
+                bills={bills}
+                property={property}
+                period={rentPeriod}
+            />
         </View>
     );
 }
@@ -302,6 +330,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         height: 44,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    moreBtn: {
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'flex-end',
     },
 
     // Month Selector (inside header)
