@@ -69,7 +69,7 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 0;
+export const OTA_VERSION = 1;
 
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
