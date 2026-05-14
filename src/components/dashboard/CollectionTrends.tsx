@@ -65,7 +65,7 @@ export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyM
 
             {/* Chart */}
             <View style={styles.chartContainer}>
-                {/* <Svg width={chartWidth} height={CHART_HEIGHT + 28}>
+                <Svg width={chartWidth} height={CHART_HEIGHT + 28}>
                     {visibleTrends.map((item, i) => {
                         const x = spacing + i * (groupWidth + spacing);
                         const expectedH = (item.expected / maxVal) * CHART_HEIGHT;
@@ -105,7 +105,7 @@ export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyM
                             </React.Fragment>
                         );
                     })}
-                </Svg> */}
+                </Svg>
             </View>
 
             {/* Legend */}
