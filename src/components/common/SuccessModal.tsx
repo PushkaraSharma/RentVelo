@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { ArrowLeft, LucideIcon } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface ModalAction {
     id: string;
@@ -31,6 +32,7 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
+    const insets = useSafeAreaInsets();
     return (
         <Modal
             visible={visible}
@@ -39,7 +41,7 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
             onRequestClose={onClose}
         >
             <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
+                <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
                     <Text style={styles.modalTitle}>{title}</Text>
                     {subtitle && <Text style={styles.modalSubtitle}>{subtitle}</Text>}
 

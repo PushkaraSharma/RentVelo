@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, ScrollView, Pressable, Image,
     TextInput, Dimensions
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../../components/common/Header';
@@ -35,11 +35,11 @@ const EXPENSE_CATEGORIES = [
     'Gas cylinder', 'Monthly Maintenance', 'Electricity Bill', 'Gas Bill', 'Other'
 ];
 
-const { width } = Dimensions.get('window');
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function ExpensesScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const insets = useSafeAreaInsets();
     const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
@@ -414,7 +414,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
                                 style={styles.imageFull}
                                 resizeMode="cover"
                             />
-                            <Pressable 
+                            <Pressable
                                 style={styles.removeImageBtn}
                                 onPress={() => {
                                     hapticsSelection();
@@ -530,7 +530,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
 
             {/* FAB */}
             <Pressable
-                style={styles.fab}
+                style={[styles.fab, { bottom: insets.bottom + 24 }]}
                 onPress={() => setShowAddModal(true)}
             >
                 <Plus color={theme.colors.background} size={24} />
@@ -582,7 +582,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     fab: {
         position: 'absolute',
-        bottom: 24,
         right: 24,
         width: 56,
         height: 56,

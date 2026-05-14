@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { X, Check, ChevronDown, ChevronUp, Share2 } from 'lucide-react-native';
+import { X, Check, Share2 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Button from '../common/Button';
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import { generateRentLedgerHTML } from '../../utils/rentLedgerTemplate';
-import { getReceiptConfigByPropertyId, getPropertyById } from '../../db';
+import { getReceiptConfigByPropertyId } from '../../db';
 import { useToast } from '../../hooks/useToast';
 
 interface RentLedgerModalProps {
@@ -29,6 +30,7 @@ export default function RentLedgerModal({
     const { theme } = useAppTheme();
     const { showToast } = useToast();
     const styles = getStyles(theme);
+    const insets = useSafeAreaInsets();
     // Options state
     const [includeIdProof, setIncludeIdProof] = useState(true);
     const [includeTransactions, setIncludeTransactions] = useState(true);
@@ -188,7 +190,7 @@ export default function RentLedgerModal({
                     </ScrollView>
 
                     {/* Footer */}
-                    <View style={styles.footer}>
+                    <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
                         <Button
                             title="Generate"
                             onPress={handleGenerate}
@@ -220,7 +222,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
         maxHeight: '90%',
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
     },
     handle: {
         width: 40,

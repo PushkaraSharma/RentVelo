@@ -57,7 +57,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                     behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
                     style={styles.keyboardView}
                 >
-                    <View style={styles.modalContent}>
+                    <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom + 20, 20) }]}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Remove Tenant</Text>
                             <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -109,7 +109,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                                 <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
                             </View>
 
-                            <View style={[styles.modalActions, { paddingBottom: insets.bottom }]}>
+                            <View style={[styles.modalActions]}>
                                 <Button
                                     title="Cancel"
                                     onPress={onClose}
@@ -140,7 +140,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
         paddingHorizontal: theme.spacing.m
     },
     dismissArea: {

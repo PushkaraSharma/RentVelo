@@ -139,7 +139,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
     if (!tenant) return null;
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Header
                 title="Tenant Details"
                 subTitle={property?.name}

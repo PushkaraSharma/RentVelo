@@ -348,7 +348,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             {/* Header */}
             <Header
                 title={isPGBed ? (unit?.bed_number || unit?.name) : (unit?.name || 'Room Details')}
