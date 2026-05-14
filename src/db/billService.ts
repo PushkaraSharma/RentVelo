@@ -1110,6 +1110,15 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     let waterPrevReading = bill.water_prev_reading;
     let needsUpdate = false;
 
+    // B19: Determine if this bill is "locked" by a future bill
+    const futureBill = await db.select({ id: rentBills.id }).from(rentBills).where(
+        and(
+            eq(rentBills.unit_id, bill.unit_id),
+            sql`${rentBills.year} * 12 + ${rentBills.month} > ${bill.year} * 12 + ${bill.month}`
+        )
+    ).limit(1);
+    const isLocked = futureBill.length > 0;
+
     if (unit) {
         // P2: Single prev-bill query for both electricity and water sync
         const prevBillArr = await db.select().from(rentBills).where(
@@ -1123,7 +1132,7 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
 
         // Sync electricity
         if (!prevBill) {
-            if (prevReading !== unit.initial_electricity_reading) {
+            if (!isLocked && prevReading !== unit.initial_electricity_reading) {
                 prevReading = unit.initial_electricity_reading;
                 needsUpdate = true;
             }
@@ -1134,7 +1143,7 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
 
         // Sync water (reuse same prevBill)
         if (!prevBill) {
-            if (waterPrevReading !== unit.initial_water_reading) {
+            if (!isLocked && waterPrevReading !== unit.initial_water_reading) {
                 waterPrevReading = unit.initial_water_reading;
                 needsUpdate = true;
             }
@@ -1144,7 +1153,7 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         }
 
         // Calculate utility amounts (Electricity) if metered
-        if (unit.electricity_rate !== null && bill.curr_reading !== null) {
+        if (!isLocked && unit.electricity_rate !== null && bill.curr_reading !== null) {
             const prev = (prevReading !== null && prevReading !== 0) ? prevReading : (unit.initial_electricity_reading ?? 0);
             let unitsUsed = Math.max(0, bill.curr_reading - prev);
             const defaultUnits = unit.electricity_default_units;
@@ -1165,13 +1174,13 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
                 electricityAmount = targetElecAmt;
                 needsUpdate = true;
             }
-        } else if (unit.electricity_rate !== null && bill.curr_reading === null) {
+        } else if (!isLocked && unit.electricity_rate !== null && bill.curr_reading === null) {
             // Metered but no reading yet -> cost should be 0
             if (electricityAmount !== 0) {
                 electricityAmount = 0;
                 needsUpdate = true;
             }
-        } else if (unit.electricity_rate === null && unit.electricity_fixed_amount && unit.room_group) {
+        } else if (!isLocked && unit.electricity_rate === null && unit.electricity_fixed_amount && unit.room_group) {
             // PG split for FIXED electricity
             // Only split if current amount is the full unsplit amount (default state)
             if (electricityAmount === unit.electricity_fixed_amount) {
@@ -1185,7 +1194,7 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         }
 
         // Calculate utility amounts (Water) if metered
-        if (unit.water_rate !== null && bill.water_curr_reading !== null) {
+        if (!isLocked && unit.water_rate !== null && bill.water_curr_reading !== null) {
             const prev = (waterPrevReading !== null && waterPrevReading !== 0) ? waterPrevReading : (unit.initial_water_reading ?? 0);
             let unitsUsed = Math.max(0, bill.water_curr_reading - prev);
             const defaultUnits = unit.water_default_units;
@@ -1206,13 +1215,13 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
                 waterAmount = targetWaterAmt;
                 needsUpdate = true;
             }
-        } else if (unit.water_rate !== null && bill.water_curr_reading === null) {
+        } else if (!isLocked && unit.water_rate !== null && bill.water_curr_reading === null) {
             // Metered but no reading yet -> cost should be 0
             if (waterAmount !== 0) {
                 waterAmount = 0;
                 needsUpdate = true;
             }
-        } else if (unit.water_rate === null && unit.water_fixed_amount && unit.room_group) {
+        } else if (!isLocked && unit.water_rate === null && unit.water_fixed_amount && unit.room_group) {
             // PG split for FIXED water
             if (waterAmount === unit.water_fixed_amount) {
                 const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
@@ -1479,6 +1488,17 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
         );
 
     for (const bill of pendingBills) {
+        // B19: Skip "Locked" bills. Only sync the latest bill for a unit.
+        // A bill is locked if there exists a future bill for the same unit.
+        const futureBill = await db.select({ id: rentBills.id }).from(rentBills).where(
+            and(
+                eq(rentBills.unit_id, unitId),
+                sql`${rentBills.year} * 12 + ${rentBills.month} > ${bill.year} * 12 + ${bill.month}`
+            )
+        ).limit(1);
+
+        if (futureBill.length > 0) continue;
+
         let updateData: any = { updated_at: new Date() };
 
         // Sync fixed amounts (only if user changed unit setting)
