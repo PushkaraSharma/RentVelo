@@ -273,32 +273,42 @@ export const generateBillsForProperty = async (
             // The period this bill covers (Usage Month)
             let finalPeriodStart = new Date(usageYear, usageMonth - 1, 1);
             let finalPeriodEnd = new Date(usageYear, usageMonth, 0, 23, 59, 59);
-            const daysInMonth = new Date(usageYear, usageMonth, 0).getDate();
+            let daysInMonth = new Date(usageYear, usageMonth, 0).getDate();
 
-            // Pro-rata for move-in: adjust period_start
-            if (tenant.rent_start_date) {
+            if (unit.rent_cycle === 'relative' && tenant.rent_start_date) {
                 const rsd = new Date(tenant.rent_start_date);
-                const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
-                const currentUsageMonthStart = new Date(usageYear, usageMonth - 1, 1);
+                const cycleDay = rsd.getDate();
+                if (cycleDay > 1) {
+                    finalPeriodStart = new Date(usageYear, usageMonth - 1, cycleDay);
+                    finalPeriodEnd = new Date(usageYear, usageMonth, cycleDay - 1, 23, 59, 59);
+                    daysInMonth = differenceInDays(startOfDay(finalPeriodEnd), startOfDay(finalPeriodStart)) + 1;
+                }
+            } else {
+                // First of month cycle logic
+                // Pro-rata for move-in: adjust period_start
+                if (tenant.rent_start_date) {
+                    const rsd = new Date(tenant.rent_start_date);
+                    const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
+                    const currentUsageMonthStart = new Date(usageYear, usageMonth - 1, 1);
 
-                if (rsdMonthStart.getTime() === currentUsageMonthStart.getTime() && rsd.getDate() > 1) {
-                    finalPeriodStart = rsd;
+                    if (rsdMonthStart.getTime() === currentUsageMonthStart.getTime() && rsd.getDate() > 1) {
+                        finalPeriodStart = rsd;
+                    }
                 }
             }
 
             // Pro-rata for move-out: adjust period_end
             if (isMovedOutTenant && tenant.move_out_date) {
                 const mod = new Date(tenant.move_out_date);
-                if (mod.getMonth() === (usageMonth - 1) && mod.getFullYear() === usageYear) {
+                if (mod >= finalPeriodStart && mod <= finalPeriodEnd) {
                     finalPeriodEnd = mod;
                 }
             }
 
             // Calculate pro-rated rent based on actual period
-            const startDay = finalPeriodStart.getDate();
-            const endDay = finalPeriodEnd.getDate();
-            const daysOccupied = endDay - startDay + 1;
-            if (daysOccupied < daysInMonth) {
+            const daysOccupied = differenceInDays(startOfDay(finalPeriodEnd), startOfDay(finalPeriodStart)) + 1;
+            
+            if (daysOccupied < daysInMonth && daysOccupied > 0) {
                 rentAmount = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
             }
 
