@@ -13,7 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { storage } from '../../utils/storage';
 import { OTA_VERSION, CHANGELOG } from '../../utils/Constants';
 import WhatsNewModal from '../../components/modals/WhatsNewModal';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import GetStartedCard from '../../components/dashboard/GetStartedCard';
 import { getFullImageUri } from '../../services/imageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setPortfolioStats, setEnrichedUserProperties } from '../../services/analyticsService';
@@ -132,6 +132,16 @@ export default function DashboardScreen({ navigation }: any) {
                             onPressCollected={() => (navigation as any).navigate('Payments')}
                             isPrivacyMode={isPrivacyMode}
                         />
+
+                        {/* Get Started Guide - shows when setup is incomplete */}
+                        {(data.propertyCount === 0 || data.occupiedCount === 0 || data.collected === 0) && (
+                            <GetStartedCard
+                                navigation={navigation}
+                                propertyCount={data.propertyCount}
+                                tenantCount={data.occupiedCount}
+                                hasPayments={data.collected > 0}
+                            />
+                        )}
 
                         {/* Pending Alert */}
                         <PendingAlert

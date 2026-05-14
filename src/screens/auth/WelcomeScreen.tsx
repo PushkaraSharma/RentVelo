@@ -26,6 +26,16 @@ export default function WelcomeScreen() {
     }, []);
 
     const handleGoogleLogin = async () => {
+        if (__DEV__) {
+            dispatch(login({
+                name: 'Dev User',
+                email: 'dev@rentvelo.app',
+                photoUrl: undefined,
+                isGoogleLinked: true
+            }));
+            return;
+        }
+
         try {
             setGoogleLoading(true);
             const user = await signInWithGoogle();

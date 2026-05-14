@@ -11,6 +11,7 @@ import { RootState } from '../redux/store';
 // Auth Screens
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
+import SetupWizardScreen from '../screens/auth/SetupWizardScreen';
 
 // Main Screens
 import TabNavigator from './TabNavigator';
@@ -42,7 +43,7 @@ import ExpectedRevenueScreen from '../screens/dashboard/ExpectedRevenueScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-    const { isAuthenticated, isOnboarded } = useSelector((state: RootState) => state.auth);
+    const { isAuthenticated, isOnboarded, isSetupComplete } = useSelector((state: RootState) => state.auth);
 
     React.useEffect(() => {
         trackEvent(AnalyticsEvents.APP_OPENED);
@@ -64,6 +65,8 @@ export default function RootNavigator() {
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                 ) : !isAuthenticated ? (
                     <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                ) : !isSetupComplete ? (
+                    <Stack.Screen name="SetupWizard" component={SetupWizardScreen} />
                 ) : (
                     <>
                         <Stack.Screen name="Main" component={TabNavigator} />

@@ -2,11 +2,13 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { storage } from '../utils/storage';
 
 const ONBOARDING_KEY = 'isOnboarded';
+const SETUP_COMPLETE_KEY = 'isSetupComplete';
 const AUTH_KEY = 'authState';
 
 interface AuthState {
     isAuthenticated: boolean;
     isOnboarded: boolean;
+    isSetupComplete: boolean;
     user: {
         name: string;
         email: string;
@@ -33,6 +35,8 @@ const savedAuthState = loadAuthState();
 const initialState: AuthState = {
     isAuthenticated: savedAuthState.isAuthenticated ?? false,
     isOnboarded: storage.getBoolean(ONBOARDING_KEY) ?? false,
+    // Default to true for existing authenticated users (they don't need the wizard)
+    isSetupComplete: storage.getBoolean(SETUP_COMPLETE_KEY) ?? (savedAuthState.isAuthenticated ?? false),
     user: savedAuthState.user ?? null,
     isGoogleLinked: savedAuthState.isGoogleLinked ?? false,
     googleEmail: savedAuthState.googleEmail ?? null,
@@ -79,6 +83,10 @@ const authSlice = createSlice({
             state.isOnboarded = true;
             storage.set(ONBOARDING_KEY, true);
         },
+        completeSetup: (state) => {
+            state.isSetupComplete = true;
+            storage.set(SETUP_COMPLETE_KEY, true);
+        },
         linkGoogleAccount: (state, action: PayloadAction<{ email: string, name?: string | null, photoUrl?: string | null }>) => {
             state.isGoogleLinked = true;
             state.googleEmail = action.payload.email;
@@ -92,5 +100,5 @@ const authSlice = createSlice({
     },
 });
 
-export const { login, logout, completeOnboarding, linkGoogleAccount, unlinkGoogleAccount } = authSlice.actions;
+export const { login, logout, completeOnboarding, completeSetup, linkGoogleAccount, unlinkGoogleAccount } = authSlice.actions;
 export default authSlice.reducer;
