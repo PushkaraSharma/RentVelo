@@ -142,7 +142,11 @@ export default function DashboardScreen({ navigation }: any) {
                         />
 
                         {/* Collection Trends */}
-                        <CollectionTrends trends={data.trends} isPrivacyMode={isPrivacyMode} />
+                        <CollectionTrends
+                            trends={data.trends}
+                            propertyCount={data.propertyCount}
+                            isPrivacyMode={isPrivacyMode}
+                        />
 
                         {/* Occupancy Insight */}
                         <View style={styles.occupancyCard}>

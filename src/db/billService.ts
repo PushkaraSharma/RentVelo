@@ -1737,6 +1737,7 @@ export const getBillSummaryByUnitId = async (unitId: number): Promise<{
 
 export interface ExpectedRevenueBreakdown {
     totalExpected: number;
+    propertyCount: number;
     composition: {
         rent: number;
         utilities: number;
@@ -1857,6 +1858,7 @@ export const getExpectedRevenueBreakdown = async (month: number, year: number): 
 
     return {
         totalExpected,
+        propertyCount: allProps.length,
         composition,
         properties: propertiesData,
         highRiskTenants,

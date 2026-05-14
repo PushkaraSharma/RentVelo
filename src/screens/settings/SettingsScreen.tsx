@@ -457,7 +457,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     profileCard: {
         backgroundColor: theme.colors.surface,
         marginHorizontal: theme.spacing.l,
-        padding: theme.spacing.l,
+        padding: theme.spacing.m,
         borderRadius: 24,
         flexDirection: 'row',
         alignItems: 'center',
@@ -467,13 +467,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginBottom: theme.spacing.xl,
     },
     profileImageContainer: {
-        width: 80,
-        height: 80,
+        width: 75,
+        height: 75,
         borderRadius: 40,
         backgroundColor: theme.colors.accentLight,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: theme.spacing.l,
+        marginRight: theme.spacing.m,
     },
     profileImage: {
         width: '100%',
@@ -484,7 +484,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
     },
     profileName: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
     },
