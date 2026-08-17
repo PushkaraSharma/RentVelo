@@ -10,7 +10,7 @@ import RentLedgerModal from '../../components/modals/RentLedgerModal';
 import ContactPickerModal from '../../components/modals/ContactPickerModal';
 import { UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users, Phone, Contact2, User, Building, Check, Camera, Edit3, Info, Edit2 } from 'lucide-react-native';
 import Header from '../../components/common/Header';
-import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, Property, Unit, Tenant } from '../../db';
+import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, addDocument, getDocumentsByTenantId, deleteDocument, Property, Unit, Tenant } from '../../db';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
@@ -21,6 +21,14 @@ import ImagePreviewModal from '../../components/common/ImagePreviewModal';
 import { incrementActionAndReview } from '../../services/storeReviewService';
 import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
+
+type AdditionalDoc = {
+    localKey: string;
+    id?: number;
+    uri: string;
+    document_type: string;
+    document_name: string;
+};
 
 export default function AddTenantScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
@@ -94,6 +102,8 @@ export default function AddTenantScreen({ navigation, route }: any) {
     const [aadhaarFrontUri, setAadhaarFrontUri] = useState<string | null>(null);
     const [aadhaarBackUri, setAadhaarBackUri] = useState<string | null>(null);
     const [panUri, setPanUri] = useState<string | null>(null);
+    const [additionalDocs, setAdditionalDocs] = useState<AdditionalDoc[]>([]);
+    const [initialDocIds, setInitialDocIds] = useState<number[]>([]);
 
     // Image Preview
     const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
@@ -150,6 +160,16 @@ export default function AddTenantScreen({ navigation, route }: any) {
                 setAadhaarBackUri(tenant.aadhaar_back_uri || null);
                 setPanUri(tenant.pan_uri || null);
 
+                const docs = await getDocumentsByTenantId(tenantId);
+                setAdditionalDocs(docs.map((doc) => ({
+                    localKey: `doc-${doc.id}`,
+                    id: doc.id,
+                    uri: doc.file_uri,
+                    document_type: doc.document_type || 'other',
+                    document_name: doc.document_name,
+                })));
+                setInitialDocIds(docs.map((doc) => doc.id));
+
                 // Preserve existing stay info
                 setOriginalStatus(tenant.status as any || 'active');
                 setOriginalPropertyId(tenant.property_id);
@@ -197,12 +217,73 @@ export default function AddTenantScreen({ navigation, route }: any) {
         openPicker({ quality: 0.8, allowsEditing: false }, setter);
     };
 
+    const pickAdditionalDocument = () => {
+        openPicker({ quality: 0.8, allowsEditing: false }, (uri) => {
+            setAdditionalDocs((prev) => {
+                const nextIndex = prev.length + 1;
+                return [
+                    ...prev,
+                    {
+                        localKey: `new-${Date.now()}-${nextIndex}`,
+                        uri,
+                        document_type: 'other',
+                        document_name: `Document ${nextIndex}`,
+                    },
+                ];
+            });
+        });
+    };
+
+    const replaceAdditionalDocument = (localKey: string) => {
+        openPicker({ quality: 0.8, allowsEditing: false }, (uri) => {
+            setAdditionalDocs((prev) =>
+                prev.map((doc) => (doc.localKey === localKey ? { ...doc, uri } : doc))
+            );
+        });
+    };
+
+    const removeAdditionalDocument = (localKey: string) => {
+        setAdditionalDocs((prev) => prev.filter((doc) => doc.localKey !== localKey));
+    };
+
     const openPreview = (uri: string, title: string, editFn: () => void, deleteFn: () => void) => {
         setPreviewImageUri(getFullImageUri(uri) || uri);
         setPreviewImageTitle(title);
         setPreviewEditAction(() => editFn);
         setPreviewDeleteAction(() => deleteFn);
         setShowImagePreview(true);
+    };
+
+    const syncAdditionalDocuments = async (savedTenantId: number) => {
+        const processImage = async (uri: string) => {
+            if (uri.startsWith('file://')) {
+                const permanentPath = await saveImageToPermanentStorage(uri);
+                return permanentPath || uri;
+            }
+            return uri;
+        };
+
+        // Keep only unchanged existing rows; replaced (new file://) and removed rows are deleted
+        const keptIds = additionalDocs
+            .filter((doc) => doc.id && !doc.uri.startsWith('file://'))
+            .map((doc) => doc.id as number);
+
+        const removedIds = initialDocIds.filter((id) => !keptIds.includes(id));
+        for (const id of removedIds) {
+            await deleteDocument(id);
+        }
+
+        for (const doc of additionalDocs) {
+            if (doc.id && !doc.uri.startsWith('file://')) continue;
+
+            const fileUri = await processImage(doc.uri);
+            await addDocument({
+                tenant_id: savedTenantId,
+                document_type: doc.document_type,
+                document_name: doc.document_name,
+                file_uri: fileUri,
+            });
+        }
     };
 
     const handleSubmit = async () => {
@@ -259,10 +340,12 @@ export default function AddTenantScreen({ navigation, route }: any) {
 
             if (isEditMode) {
                 await updateTenant(tenantId, tenantData);
+                await syncAdditionalDocuments(tenantId);
                 showToast({ type: 'success', title: 'Success', message: 'Tenant updated successfully' });
                 navigation.goBack();
             } else {
                 const id = await createTenant(tenantData);
+                await syncAdditionalDocuments(id);
                 setNewlyCreatedId(id);
                 trackEvent(AnalyticsEvents.TENANT_ADDED, { lease_type: leaseType });
                 incrementActionAndReview(); // Trigger logic for store review
@@ -612,6 +695,38 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                 </Pressable>
                             </View>
                         </View>
+
+                        <Text style={[styles.docLabel, { marginTop: theme.spacing.l }]}>ADDITIONAL DOCUMENTS</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.extraDocsRow}>
+                            <Pressable style={styles.addExtraDocBox} onPress={pickAdditionalDocument}>
+                                <Camera size={22} color={theme.colors.accent} />
+                                <Text style={styles.uploadText}>Add</Text>
+                            </Pressable>
+                            {additionalDocs.map((doc) => (
+                                <View key={doc.localKey} style={styles.extraDocWrapper}>
+                                    <Pressable
+                                        onPress={() => openPreview(
+                                            doc.uri,
+                                            doc.document_name,
+                                            () => replaceAdditionalDocument(doc.localKey),
+                                            () => removeAdditionalDocument(doc.localKey)
+                                        )}
+                                    >
+                                        <Image
+                                            source={{ uri: getFullImageUri(doc.uri) || doc.uri }}
+                                            style={styles.extraDocImg}
+                                        />
+                                    </Pressable>
+                                    <Text style={styles.extraDocName} numberOfLines={1}>{doc.document_name}</Text>
+                                    <Pressable
+                                        style={styles.removeDoc}
+                                        onPress={() => removeAdditionalDocument(doc.localKey)}
+                                    >
+                                        <X size={12} color="#FFF" />
+                                    </Pressable>
+                                </View>
+                            ))}
+                        </ScrollView>
                     </View>
 
                     {/* Submit Button */}
@@ -952,6 +1067,38 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center'
+    },
+    extraDocsRow: {
+        flexDirection: 'row',
+        gap: theme.spacing.m,
+        paddingBottom: theme.spacing.s,
+    },
+    addExtraDocBox: {
+        width: 100,
+        height: 100,
+        borderRadius: theme.borderRadius.m,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderStyle: 'dashed',
+        backgroundColor: theme.colors.surface,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    extraDocWrapper: {
+        width: 100,
+        position: 'relative',
+    },
+    extraDocImg: {
+        width: 100,
+        height: 100,
+        borderRadius: theme.borderRadius.m,
+        backgroundColor: theme.colors.surface,
+    },
+    extraDocName: {
+        fontSize: 10,
+        color: theme.colors.textSecondary,
+        marginTop: 4,
+        textAlign: 'center',
     },
     submitBtn: {
         backgroundColor: theme.colors.accent,

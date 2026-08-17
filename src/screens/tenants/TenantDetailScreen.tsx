@@ -38,6 +38,8 @@ import {
     getUnitById,
     getBillsByTenantId,
     getPaymentsByTenantId,
+    getDocumentsByTenantId,
+    Document,
 } from '../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import { CURRENCY } from '../../utils/Constants';
@@ -55,6 +57,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
     const [property, setProperty] = useState<any>(null);
     const [unit, setUnit] = useState<any>(null);
     const [bills, setBills] = useState<any[]>([]);
+    const [additionalDocs, setAdditionalDocs] = useState<Document[]>([]);
     const [refreshing, setRefreshing] = useState(false);
 
     // Image Preview
@@ -66,16 +69,18 @@ export default function TenantDetailScreen({ navigation, route }: any) {
 
     const loadData = async () => {
         try {
-            const [tenantData, propData, unitData, billsData] = await Promise.all([
+            const [tenantData, propData, unitData, billsData, docsData] = await Promise.all([
                 getTenantById(tenantId),
                 propertyId ? getPropertyById(propertyId) : null,
                 unitId ? getUnitById(unitId) : null,
                 getBillsByTenantId(tenantId),
+                getDocumentsByTenantId(tenantId),
             ]);
             setTenant(tenantData);
             setProperty(propData);
             setUnit(unitData);
             setBills(billsData);
+            setAdditionalDocs(docsData);
         } catch (error) {
             console.error('Error loading tenant details:', error);
         }
@@ -411,7 +416,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                 )}
 
                 {/* ─── Document Vault ─── */}
-                {(tenant.aadhaar_front_uri || tenant.aadhaar_back_uri || tenant.pan_uri) && (
+                {(tenant.aadhaar_front_uri || tenant.aadhaar_back_uri || tenant.pan_uri || additionalDocs.length > 0) && (
                     <View style={styles.infoCard}>
                         <Text style={styles.cardTitle}>Documents</Text>
                         <View style={styles.docsGrid}>
@@ -451,6 +456,19 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                                     <Text style={styles.docLabel}>PAN Card</Text>
                                 </Pressable>
                             )}
+                            {additionalDocs.map((doc) => (
+                                <Pressable
+                                    key={doc.id}
+                                    style={styles.docThumb}
+                                    onPress={() => openPreview(doc.file_uri, doc.document_name)}
+                                >
+                                    <Image
+                                        source={{ uri: getFullImageUri(doc.file_uri) || doc.file_uri }}
+                                        style={styles.docImage}
+                                    />
+                                    <Text style={styles.docLabel} numberOfLines={1}>{doc.document_name}</Text>
+                                </Pressable>
+                            ))}
                         </View>
                     </View>
                 )}
