@@ -782,9 +782,16 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>
                 </Pressable>
-                {(bill.total_expenses ?? 0) > 0 && (
-                    <Pressable style={styles.expenseChip} onPress={() => setShowExpenseList(true)}>
-                        <Text style={styles.expenseChipText}>{formatAmount(bill.total_expenses)}</Text>
+                {/* Shown for credits too, otherwise a bill that only has discounts has no
+                    way to reach the expense list and undo them. */}
+                {(bill.total_expenses ?? 0) !== 0 && (
+                    <Pressable
+                        style={[styles.expenseChip, (bill.total_expenses ?? 0) < 0 && styles.expenseChipCredit]}
+                        onPress={() => setShowExpenseList(true)}
+                    >
+                        <Text style={[styles.expenseChipText, (bill.total_expenses ?? 0) < 0 && styles.expenseChipTextCredit]}>
+                            {(bill.total_expenses ?? 0) < 0 ? '−' : ''}{formatAmount(Math.abs(bill.total_expenses ?? 0))}
+                        </Text>
                     </Pressable>
                 )}
                 <View style={{ flex: 1 }} />
@@ -989,6 +996,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowExpenseList(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                locked={isLocked}
             />
             <EditUtilityModal
                 visible={showEditUtility.visible}
@@ -1260,10 +1268,16 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderRadius: 10,
         backgroundColor: theme.colors.successLight,
     },
+    expenseChipCredit: {
+        backgroundColor: theme.colors.dangerLight,
+    },
     expenseChipText: {
         fontSize: 12,
         fontWeight: theme.typography.semiBold,
         color: theme.colors.success,
+    },
+    expenseChipTextCredit: {
+        color: theme.colors.danger,
     },
     totalCol: {
         alignItems: 'flex-end',

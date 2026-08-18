@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { CURRENCY } from '../../utils/Constants';
+import { CURRENCY, formatExpenseLabel } from '../../utils/Constants';
 import { Trash2, Zap } from 'lucide-react-native';
 import { getBillExpenses, removeExpense } from '../../db';
 import RentModalSheet from './RentModalSheet';
@@ -11,9 +11,11 @@ interface ExpenseListModalProps {
     onClose: () => void;
     bill: any;
     unit: any;
+    /** Historical bill: view only, matching how every other edit on the card is gated */
+    locked?: boolean;
 }
 
-export default function ExpenseListModal({ visible, onClose, bill, unit }: ExpenseListModalProps) {
+export default function ExpenseListModal({ visible, onClose, bill, unit, locked }: ExpenseListModalProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const [expenses, setExpenses] = useState<any[]>([]);
@@ -70,7 +72,7 @@ export default function ExpenseListModal({ visible, onClose, bill, unit }: Expen
                                     <Zap size={18} color={item.amount < 0 ? theme.colors.danger : theme.colors.accent} />
                                 </View>
                                 <View>
-                                    <Text style={styles.expenseLabel}>{item.label}</Text>
+                                    <Text style={styles.expenseLabel}>{formatExpenseLabel(item.label)}</Text>
                                     <View style={styles.badgeRow}>
                                         <View style={[styles.badge, item.is_recurring ? styles.recurBadge : styles.oneTimeBadge]}>
                                             <Text style={[styles.badgeText, item.is_recurring ? styles.recurBadgeText : styles.oneTimeBadgeText]}>
@@ -84,7 +86,7 @@ export default function ExpenseListModal({ visible, onClose, bill, unit }: Expen
                                 <Text style={[styles.expenseAmount, item.amount < 0 && { color: theme.colors.danger }]}>
                                     {item.amount < 0 ? '−' : ''}{CURRENCY}{Math.abs(item.amount).toLocaleString('en-IN')}
                                 </Text>
-                                {bill.id && (
+                                {bill.id && !locked && (
                                     <Pressable style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
                                         <Trash2 size={18} color={theme.colors.danger} />
                                     </Pressable>

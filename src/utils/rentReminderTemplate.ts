@@ -1,4 +1,4 @@
-import { CURRENCY } from './Constants';
+import { CURRENCY, formatExpenseLabel } from './Constants';
 
 interface ReminderData {
     property: any;
@@ -47,7 +47,7 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
     const filteredExpenses = expenses.filter(e => e.amount !== 0);
     const expenseRows = filteredExpenses.map(e => `
         <tr>
-            <td style="padding:4px 10px; border-bottom:1px solid #F0F0F0; font-size:11px;">${e.label}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #F0F0F0; font-size:11px;">${formatExpenseLabel(e.label)}</td>
             <td style="padding:4px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:600; color:${e.amount < 0 ? '#B91C1C' : '#111'}; font-size:11px;">
                 ${e.amount < 0 ? '−' : '+'}${fmtCur(Math.abs(e.amount))}
             </td>

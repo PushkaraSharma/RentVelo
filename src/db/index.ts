@@ -68,6 +68,8 @@ export {
 export {
     generateBillsForProperty,
     getBillsForPropertyMonth,
+    getUsagePeriod,
+    BILL_ADVANCE_DAYS,
     getBillById,
     updateBill,
     recalculateBill,

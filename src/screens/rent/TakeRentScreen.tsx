@@ -7,7 +7,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { ChevronLeft, ChevronRight, MoreVertical, Search, X } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
-import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById } from '../../db';
+import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById, getUsagePeriod, BILL_ADVANCE_DAYS } from '../../db';
 import MonthPickerModal from '../../components/rent/MonthPickerModal';
 import RentBillCard from '../../components/rent/RentBillCard';
 import RentBillSkeleton from '../../components/rent/RentBillSkeleton';
@@ -28,9 +28,10 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
     const propertyId = route?.params?.propertyId;
     
-    const ADVANCE_DAYS = 3;
+    // Shared with bill generation so the furthest month reachable here is always a month
+    // that actually has bills
     const effectiveNow = new Date();
-    effectiveNow.setDate(effectiveNow.getDate() + ADVANCE_DAYS);
+    effectiveNow.setDate(effectiveNow.getDate() + BILL_ADVANCE_DAYS);
     
     // Default open month remains the strict CURRENT month
     const now = new Date();
@@ -155,16 +156,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
     ];
 
     const rentPeriod = useMemo(() => {
-        let pMonth = month;
-        let pYear = year;
-
-        if (property?.rent_payment_type === 'previous_month') {
-            pMonth = month - 1;
-            if (pMonth < 1) {
-                pMonth = 12;
-                pYear = year - 1;
-            }
-        }
+        const { usageMonth: pMonth, usageYear: pYear } = getUsagePeriod(property, month, year);
 
         const startDate = new Date(pYear, pMonth - 1, 1);
         const endDate = new Date(pYear, pMonth, 0);

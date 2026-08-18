@@ -10,6 +10,96 @@ import { differenceInDays, isAfter, startOfDay } from 'date-fns';
 export { RentBill, BillExpense };
 
 /**
+ * How many days before a month starts its bills may be generated and collected.
+ * The rent screen lets the landlord open the upcoming month this early, so generation
+ * has to allow the same window or that month renders with no bills at all.
+ */
+export const BILL_ADVANCE_DAYS = 3;
+
+/** "Today" shifted by the advance window, i.e. the latest month bills may exist for. */
+const getBillingHorizon = (): { month: number; year: number } => {
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + BILL_ADVANCE_DAYS);
+    return { month: horizon.getMonth() + 1, year: horizon.getFullYear() };
+};
+
+/**
+ * Resolve the "usage month" that a bill covers.
+ * Post-paid properties bill the previous month's occupancy, so period dates and
+ * property expenses are keyed one month behind the bill itself. Anything that
+ * writes or reads month-scoped bill data must agree on this shift.
+ */
+export const getUsagePeriod = (
+    property: { rent_payment_type?: string | null } | null | undefined,
+    month: number,
+    year: number
+): { usageMonth: number; usageYear: number } => {
+    if (property?.rent_payment_type !== 'previous_month') {
+        return { usageMonth: month, usageYear: year };
+    }
+    return month === 1
+        ? { usageMonth: 12, usageYear: year - 1 }
+        : { usageMonth: month - 1, usageYear: year };
+};
+
+/**
+ * A zeroed bill line whose label carries a "(Removed)" or "(Waived)" suffix.
+ * The marker records a deliberate removal for one month only, so the lazy syncs
+ * must leave it alone and must never carry it into a later month's bill.
+ */
+const isWaivedLabel = (label: string | null | undefined): boolean =>
+    !!label && (label.endsWith('(Removed)') || label.endsWith('(Waived)'));
+
+/**
+ * Matches bills strictly later than the given month.
+ */
+const isAfterMonthFilter = (month: number, year: number) => or(
+    sql`${rentBills.year} > ${year}`,
+    and(eq(rentBills.year, year), sql`${rentBills.month} > ${month}`)
+);
+
+/**
+ * The single definition of what makes a bill "complex" enough to lock earlier months:
+ * it carries manual user input — a payment, a meter reading, or a hand-added expense.
+ * Clean auto-generated shells must not lock anything, otherwise routine bill generation
+ * would freeze the month the user is trying to edit.
+ *
+ * Requires billExpenses to be left-joined onto rentBills by the caller.
+ */
+const complexBillInputFilter = () => or(
+    sql`${rentBills.paid_amount} > 0`,
+    sql`${rentBills.curr_reading} IS NOT NULL`,
+    sql`${rentBills.water_curr_reading} IS NOT NULL`,
+    and(
+        sql`${billExpenses.id} IS NOT NULL`,
+        eq(billExpenses.is_recurring, false),
+        sql`${billExpenses.property_expense_id} IS NULL`
+    )
+);
+
+/**
+ * Single-unit form of the lock test. getBillsForPropertyMonth runs the same criteria as
+ * one batched query for the whole property; both must agree or the UI will present a bill
+ * as editable while the service layer silently refuses to recalculate it.
+ */
+const hasComplexFutureBills = async (unitId: number, month: number, year: number): Promise<boolean> => {
+    const db = getDb();
+    const rows = await db.select({ id: rentBills.id })
+        .from(rentBills)
+        .leftJoin(billExpenses, eq(rentBills.id, billExpenses.bill_id))
+        .where(
+            and(
+                eq(rentBills.unit_id, unitId),
+                isAfterMonthFilter(month, year),
+                complexBillInputFilter()
+            )
+        )
+        .limit(1);
+
+    return rows.length > 0;
+};
+
+/**
  * Helper: count occupied beds in a PG room_group for a given month.
  * "Occupied" = has a bill for that month (which means had an active tenant).
  */
@@ -51,29 +141,18 @@ export const generateBillsForProperty = async (
 ): Promise<void> => {
     const db = getDb();
 
-    // Skip bill generation for future months — they will be virtual
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    // Current/Future months (relative to today) are treated as virtual simulations until specialized action is taken
-    const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
-    const isStrictlyFuture = (year > currentYear) || (year === currentYear && month > currentMonth);
-    if (isFutureMonth) return;
+    // Skip bill generation beyond the billing horizon. The horizon includes the advance
+    // window so the upcoming month the rent screen already lets the landlord open actually
+    // has bills; without this the screen renders a list of empty cards.
+    const { month: horizonMonth, year: horizonYear } = getBillingHorizon();
+    const isBeyondHorizon = (year > horizonYear) || (year === horizonYear && month > horizonMonth);
+    if (isBeyondHorizon) return;
 
     // Get property to check rent_payment_type
     const propertyResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
     const property = propertyResult[0];
-    const isPostPaid = property?.rent_payment_type === 'previous_month';
 
-    let usageMonth = month;
-    let usageYear = year;
-    if (isPostPaid) {
-        usageMonth = month - 1;
-        if (usageMonth < 1) {
-            usageMonth = 12;
-            usageYear--;
-        }
-    }
+    const { usageMonth, usageYear } = getUsagePeriod(property, month, year);
     const usageMonthStart = new Date(usageYear, usageMonth - 1, 1);
 
     // Get all units for this property (sorted same as room list)
@@ -347,9 +426,12 @@ export const generateBillsForProperty = async (
 
             // Copy recurring expenses from previous month's bill
             if (prevBill.length > 0) {
-                const recurringExps = await db.select().from(billExpenses).where(
+                const prevRecurringExps = await db.select().from(billExpenses).where(
                     and(eq(billExpenses.bill_id, prevBill[0].id), eq(billExpenses.is_recurring, true))
                 );
+                // Skip zeroed markers: they record a removal for the previous month only,
+                // and copying them forward would silently make that removal permanent.
+                const recurringExps = prevRecurringExps.filter(e => !isWaivedLabel(e.label));
                 for (const exp of recurringExps) {
                     await db.insert(billExpenses).values({
                         bill_id: newBillId,
@@ -727,17 +809,8 @@ export const getBillsForPropertyMonth = async (
     // Fetch property config once for all units
     const propResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
     const property = propResult[0];
-    const isPostPaid = property?.rent_payment_type === 'previous_month';
 
-    let usageMonth = month;
-    let usageYear = year;
-    if (isPostPaid) {
-        usageMonth = month - 1;
-        if (usageMonth < 1) {
-            usageMonth = 12;
-            usageYear--;
-        }
-    }
+    const { usageMonth, usageYear } = getUsagePeriod(property, month, year);
 
     // P1: Hoist property expenses query — same for all units
     const hoistedPropExpenses = await db.select().from(propertyExpenses)
@@ -808,20 +881,8 @@ export const getBillsForPropertyMonth = async (
         .where(
             and(
                 inArray(rentBills.unit_id, unitIds),
-                or(
-                    sql`${rentBills.year} > ${year}`,
-                    and(eq(rentBills.year, year), sql`${rentBills.month} > ${month}`)
-                ),
-                or(
-                    sql`${rentBills.paid_amount} > 0`,
-                    sql`${rentBills.curr_reading} IS NOT NULL`,
-                    sql`${rentBills.water_curr_reading} IS NOT NULL`,
-                    and(
-                        sql`${billExpenses.id} IS NOT NULL`,
-                        eq(billExpenses.is_recurring, false),
-                        sql`${billExpenses.property_expense_id} IS NULL`
-                    )
-                )
+                isAfterMonthFilter(month, year),
+                complexBillInputFilter()
             )
         );
     const unitsWithFutureBills = new Set(complexFutureBills.map(fb => fb.unit_id));
@@ -1110,17 +1171,15 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     let waterPrevReading = bill.water_prev_reading;
     let needsUpdate = false;
 
-    // B19: Determine if this bill is "locked" by a future bill
-    const futureBill = await db.select({ id: rentBills.id }).from(rentBills).where(
-        and(
-            eq(rentBills.unit_id, bill.unit_id),
-            sql`${rentBills.year} * 12 + ${rentBills.month} > ${bill.year} * 12 + ${bill.month}`
-        )
-    ).limit(1);
-    const isLocked = futureBill.length > 0;
+    // B19: Determine if this bill is "locked" by a future bill. Uses the same test the UI
+    // shows the user, so a bill presented as editable is never silently skipped here.
+    const isLocked = await hasComplexFutureBills(bill.unit_id, bill.month, bill.year);
 
     if (unit) {
-        // P2: Single prev-bill query for both electricity and water sync
+        // P2: Single prev-bill query for both electricity and water sync.
+        // Deliberately scoped to the unit rather than the tenant: this only feeds meter
+        // readings, and the meter belongs to the room. Scoping it by tenant would reset an
+        // incoming tenant to the unit's initial reading and bill them for months of usage.
         const prevBillArr = await db.select().from(rentBills).where(
             and(
                 eq(rentBills.unit_id, bill.unit_id),
@@ -1262,23 +1321,26 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         })
         .where(eq(rentBills.id, billId));
 
-    // B3 & B17: Cascade to next month — update its previous_balance and prev_reading in ONE batch
+    // B3 & B17: Cascade to next month — update previous_balance and prev_reading in ONE batch.
+    // A unit can hold more than one bill in a month once a tenant moves out and another
+    // moves in, so every next-month bill is considered rather than an arbitrary first row.
+    // An outstanding balance is personal and only follows the same tenant; meter readings
+    // belong to the room and carry over to whoever occupies it next.
     const nextMonth = bill.month === 12 ? 1 : bill.month + 1;
     const nextYear = bill.month === 12 ? bill.year + 1 : bill.year;
-    const nextBillResult = await db.select().from(rentBills).where(
+    const nextBills = await db.select().from(rentBills).where(
         and(
             eq(rentBills.unit_id, bill.unit_id),
             eq(rentBills.month, nextMonth),
             eq(rentBills.year, nextYear)
         )
-    ).limit(1);
+    );
 
-    if (nextBillResult.length > 0) {
-        const nextBill = nextBillResult[0];
+    for (const nextBill of nextBills) {
         const updates: any = {};
         let needsRecalculate = false;
 
-        if (nextBill.previous_balance !== balance) {
+        if (nextBill.tenant_id === bill.tenant_id && nextBill.previous_balance !== balance) {
             updates.previous_balance = balance;
             needsRecalculate = true;
         }
@@ -1356,17 +1418,42 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
     const bill = await getBillById(billId);
     if (!bill) throw new Error('Bill not found');
 
-    // Also create a property expense record so it shows in the Expenses screen
+    const amount = expense.amount ?? 0;
+    const rawLabel = expense.label || 'Custom Expense';
+
+    // A discount/waiver is lost income rather than a landlord cost, so it is never
+    // mirrored into property_expenses. Leaving property_expense_id null and the label
+    // unprefixed also keeps it outside syncPropertyExpensesLazily's scope, which would
+    // otherwise flip the sign back to positive on the next read.
+    if (amount < 0) {
+        const discountResult = await db.insert(billExpenses).values({
+            ...expense,
+            bill_id: billId,
+            property_expense_id: null,
+            label: rawLabel,
+            is_recurring: false,
+        }).returning({ id: billExpenses.id });
+
+        await recalculateBill(billId);
+        return discountResult[0].id;
+    }
+
+    // Also create a property expense record so it shows in the Expenses screen.
+    // It must be stamped with the usage month rather than the bill month, otherwise
+    // the lazy reconciler will not recognise it and deletes the line on next read.
+    const propertyResult = await db.select().from(properties).where(eq(properties.id, bill.property_id)).limit(1);
+    const { usageMonth, usageYear } = getUsagePeriod(propertyResult[0], bill.month, bill.year);
+
     const isRecurring = expense.is_recurring === true;
     const propExpResult = await db.insert(propertyExpenses).values({
         property_id: bill.property_id,
-        amount: Math.abs(expense.amount ?? 0),
-        expense_type: expense.label || 'Custom Expense',
+        amount,
+        expense_type: rawLabel,
         frequency: isRecurring ? 'monthly' : 'one_time',
         distribute_type: 'rooms',
         distributed_unit_ids: JSON.stringify([bill.unit_id]),
-        month: bill.month,
-        year: bill.year,
+        month: usageMonth,
+        year: usageYear,
     }).returning({ id: propertyExpenses.id });
 
     const propExpId = propExpResult[0].id;
@@ -1375,11 +1462,33 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
         ...expense,
         bill_id: billId,
         property_expense_id: propExpId,
-        label: expense.label ? `Property: ${expense.label}` : 'Property: Custom Expense',
+        label: `Property: ${rawLabel}`,
     }).returning({ id: billExpenses.id });
 
     await recalculateBill(billId);
     return result[0].id;
+};
+
+/**
+ * How many units a property expense is split across.
+ * Returns 0 when the row is missing or its unit list cannot be parsed, so callers
+ * can treat "unknown" as "shared" and avoid destructive cleanup.
+ */
+const getExpenseUnitCount = async (propertyExpenseId: number): Promise<number> => {
+    const db = getDb();
+    const rows = await db.select({ ids: propertyExpenses.distributed_unit_ids })
+        .from(propertyExpenses)
+        .where(eq(propertyExpenses.id, propertyExpenseId))
+        .limit(1);
+
+    if (rows.length === 0) return 0;
+
+    try {
+        const ids = JSON.parse(rows[0].ids || '[]');
+        return Array.isArray(ids) ? ids.length : 0;
+    } catch {
+        return 0;
+    }
 };
 
 export const removeExpense = async (expenseId: number): Promise<void> => {
@@ -1393,21 +1502,32 @@ export const removeExpense = async (expenseId: number): Promise<void> => {
     const label = expense[0].label;
     const isRecurring = expense[0].is_recurring;
 
+    // Zeroing a row rather than deleting it is what tells the lazy syncs the line was
+    // deliberately removed. A deleted row just looks missing and gets re-added.
+    const waive = (newLabel: string) => db.update(billExpenses)
+        .set({ label: newLabel, amount: 0 })
+        .where(eq(billExpenses.id, expenseId));
+
+    const sharedUnitCount = propertyExpId ? await getExpenseUnitCount(propertyExpId) : 1;
+
     if (label === 'Late Payment Penalty') {
         // Waive penalty instead of deleting, to avoid lazy regeneration
-        await db.update(billExpenses)
-            .set({ label: 'Late Payment Penalty (Waived)', amount: 0 })
-            .where(eq(billExpenses.id, expenseId));
-    } else if (isRecurring && propertyExpId) {
-        // For recurring property expenses, waive for THIS month only (don't delete the source).
-        // Mark it with a "(Removed)" suffix so syncPropertyExpensesLazily won't re-add it.
-        await db.update(billExpenses)
-            .set({ label: `${label} (Removed)`, amount: 0 })
-            .where(eq(billExpenses.id, expenseId));
+        await waive('Late Payment Penalty (Waived)');
+    } else if (isRecurring) {
+        // Recurring expenses are waived for THIS month only. The source keeps emitting
+        // lines for later months, and generateBillsForProperty skips copying the marker
+        // forward so the expense reappears next month.
+        await waive(`${label} (Removed)`);
+    } else if (sharedUnitCount !== 1) {
+        // The source is split across several rooms (or its unit list is unreadable).
+        // Drop only this room's line and leave the source untouched, so the other rooms
+        // keep the share they were already billed. The remainder is deliberately not
+        // re-split across the survivors, which would raise their bills.
+        await waive(`${label} (Removed)`);
     } else {
         await db.delete(billExpenses).where(eq(billExpenses.id, expenseId));
 
-        // If this expense came from the property expense module, delete the root expense
+        // This bill was the expense's only consumer, so remove the root record too.
         if (propertyExpId) {
             await db.delete(propertyExpenses).where(eq(propertyExpenses.id, propertyExpId));
         }
@@ -1565,13 +1685,16 @@ const syncRecurringExpensesLazily = async (
     const db = getDb();
 
     // Get recurring expenses from previous month's bill (non-property ones only)
-    const prevRecurring = await db.select().from(billExpenses).where(
+    const prevRecurringRows = await db.select().from(billExpenses).where(
         and(
             eq(billExpenses.bill_id, prevBillId),
             eq(billExpenses.is_recurring, true),
             sql`${billExpenses.property_expense_id} IS NULL`
         )
     );
+    // A marker on the previous bill removed the expense for that month only, so it
+    // must not be treated as the template for this month.
+    const prevRecurring = prevRecurringRows.filter(e => !isWaivedLabel(e.label));
 
     if (prevRecurring.length === 0) return;
 
@@ -1664,7 +1787,7 @@ const syncPropertyExpensesLazily = async (
     // 3. Remove stale ones (exist in bill but NOT in expected)
     for (const existing of propertyLabeledExpenses) {
         // Skip manually removed expenses — they should stay zeroed
-        if (existing.label.endsWith('(Removed)') || existing.label.endsWith('(Waived)')) continue;
+        if (isWaivedLabel(existing.label)) continue;
 
         // Find if this existing bill expense corresponds to any expected property expense
         let isExpected = false;
@@ -1694,7 +1817,7 @@ const syncPropertyExpensesLazily = async (
         if (!existing) {
             // Check if this expense was manually removed for this month
             const wasRemoved = propertyLabeledExpenses.some(
-                e => e.property_expense_id === propExpId && e.label.endsWith('(Removed)')
+                e => e.property_expense_id === propExpId && isWaivedLabel(e.label)
             );
             if (wasRemoved) continue; // Don't re-add manually removed expenses
             await db.insert(billExpenses).values({
@@ -1707,7 +1830,7 @@ const syncPropertyExpensesLazily = async (
             changed = true;
         } else if (
             (existing.amount !== expected.amount || existing.is_recurring !== expected.isRecurring || existing.property_expense_id !== propExpId) &&
-            !existing.label.endsWith('(Removed)')
+            !isWaivedLabel(existing.label)
         ) {
             // Amount, recurring flag, or missing ID changed — update it
             await db.update(billExpenses)
