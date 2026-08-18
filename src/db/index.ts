@@ -68,6 +68,8 @@ export {
 export {
     generateBillsForProperty,
     getBillsForPropertyMonth,
+    getUsagePeriod,
+    BILL_ADVANCE_DAYS,
     getBillById,
     updateBill,
     recalculateBill,
@@ -79,11 +81,13 @@ export {
     getBillPayments,
     resetBill,
     resetFutureBills,
-    persistVirtualBill,
     syncPendingBillsWithUnitSettings,
     savePGUtilityReading,
     getBillsByTenantId,
     getBillSummaryByUnitId,
+    adjustBillForMoveOut,
+    getExpectedRevenueBreakdown,
+    type ExpectedRevenueBreakdown
 } from './billService';
 
 // Notification operations

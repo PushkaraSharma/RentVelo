@@ -9,8 +9,9 @@ import {
     Dimensions,
     Platform
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { X, Check } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { hapticsSelection, hapticsMedium } from '../../utils/haptics';
 import { getAllProperties } from '../../db';
 
@@ -48,6 +49,7 @@ export default function PaymentFilterModal({
 }: PaymentFilterModalProps) {
     const { theme, isDark } = useAppTheme();
     const styles = getStyles(theme, isDark);
+    const insets = useSafeAreaInsets();
 
     const [localFilters, setLocalFilters] = useState<PaymentFilters>(filters);
     const [properties, setProperties] = useState<{ id: number; name: string }[]>([]);
@@ -121,7 +123,7 @@ export default function PaymentFilterModal({
             onRequestClose={onClose}
         >
             <Pressable style={styles.overlay} onPress={onClose}>
-                <View style={styles.content} onStartShouldSetResponder={() => true}>
+                <View style={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) }]} onStartShouldSetResponder={() => true}>
                     <View style={styles.header}>
                         <Text style={styles.title}>Filter Payments</Text>
                         <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -181,7 +183,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
         maxHeight: Dimensions.get('window').height * 0.85,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
     },
     header: {
         flexDirection: 'row',

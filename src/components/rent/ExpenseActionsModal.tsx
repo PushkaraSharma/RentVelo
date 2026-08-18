@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Plus, Minus, ChevronDown, Wallet } from 'lucide-react-native';
-import { addExpenseToBill, recalculateBill } from '../../db';
+import { addExpenseToBill } from '../../db';
 import Toggle from '../common/Toggle';
 import PickerBottomSheet from '../common/PickerBottomSheet';
 import RentModalSheet from './RentModalSheet';
+import { useToast } from '../../hooks/useToast';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
 
 interface ExpenseActionsModalProps {
@@ -26,6 +27,7 @@ const EXPENSE_CATEGORIES = [
 
 export default function ExpenseActionsModal({ visible, onClose, bill, unit }: ExpenseActionsModalProps) {
     const { theme } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme);
     const [actionType, setActionType] = useState<'add' | 'remove'>('add');
     const [label, setLabel] = useState('');
@@ -33,11 +35,26 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
     const [remarks, setRemarks] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+
+    // Start from a clean form every time, so a cancelled entry never leaks into the next open
+    useEffect(() => {
+        if (!visible) return;
+        setActionType('add');
+        setLabel('');
+        setAmount('');
+        setRemarks('');
+        setIsRecurring(false);
+        setShowCategoryPicker(false);
+    }, [visible]);
 
     const handleSubmit = async () => {
+        if (submitting) return;
+
         const amt = parseFloat(amount);
         if (isNaN(amt) || amt <= 0) {
             hapticsError();
+            showToast({ type: 'error', title: 'Invalid amount', message: 'Enter an amount greater than zero.' });
             return;
         }
 
@@ -51,19 +68,24 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
             finalLabel = remarks || 'Discount';
         }
 
-        await addExpenseToBill(bill.id, {
-            label: finalLabel,
-            amount: finalAmount,
-            is_recurring: isRecurring,
-        });
+        setSubmitting(true);
+        try {
+            await addExpenseToBill(bill.id, {
+                label: finalLabel,
+                amount: finalAmount,
+                // Discounts are always one-off; the recurring toggle only applies to charges
+                is_recurring: actionType === 'add' ? isRecurring : false,
+            });
 
-        hapticsMedium();
-        await recalculateBill(bill.id);
-        setLabel('');
-        setRemarks('');
-        setAmount('');
-        setIsRecurring(false);
-        onClose();
+            hapticsMedium();
+            onClose();
+        } catch (error) {
+            console.error('Error saving bill expense:', error);
+            hapticsError();
+            showToast({ type: 'error', title: 'Error', message: 'Failed to save the expense. Please try again.' });
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     if (!bill) return null;
@@ -74,8 +96,9 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
             onClose={onClose}
             title="Expense Actions"
             subtitle={unit?.name}
-            actionLabel={actionType === 'add' ? 'Add Expense' : 'Remove Expense'}
+            actionLabel={submitting ? 'Saving...' : (actionType === 'add' ? 'Add Expense' : 'Remove Expense')}
             onAction={handleSubmit}
+            actionDisabled={submitting}
         >
             {/* Add / Remove Toggle */}
             <View style={styles.toggleRow}>

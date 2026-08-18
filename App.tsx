@@ -6,7 +6,7 @@ import { Provider } from 'react-redux';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { store } from './src/redux/store';
 import RootNavigator from './src/navigation/RootNavigator';
-import { db, migrations } from './src/db/database';
+import { db, migrations, syncDatabaseSchema } from './src/db/database';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { theme } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -19,6 +19,9 @@ import { migrateOldImagesToPermanentStorage } from './src/services/imageMigratio
 import { syncNotificationSchedules } from './src/services/pushNotificationService';
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from './src/navigation/RootNavigator';
+
+// @ts-expect-error
+globalThis.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
@@ -69,6 +72,7 @@ export default function App() {
 
   React.useEffect(() => {
     if (success) {
+      syncDatabaseSchema(); // Double check schema after migrations
       migrateOldImagesToPermanentStorage();
     }
   }, [success]);

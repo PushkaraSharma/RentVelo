@@ -1,0 +1,42 @@
+appId: com.indieroots.rentVelo
+---
+# 04_add_tenant.yaml
+- launchApp:
+    clearState: false
+
+# Navigate to Properties and select the property
+- tapOn: "Properties, tab, 2 of 3"
+- tapOn: "Maestro Test Villa"
+
+# Go to Rooms
+- tapOn: "Rooms"
+
+# Select the room we just created
+- tapOn: "Room 101"
+
+# Tap Register Tenant
+- tapOn: "Register Tenant"
+
+# Fill in Tenant Details
+- tapOn: "Full Name"
+- inputText: "Maestro Tenant"
+- hideKeyboard
+
+- tapOn: "Phone Number"
+- inputText: "9876543210"
+- hideKeyboard
+
+- swipe:
+    direction: UP
+    duration: 500
+
+- tapOn: "Security Deposit Amount"
+- inputText: "2000"
+- hideKeyboard
+
+# Tap Create Tenant
+- tapOn: "Create Tenant"
+
+# Verify Success Modal
+- assertVisible: "Tenant Registered!"
+- tapOn: "Got it" # Or tap outside/close button

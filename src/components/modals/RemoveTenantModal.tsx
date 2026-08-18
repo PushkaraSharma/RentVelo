@@ -25,6 +25,7 @@ interface RemoveTenantModalProps {
     refundAmount: string;
     onRefundAmountChange: (amount: string) => void;
     onSubmit: () => void;
+    liveBalance?: number;
 }
 
 const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
@@ -35,7 +36,8 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
     onDateChange,
     refundAmount,
     onRefundAmountChange,
-    onSubmit
+    onSubmit,
+    liveBalance,
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
@@ -55,7 +57,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                     behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
                     style={styles.keyboardView}
                 >
-                    <View style={styles.modalContent}>
+                    <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom + 20, 20) }]}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Remove Tenant</Text>
                             <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -70,9 +72,9 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                                     <Text style={styles.statValue}>₹ {tenant?.security_deposit || 0}</Text>
                                 </View>
                                 <View style={styles.statBox}>
-                                    <Text style={styles.statLabel}>Balance Left</Text>
-                                    <Text style={[styles.statValue, { color: (tenant?.balance_amount || 0) > 0 ? '#EF4444' : '#10B981' }]}>
-                                        ₹ {tenant?.balance_amount || 0}
+                                    <Text style={styles.statLabel}>{(liveBalance ?? 0) < 0 ? 'Advance Balance' : 'Balance Due'}</Text>
+                                    <Text style={[styles.statValue, { color: (liveBalance ?? 0) > 0 ? '#EF4444' : '#10B981' }]}>
+                                        ₹ {Math.abs(liveBalance ?? 0)}
                                     </Text>
                                 </View>
                             </View>
@@ -107,7 +109,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                                 <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
                             </View>
 
-                            <View style={[styles.modalActions, { paddingBottom: insets.bottom }]}>
+                            <View style={[styles.modalActions]}>
                                 <Button
                                     title="Cancel"
                                     onPress={onClose}
@@ -138,7 +140,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
         paddingHorizontal: theme.spacing.m
     },
     dismissArea: {

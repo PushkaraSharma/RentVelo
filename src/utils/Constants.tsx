@@ -3,6 +3,14 @@ import Constants from 'expo-constants';
 
 export const CURRENCY = '₹';
 
+/**
+ * Bill lines that mirror a property expense are stored with a "Property: " prefix so
+ * the reconciler can match legacy rows by label. That prefix is internal bookkeeping
+ * and should never be shown to a landlord or a tenant.
+ */
+export const formatExpenseLabel = (label?: string | null): string =>
+    (label ?? '').replace(/^Property:\s*/, '');
+
 export const PROPERTY_TYPES = [
     { id: 'house', label: 'House', icon: Home },
     { id: 'building', label: 'Building', icon: Building },
@@ -74,9 +82,8 @@ export const OTA_VERSION = 1;
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
-        "Added Rent Increment feature",
-        "Resolve receipt related issue",
-        "Bug fixes",
-        "Added Notification feature"
+        "Option to add extra documents to a tenant's profile",
+        "Rent expenses and discounts now save correctly",
+        "Other minor bug fixes and performance improvements",
     ]
 };

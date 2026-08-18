@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { payments, tenants, units, meterReadings, properties, rentBills, type Payment, type NewPayment, type MeterReading, type NewMeterReading } from './schema';
 import { eq, desc, and, gte, sum } from 'drizzle-orm';
+import { generateBillsForProperty } from './billService';
 
 // Re-export types
 export { Payment, MeterReading };
@@ -111,6 +112,12 @@ export const getDashboardData = async (): Promise<DashboardData> => {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
+    // --- Pre-computation: Ensure bills are generated for the current month ---
+    const allProps = await db.select().from(properties);
+    await Promise.all(
+        allProps.map(prop => generateBillsForProperty(prop.id, currentMonth, currentYear))
+    );
+
     // --- Current month bills ---
     const allBills = await db.select().from(rentBills)
         .where(and(eq(rentBills.month, currentMonth), eq(rentBills.year, currentYear)));
@@ -123,7 +130,6 @@ export const getDashboardData = async (): Promise<DashboardData> => {
     const pendingTenantCount = new Set(pendingBills.map(b => b.tenant_id)).size;
 
     // --- Pending properties (for property picker) ---
-    const allProps = await db.select().from(properties);
     const pendingProperties: { id: number; name: string; pendingCount: number }[] = [];
 
     // --- Occupancy ---
@@ -273,4 +279,138 @@ export const getMeterReadingsByUnitId = async (unitId: number): Promise<MeterRea
         .from(meterReadings)
         .where(eq(meterReadings.unit_id, unitId))
         .orderBy(desc(meterReadings.reading_date));
+};
+
+// ===== PROPERTY STATISTICS =====
+
+export interface PropertyStatistics {
+    summary: {
+        totalExpected: number;
+        totalReceived: number;
+        totalBalance: number;
+    };
+    breakdown: {
+        totalRent: number;
+        totalElectric: number;
+        totalWater: number;
+        totalExpenses: number;
+        totalDeposit: number;
+    };
+    paymentMethods: {
+        cash: number;
+        upi: number;
+        bank_transfer: number;
+        other: number;
+    };
+}
+
+export const getPropertyStatistics = async (propertyId: number, month: number, year: number): Promise<PropertyStatistics> => {
+    const db = getDb();
+
+    // 1. Get bills for this month/year
+    const bills = await db.select().from(rentBills)
+        .where(
+            and(
+                eq(rentBills.property_id, propertyId),
+                eq(rentBills.month, month),
+                eq(rentBills.year, year)
+            )
+        );
+
+    let totalExpected = 0;
+    let totalReceived = 0;
+    let totalBalance = 0;
+
+    let totalRent = 0;
+    let totalElectric = 0;
+    let totalWater = 0;
+
+    bills.forEach(b => {
+        totalExpected += (b.total_amount || 0);
+        totalReceived += (b.paid_amount || 0);
+        totalBalance += (b.balance || 0);
+
+        totalRent += (b.rent_amount || 0);
+        totalElectric += (b.electricity_amount || 0);
+        totalWater += (b.water_amount || 0);
+    });
+
+    // 2. Get property expenses for this month/year
+    const { propertyExpenses } = require('./schema');
+    const { lt, or } = require('drizzle-orm');
+    
+    const expenses = await db.select().from(propertyExpenses)
+        .where(
+            and(
+                eq(propertyExpenses.property_id, propertyId),
+                or(
+                    and(
+                        eq(propertyExpenses.month, month),
+                        eq(propertyExpenses.year, year)
+                    ),
+                    and(
+                        eq(propertyExpenses.frequency, 'monthly'),
+                        or(
+                            lt(propertyExpenses.year, year),
+                            and(
+                                eq(propertyExpenses.year, year),
+                                lt(propertyExpenses.month, month)
+                            )
+                        )
+                    )
+                )
+            )
+        );
+
+    let totalExpenses = 0;
+    expenses.forEach(e => {
+        totalExpenses += (e.amount || 0);
+    });
+
+    // 3. Get total security deposits for active tenants in this property
+    const activeTenants = await db.select({ deposit: tenants.security_deposit })
+        .from(tenants)
+        .where(
+            and(
+                eq(tenants.property_id, propertyId),
+                eq(tenants.status, 'active')
+            )
+        );
+    let totalDeposit = 0;
+    activeTenants.forEach(t => {
+        totalDeposit += (t.deposit || 0);
+    });
+
+    // 4. Get payment methods split for payments made towards this month's bills
+    // We will query payments that are linked to these bills.
+    const billIds = bills.map(b => b.id);
+    let cash = 0;
+    let upi = 0;
+    let bank_transfer = 0;
+    let other = 0;
+
+    if (billIds.length > 0) {
+        // Drizzle 'inArray' needs to be imported
+        const { inArray } = require('drizzle-orm');
+        const paymentsForBills = await db.select().from(payments)
+            .where(
+                and(
+                    inArray(payments.bill_id, billIds),
+                    eq(payments.status, 'paid')
+                )
+            );
+
+        paymentsForBills.forEach(p => {
+            if (p.payment_method === 'cash') cash += p.amount;
+            else if (p.payment_method === 'upi') upi += p.amount;
+            else if (p.payment_method === 'bank_transfer') bank_transfer += p.amount;
+            else other += p.amount;
+        });
+    }
+
+    return {
+        summary: { totalExpected, totalReceived, totalBalance },
+        breakdown: { totalRent, totalElectric, totalWater, totalExpenses, totalDeposit },
+        paymentMethods: { cash, upi, bank_transfer, other }
+    };
 };

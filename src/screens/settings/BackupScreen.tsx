@@ -16,7 +16,8 @@ import { storage } from '../../utils/storage';
 import { Platform } from 'react-native';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
-import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
+import { trackEvent, AnalyticsEvents, setEnrichedUserProperties } from '../../services/analyticsService';
+import { logCrashlyticsError } from '../../services/crashlyticsService';
 import { useToast } from '../../hooks/useToast';
 
 export default function BackupScreen({ navigation }: any) {
@@ -61,6 +62,7 @@ export default function BackupScreen({ navigation }: any) {
         setBackingUp(null);
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
+            setEnrichedUserProperties({ hasBackup: true });
             updateLastSync();
             showToast({ type: 'success', title: 'Success', message: 'Local backup saved successfully' });
         } else {
@@ -103,23 +105,14 @@ export default function BackupScreen({ navigation }: any) {
             setShowDisconnectModal(true);
         } else {
             try {
-                if (Platform.OS === 'ios') {
-                    // On iOS, we first ensure the user is signed in, then request Drive scopes
-                    const user = await signInWithGoogle();
-                    if (user) {
-                        const granted = await requestDriveScopes();
-                        if (granted) {
-                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                            showToast({ type: 'success', title: 'Success', message: 'Google account linked with Drive successfully!' });
-                        } else {
-                            showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
-                        }
-                    }
-                } else {
-                    const user = await signInWithGoogle();
-                    if (user) {
+                const user = await signInWithGoogle();
+                if (user) {
+                    const granted = await requestDriveScopes();
+                    if (granted) {
                         dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        showToast({ type: 'success', title: 'Success', message: 'Google account linked successfully!' });
+                        showToast({ type: 'success', title: 'Success', message: 'Google account linked with Drive successfully!' });
+                    } else {
+                        showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
                     }
                 }
             } catch (error) {
@@ -131,25 +124,16 @@ export default function BackupScreen({ navigation }: any) {
     const handleGoogleBackup = async () => {
         if (!isGoogleLinked) {
             try {
-                if (Platform.OS === 'ios') {
-                    const user = await signInWithGoogle();
-                    if (user) {
-                        const granted = await requestDriveScopes();
-                        if (granted) {
-                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        } else {
-                            return;
-                        }
-                    } else {
-                        return;
-                    }
-                } else {
-                    const user = await signInWithGoogle();
-                    if (user) {
+                const user = await signInWithGoogle();
+                if (user) {
+                    const granted = await requestDriveScopes();
+                    if (granted) {
                         dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
                     } else {
                         return;
                     }
+                } else {
+                    return;
                 }
             } catch (error) {
                 showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
@@ -161,6 +145,7 @@ export default function BackupScreen({ navigation }: any) {
         setBackingUp(null);
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
+            setEnrichedUserProperties({ hasBackup: true });
             updateLastSync();
             showToast({ type: 'success', title: 'Success', message: 'Backup uploaded to Google Drive.' });
         } else {
@@ -238,7 +223,7 @@ export default function BackupScreen({ navigation }: any) {
                 try {
                     const user = await signInWithGoogle();
                     if (user) {
-                        const granted = Platform.OS === 'ios' ? await requestDriveScopes() : true;
+                        const granted = await requestDriveScopes();
                         if (granted) {
                             dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
                             // Try restore again

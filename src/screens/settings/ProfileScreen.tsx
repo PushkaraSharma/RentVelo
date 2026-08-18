@@ -15,6 +15,8 @@ import ImagePickerModal from '../../components/common/ImagePickerModal';
 import { storage } from '../../utils/storage';
 import { saveImageToPermanentStorage, getFullImageUri } from '../../services/imageService';
 import { useToast } from '../../hooks/useToast';
+import { setAnalyticsUser } from '../../services/analyticsService';
+import { setCrashlyticsUser } from '../../services/crashlyticsService';
 
 export default function ProfileScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -71,6 +73,11 @@ export default function ProfileScreen({ navigation }: any) {
             const updatedUser = { name, email, photoUrl: finalPhotoUrl || undefined };
             dispatch(login(updatedUser)); // Update Redux
             storage.set('@user_profile', JSON.stringify({ phone, businessName })); // Save extra fields
+
+            // Sync updated identity to analytics & crash reporting
+            await setAnalyticsUser({ email, name });
+            await setCrashlyticsUser({ email, name });
+
             showToast({ type: 'success', title: 'Success', message: 'Profile updated successfully' });
             navigation.goBack();
         } catch (error) {

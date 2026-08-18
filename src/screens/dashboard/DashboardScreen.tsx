@@ -13,10 +13,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { storage } from '../../utils/storage';
 import { OTA_VERSION, CHANGELOG } from '../../utils/Constants';
 import WhatsNewModal from '../../components/modals/WhatsNewModal';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import GetStartedCard from '../../components/dashboard/GetStartedCard';
 import { getFullImageUri } from '../../services/imageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { setPortfolioStats } from '../../services/analyticsService';
+import { setPortfolioStats, setEnrichedUserProperties } from '../../services/analyticsService';
 
 export default function DashboardScreen({ navigation }: any) {
     const { theme, isDark } = useAppTheme();
@@ -42,7 +42,19 @@ export default function DashboardScreen({ navigation }: any) {
             // Sync portfolio stats for analytics segmentation
             setPortfolioStats({
                 propertyCount: result.propertyCount,
-                tenantCount: result.occupiedCount // Active tenants
+                tenantCount: result.occupiedCount, // Active tenants
+                totalUnits: result.totalRooms,
+            });
+
+            // Sync enriched user properties on each dashboard load
+            const signupDate = storage.getString('@signup_date');
+            const daysSinceSignup = signupDate
+                ? Math.floor((Date.now() - new Date(signupDate).getTime()) / (1000 * 60 * 60 * 24))
+                : undefined;
+
+            setEnrichedUserProperties({
+                appVersion: CHANGELOG.version,
+                daysSinceSignup,
             });
         } catch (error) {
             console.error('Error loading dashboard data:', error);
@@ -116,9 +128,20 @@ export default function DashboardScreen({ navigation }: any) {
                         <FinancialSummary
                             expected={data.expected}
                             collected={data.collected}
-                            onPress={() => (navigation as any).navigate('Payments')}
+                            onPressExpected={() => (navigation as any).navigate('ExpectedRevenue')}
+                            onPressCollected={() => (navigation as any).navigate('Payments')}
                             isPrivacyMode={isPrivacyMode}
                         />
+
+                        {/* Get Started Guide - shows when setup is incomplete */}
+                        {(data.propertyCount === 0 || data.occupiedCount === 0 || data.collected === 0) && (
+                            <GetStartedCard
+                                navigation={navigation}
+                                propertyCount={data.propertyCount}
+                                tenantCount={data.occupiedCount}
+                                hasPayments={data.collected > 0}
+                            />
+                        )}
 
                         {/* Pending Alert */}
                         <PendingAlert
@@ -129,7 +152,11 @@ export default function DashboardScreen({ navigation }: any) {
                         />
 
                         {/* Collection Trends */}
-                        <CollectionTrends trends={data.trends} isPrivacyMode={isPrivacyMode} />
+                        <CollectionTrends
+                            trends={data.trends}
+                            propertyCount={data.propertyCount}
+                            isPrivacyMode={isPrivacyMode}
+                        />
 
                         {/* Occupancy Insight */}
                         <View style={styles.occupancyCard}>

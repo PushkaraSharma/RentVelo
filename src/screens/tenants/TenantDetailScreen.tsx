@@ -30,6 +30,7 @@ import {
     Building,
     Receipt,
 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Header from '../../components/common/Header';
 import {
     getTenantById,
@@ -37,6 +38,8 @@ import {
     getUnitById,
     getBillsByTenantId,
     getPaymentsByTenantId,
+    getDocumentsByTenantId,
+    Document,
 } from '../../db';
 import { useFocusEffect } from '@react-navigation/native';
 import { CURRENCY } from '../../utils/Constants';
@@ -54,6 +57,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
     const [property, setProperty] = useState<any>(null);
     const [unit, setUnit] = useState<any>(null);
     const [bills, setBills] = useState<any[]>([]);
+    const [additionalDocs, setAdditionalDocs] = useState<Document[]>([]);
     const [refreshing, setRefreshing] = useState(false);
 
     // Image Preview
@@ -65,16 +69,18 @@ export default function TenantDetailScreen({ navigation, route }: any) {
 
     const loadData = async () => {
         try {
-            const [tenantData, propData, unitData, billsData] = await Promise.all([
+            const [tenantData, propData, unitData, billsData, docsData] = await Promise.all([
                 getTenantById(tenantId),
                 propertyId ? getPropertyById(propertyId) : null,
                 unitId ? getUnitById(unitId) : null,
                 getBillsByTenantId(tenantId),
+                getDocumentsByTenantId(tenantId),
             ]);
             setTenant(tenantData);
             setProperty(propData);
             setUnit(unitData);
             setBills(billsData);
+            setAdditionalDocs(docsData);
         } catch (error) {
             console.error('Error loading tenant details:', error);
         }
@@ -138,7 +144,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
     if (!tenant) return null;
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Header
                 title="Tenant Details"
                 subTitle={property?.name}
@@ -228,19 +234,10 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                                         Linking.openURL(`whatsapp://send?phone=${whatsappPhone}`);
                                     }}
                                 >
-                                    <Text style={{ fontSize: 15 }}>💬</Text>
+                                    <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                                     <Text style={[styles.contactBtnText, { color: '#25D366' }]}>WhatsApp</Text>
                                 </Pressable>
                             </>
-                        ) : null}
-                        {tenant.email ? (
-                            <Pressable
-                                style={[styles.contactBtn, { backgroundColor: isDark ? '#7C3AED20' : '#F3E8FF', flex: tenant.phone ? 0 : 1 }]}
-                                onPress={() => Linking.openURL(`mailto:${tenant.email}`)}
-                            >
-                                <Mail size={16} color="#7C3AED" />
-                                <Text style={[styles.contactBtnText, { color: '#7C3AED' }]}>Email</Text>
-                            </Pressable>
                         ) : null}
                     </View>
                 </View>
@@ -419,7 +416,7 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                 )}
 
                 {/* ─── Document Vault ─── */}
-                {(tenant.aadhaar_front_uri || tenant.aadhaar_back_uri || tenant.pan_uri) && (
+                {(tenant.aadhaar_front_uri || tenant.aadhaar_back_uri || tenant.pan_uri || additionalDocs.length > 0) && (
                     <View style={styles.infoCard}>
                         <Text style={styles.cardTitle}>Documents</Text>
                         <View style={styles.docsGrid}>
@@ -459,6 +456,19 @@ export default function TenantDetailScreen({ navigation, route }: any) {
                                     <Text style={styles.docLabel}>PAN Card</Text>
                                 </Pressable>
                             )}
+                            {additionalDocs.map((doc) => (
+                                <Pressable
+                                    key={doc.id}
+                                    style={styles.docThumb}
+                                    onPress={() => openPreview(doc.file_uri, doc.document_name)}
+                                >
+                                    <Image
+                                        source={{ uri: getFullImageUri(doc.file_uri) || doc.file_uri }}
+                                        style={styles.docImage}
+                                    />
+                                    <Text style={styles.docLabel} numberOfLines={1}>{doc.document_name}</Text>
+                                </Pressable>
+                            ))}
                         </View>
                     </View>
                 )}
@@ -568,13 +578,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     contactActions: {
         flexDirection: 'row',
-        gap: 10,
         borderTopWidth: 1,
         borderTopColor: theme.colors.border + '60',
         paddingTop: theme.spacing.m,
+        justifyContent: 'space-between',
     },
     contactBtn: {
-        flex: 1,
+        width: '48%',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',

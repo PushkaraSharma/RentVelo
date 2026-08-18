@@ -163,6 +163,14 @@ export default function PropertyOperationsScreen({ navigation, route }: any) {
             color: '#F59E0B',
             bg: isDark ? '#F59E0B20' : '#FFFBEB',
             onPress: () => navigation.navigate('Expenses', { propertyId })
+        },
+        {
+            id: 'statistics',
+            label: 'Statistics',
+            icon: TrendingUp,
+            color: '#3B82F6',
+            bg: isDark ? '#3B82F620' : '#EFF6FF',
+            onPress: () => navigation.navigate('PropertyStatistics', { propertyId })
         }
     ];
 

@@ -13,11 +13,13 @@ interface MonthPickerModalProps {
     visible: boolean;
     month: number; // 1-12
     year: number;
+    maxMonth?: number;
+    maxYear?: number;
     onSelect: (month: number, year: number) => void;
     onClose: () => void;
 }
 
-export default function MonthPickerModal({ visible, month, year, onSelect, onClose }: MonthPickerModalProps) {
+export default function MonthPickerModal({ visible, month, year, maxMonth, maxYear, onSelect, onClose }: MonthPickerModalProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const [displayYear, setDisplayYear] = React.useState(year);
@@ -38,7 +40,11 @@ export default function MonthPickerModal({ visible, month, year, onSelect, onClo
                         <ChevronLeft size={22} color={theme.colors.textPrimary} />
                     </Pressable>
                     <Text style={styles.yearText}>{displayYear}</Text>
-                    <Pressable onPress={() => setDisplayYear(displayYear + 1)} style={styles.chevronBtn}>
+                    <Pressable 
+                        onPress={() => setDisplayYear(displayYear + 1)} 
+                        style={[styles.chevronBtn, (maxYear && displayYear >= maxYear) ? { opacity: 0.3 } : null]}
+                        disabled={!!(maxYear && displayYear >= maxYear)}
+                    >
                         <ChevronRight size={22} color={theme.colors.textPrimary} />
                     </Pressable>
                 </View>
@@ -49,21 +55,26 @@ export default function MonthPickerModal({ visible, month, year, onSelect, onClo
                         const m = index + 1;
                         const isSelected = m === month && displayYear === year;
                         const isCurrent = m === new Date().getMonth() + 1 && displayYear === new Date().getFullYear();
+                        const isFuture = (maxYear && maxMonth) ? (displayYear > maxYear || (displayYear === maxYear && m > maxMonth)) : false;
 
                         return (
                             <Pressable
                                 key={name}
                                 style={[
                                     styles.monthCell,
-                                    isSelected && styles.selectedCell,
-                                    isCurrent && !isSelected && styles.currentCell,
+                                    isSelected ? styles.selectedCell : null,
+                                    isCurrent && !isSelected ? styles.currentCell : null,
+                                    isFuture ? { opacity: 0.3 } : null
                                 ]}
-                                onPress={() => onSelect(m, displayYear)}
+                                onPress={() => {
+                                    if (!isFuture) onSelect(m, displayYear);
+                                }}
+                                disabled={isFuture}
                             >
                                 <Text style={[
                                     styles.monthText,
-                                    isSelected && styles.selectedText,
-                                    isCurrent && !isSelected && styles.currentText,
+                                    isSelected ? styles.selectedText : null,
+                                    isCurrent && !isSelected ? styles.currentText : null,
                                 ]}>
                                     {name.substring(0, 3)}
                                 </Text>

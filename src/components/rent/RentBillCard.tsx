@@ -4,7 +4,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
 import {
-    updateBill, recalculateBill,
+    updateBill, recalculateBill, resetFutureBills,
     getBillExpenses, getBillPayments,
     getReceiptConfigByPropertyId, getPropertyById, getTenantById, getUnitById
 } from '../../db';
@@ -40,8 +40,8 @@ interface RentBillCardProps {
         isVacant: boolean;
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
+        isMovedOut?: boolean;
         hasFuturePersistedBills?: boolean;
-        isStrictlyFuture?: boolean;
     };
     period: { start: string; end: string; days: number };
     onRefresh: (isSilent?: boolean) => void;
@@ -52,7 +52,7 @@ interface RentBillCardProps {
 }
 
 const RentBillCard = React.memo(({ item, period, onRefresh, navigation, propertyId, viewingMonth, viewingYear }: RentBillCardProps) => {
-    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, hasFuturePersistedBills } = item;
+    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, isMovedOut, hasFuturePersistedBills } = item;
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
@@ -79,9 +79,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [isReseting, setIsReseting] = useState(false);
     const [meterReadingError, setMeterReadingError] = useState('');
     const [waterReadingError, setWaterReadingError] = useState('');
-    const [showVirtualBillWarning, setShowVirtualBillWarning] = useState(false);
-    const [pendingVirtualAction, setPendingVirtualAction] = useState<(() => void) | null>(null);
-    const [isPersistingVirtual, setIsPersistingVirtual] = useState(false);
 
     const swipeAnim = useRef(new Animated.Value(0)).current;
     const viewShotRef = useRef<any>(null);
@@ -282,9 +279,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_RECEIPT_GENERATED, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
 
-                await executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
-
                 setGeneratingReceipt(false);
+                executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`)
+                    .catch((shareError) => {
+                        console.error('Receipt share error:', shareError);
+                        showToast({ type: 'error', title: 'Share failed', message: 'Receipt generated, but sharing failed.' });
+                    });
             } else {
                 setShareHtml({ html, action: 'receipt' });
             }
@@ -331,9 +331,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_REMINDER_SENT, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
-                await executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
-
                 setSendingReminder(false);
+                executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`)
+                    .catch((shareError) => {
+                        console.error('Reminder share error:', shareError);
+                        showToast({ type: 'error', title: 'Share failed', message: 'Reminder generated, but sharing failed.' });
+                    });
             } else {
                 setShareHtml({ html, action: 'reminder' });
             }
@@ -483,7 +486,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const confirmResetBill = async () => {
         try {
             setIsReseting(true);
-            const { resetFutureBills } = require('../../db');
             await resetFutureBills(unit.id, viewingMonth, viewingYear);
             onRefresh();
         } catch (e) {
@@ -495,49 +497,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    const executeVirtualAction = (action: () => void) => {
-        if (bill?.id === null) {
-            if (item.isStrictlyFuture) {
-                Keyboard.dismiss();
-                setPendingVirtualAction(() => action);
-                setTimeout(() => {
-                    setShowVirtualBillWarning(true);
-                }, 100);
-            } else {
-                handleConfirmVirtualAction(action);
-            }
-        } else {
-            action();
-        }
-    };
 
-    const handleConfirmVirtualAction = async (silentAction?: () => void) => {
-        const actionToRun = silentAction || pendingVirtualAction;
-        if (!bill || bill.id !== null || !actionToRun) {
-            return;
-        }
-
-        setIsPersistingVirtual(true);
-        try {
-            const { persistVirtualBill } = require('../../db');
-            const newBillId = await persistVirtualBill(bill);
-
-            // Update local object bridge so that 'actionToRun' (like runSave) 
-            // has the ID it needs immediately before the refresh unmounts us.
-            bill.id = newBillId;
-
-            // Wait for the action (e.g., save reading) to complete BEFORE refreshing UI
-            await Promise.resolve(actionToRun());
-            onRefresh(true);
-        } catch (e) {
-            console.error('[RentBillCard] Error persisting virtual bill:', e);
-            showToast({ type: 'error', title: 'Error', message: 'Failed to persist bill' });
-        } finally {
-            setIsPersistingVirtual(false);
-            setShowVirtualBillWarning(false);
-            setPendingVirtualAction(null);
-        }
-    };
 
     const handleMeterReadingSave = async (type: 'electricity' | 'water') => {
         if (!bill || savingReading.current) return;
@@ -617,11 +577,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         };
 
-        if (bill.id === null) {
-            executeVirtualAction(runSave);
-        } else {
-            runSave();
-        }
+        runSave();
     };
 
     const formattedDate = () => {
@@ -632,7 +588,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     };
 
     return (
-        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard]}>
+        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard, isMovedOut && { borderLeftWidth: 3, borderLeftColor: '#F59E0B' }]}>
             {isLocked && (
                 <View style={styles.lockedBanner}>
                     <Lock size={12} color={theme.colors.textSecondary} />
@@ -656,6 +612,11 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                 </Text>
                             </View>
                         )}
+                        {isMovedOut && (
+                            <View style={[styles.leaseBadge, { backgroundColor: isDark ? '#78350F40' : '#FEF3C7' }]}>
+                                <Text style={[styles.leaseBadgeText, { color: '#D97706' }]}>Moved Out</Text>
+                            </View>
+                        )}
                     </View>
                     <Text style={styles.tenantName}>{tenant?.name || '—'}</Text>
                     {isLocked && (
@@ -674,7 +635,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         if ((bill.paid_amount ?? 0) > 0) {
                             setShowPaidAmount(true);
                         } else if (!isLocked) {
-                            executeVirtualAction(() => setShowReceivePayment(true));
+                            setShowReceivePayment(true);
                         } else {
                             showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' });
                         }
@@ -716,7 +677,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'electricity' }))}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'electricity' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
@@ -762,7 +723,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'water' }))}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'water' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
                                 <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
@@ -782,7 +743,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             {/* === RENT + PREVIOUS BALANCE (tappable) === */}
             <Pressable
                 style={styles.rentSection}
-                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowTransactionInfo(true))}
+                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowTransactionInfo(true)}
             >
                 <View style={styles.rentRow}>
                     <View>
@@ -816,14 +777,21 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             <View style={styles.actionsRow}>
                 <Pressable
                     style={[styles.addRemoveBtn, isLocked && { opacity: 0.5 }]}
-                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowExpenseActions(true))}
+                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowExpenseActions(true)}
                 >
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>
                 </Pressable>
-                {(bill.total_expenses ?? 0) > 0 && (
-                    <Pressable style={styles.expenseChip} onPress={() => setShowExpenseList(true)}>
-                        <Text style={styles.expenseChipText}>{formatAmount(bill.total_expenses)}</Text>
+                {/* Shown for credits too, otherwise a bill that only has discounts has no
+                    way to reach the expense list and undo them. */}
+                {(bill.total_expenses ?? 0) !== 0 && (
+                    <Pressable
+                        style={[styles.expenseChip, (bill.total_expenses ?? 0) < 0 && styles.expenseChipCredit]}
+                        onPress={() => setShowExpenseList(true)}
+                    >
+                        <Text style={[styles.expenseChipText, (bill.total_expenses ?? 0) < 0 && styles.expenseChipTextCredit]}>
+                            {(bill.total_expenses ?? 0) < 0 ? '−' : ''}{formatAmount(Math.abs(bill.total_expenses ?? 0))}
+                        </Text>
                     </Pressable>
                 )}
                 <View style={{ flex: 1 }} />
@@ -1014,6 +982,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowTransactionInfo(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                tenant={tenant}
                 period={period}
             />
             <ExpenseActionsModal
@@ -1027,6 +996,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowExpenseList(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                locked={isLocked}
             />
             <EditUtilityModal
                 visible={showEditUtility.visible}
@@ -1044,19 +1014,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 confirmText="Delete"
                 variant="danger"
                 loading={isReseting}
-            />
-            <ConfirmationModal
-                visible={showVirtualBillWarning}
-                onClose={() => {
-                    setShowVirtualBillWarning(false);
-                    setPendingVirtualAction(null);
-                }}
-                onConfirm={handleConfirmVirtualAction}
-                title="Modify Future Month?"
-                message="You're editing a future month. This will save your changes and lock all previous months."
-                confirmText="Proceed"
-                variant="danger"
-                loading={isPersistingVirtual}
             />
         </View >
     );
@@ -1311,10 +1268,16 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderRadius: 10,
         backgroundColor: theme.colors.successLight,
     },
+    expenseChipCredit: {
+        backgroundColor: theme.colors.dangerLight,
+    },
     expenseChipText: {
         fontSize: 12,
         fontWeight: theme.typography.semiBold,
         color: theme.colors.success,
+    },
+    expenseChipTextCredit: {
+        color: theme.colors.danger,
     },
     totalCol: {
         alignItems: 'flex-end',

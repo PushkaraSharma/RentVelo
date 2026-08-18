@@ -8,11 +8,11 @@ interface InputProps extends TextInputProps {
     error?: string;
 }
 
-export default function Input({ label, icon, error, style, ...props }: InputProps) {
+export default function Input({ label, icon, error, style, containerStyle, ...props }: InputProps & { containerStyle?: any }) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, containerStyle]}>
             {label && <Text style={styles.label}>{label}</Text>}
             <View style={[styles.inputContainer, error && styles.errorBorder]}>
                 {icon && <View style={styles.icon}>{icon}</View>}

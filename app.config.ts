@@ -8,7 +8,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     "name": appName,
     "slug": "rentvelo",
-    "version": "0.0.4",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "automatic",
@@ -55,11 +55,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           "color": "#3B82F6"
         }
       ],
+      "expo-font",
       "expo-sqlite",
       "expo-web-browser",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
+      "@react-native-firebase/crashlytics",
       "@react-native-google-signin/google-signin",
+      "@react-native-community/datetimepicker",
       [
         "expo-local-authentication",
         {

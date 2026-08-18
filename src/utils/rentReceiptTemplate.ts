@@ -1,4 +1,4 @@
-import { CURRENCY } from './Constants';
+import { CURRENCY, formatExpenseLabel } from './Constants';
 
 interface ReceiptData {
     property: any;
@@ -54,7 +54,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     // Status
     const isPaid = bill.status === 'paid' || bill.status === 'overpaid';
     const isPartial = bill.status === 'partial';
-    const statusBg = isPaid ? '#10B981' : isPartial ? '#F59E0B' : '#EF4444';
+    const statusBg = isPaid ? '#059669' : isPartial ? '#B45309' : '#B91C1C';
     const statusLabel = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'PENDING';
 
     // Rent Period — use bill dates if available, otherwise derive from displayMonth
@@ -67,7 +67,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const filteredExpenses = expenses.filter(e => e.amount !== 0);
     const expenseRows = filteredExpenses.map(e => `
         <tr>
-            <td style="padding:4px 10px; border-bottom:1px solid #f0f0f0; font-size:11px;">${e.label}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #f0f0f0; font-size:11px;">${formatExpenseLabel(e.label)}</td>
             <td style="padding:4px 10px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:600; color:${e.amount < 0 ? '#EF4444' : '#111'}; font-size:11px;">
                 ${e.amount < 0 ? '−' : '+'}${fmtCur(Math.abs(e.amount))}
             </td>
@@ -77,9 +77,9 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     // Payment rows
     const paymentRows = payments.map(p => `
         <tr>
-            <td style="padding:4px 10px; border-bottom:1px solid #e5f5ed; font-size:11px;">${fmtDate(p.payment_date || p.created_at)}</td>
-            <td style="padding:4px 10px; border-bottom:1px solid #e5f5ed; font-size:11px;">${p.payment_method || 'Cash'}</td>
-            <td style="padding:4px 10px; border-bottom:1px solid #e5f5ed; text-align:right; font-weight:700; font-size:11px; color:#10B981;">${fmtCur(p.amount)}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; font-size:11px;">${fmtDate(p.payment_date || p.created_at)}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; font-size:11px;">${p.payment_method || 'Cash'}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; text-align:right; font-weight:700; font-size:11px; color:#059669;">${fmtCur(p.amount)}</td>
         </tr>
     `).join('');
 
@@ -94,8 +94,8 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 
     const bankCol = hasBank ? `
         <td style="padding:0 6px 0 0; vertical-align:top; width:${hasQr ? '38%' : '50%'};">
-            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px; height:100%;">
-                <div style="font-size:12px; font-weight:700; color:#7C3AED; margin-bottom:4px;">🏦 Bank Transfer</div>
+            <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:8px 10px; height:100%;">
+                <div style="font-size:12px; font-weight:700; color:#374151; margin-bottom:4px;">🏦 Bank Transfer</div>
                 <div style="font-size:12px; color:#333; line-height:1.5;">${receiptConfig.bank_name || ''}<br/>A/C: <strong>${receiptConfig.bank_acc_number || '—'}</strong><br/>IFSC: ${receiptConfig.bank_ifsc || '—'}${receiptConfig.bank_acc_holder ? `<br/>Name: ${receiptConfig.bank_acc_holder}` : ''}</div>
             </div>
         </td>
@@ -104,13 +104,13 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const upiOrWalletCol = (hasUpi || hasWallet) ? `
         <td style="padding:0 6px; vertical-align:top; width:${hasQr ? '30%' : '50%'};">
             ${hasUpi ? `
-            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px; margin-bottom:${hasWallet ? '4px' : '0'};">
-                <div style="font-size:12px; font-weight:700; color:#7C3AED; margin-bottom:3px;">💳 UPI</div>
+            <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:8px 10px; margin-bottom:${hasWallet ? '4px' : '0'};">
+                <div style="font-size:12px; font-weight:700; color:#374151; margin-bottom:3px;">💳 UPI</div>
                 <div style="font-size:14px; font-weight:600; color:#333; word-break:break-all;">${receiptConfig.upi_id}</div>
             </div>` : ''}
             ${hasWallet ? `
-            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px;">
-                <div style="font-size:12px; font-weight:700; color:#7C3AED; margin-bottom:3px;">📱 ${walletLabels[receiptConfig.wallet_type] || 'Wallet'}</div>
+            <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:8px 10px;">
+                <div style="font-size:12px; font-weight:700; color:#374151; margin-bottom:3px;">📱 ${walletLabels[receiptConfig.wallet_type] || 'Wallet'}</div>
                 <div style="font-size:14px; color:#333;">${receiptConfig.wallet_phone}${receiptConfig.wallet_name ? ` (${receiptConfig.wallet_name})` : ''}</div>
             </div>` : ''}
         </td>
@@ -118,9 +118,9 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
 
     const qrCol = hasQr ? `
         <td style="padding:0 0 0 6px; vertical-align:top; width:${hasBank || hasUpi || hasWallet ? '32%' : '100%'}; text-align:center;">
-            <div style="background:#F5F3FF; border-radius:6px; padding:8px 10px; display:inline-block; width:100%;">
+            <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:8px 10px; display:inline-block; width:100%;">
                 <img src="${receiptConfig.payment_qr_uri}" style="width:80px; height:80px; display:block; margin:0 auto;" />
-                <div style="font-size:10px; font-weight:700; color:#7C3AED; margin-top:4px;">Scan to Pay</div>
+                <div style="font-size:10px; font-weight:700; color:#374151; margin-top:4px;">Scan to Pay</div>
             </div>
         </td>
     ` : '';
@@ -148,7 +148,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            color: #111;
+            color: #111827;
             font-size: 12px;
             line-height: 1.4;
             -webkit-print-color-adjust: exact;
@@ -163,11 +163,11 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
         }
         .divider { border: none; border-top: 1px solid #E5E7EB; margin: 8px 0; }
         .section-label {
-            font-size: 12px;
-            font-weight: 700;
-            color: #7C3AED;
+            font-size: 11px;
+            font-weight: 800;
+            color: #374151;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.6px;
             margin-bottom: 5px;
         }
     </style>
@@ -180,29 +180,29 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
         <div style="display:flex; align-items:center; gap:10px;">
             ${receiptConfig?.logo_uri ? `<img src="${receiptConfig.logo_uri}" style="height:42px; width:auto;" />` : ''}
             <div>
-                <div style="font-size:24px; font-weight:900; color:#7C3AED; letter-spacing:1px; line-height:1;">RENT RECEIPT</div>
-                <div style="font-size:11px; color:#555; margin-top:2px;">${monthName} ${yearNum} &nbsp;|&nbsp; ${period.days} Days</div>
+                <div style="font-size:24px; font-weight:900; color:#111827; letter-spacing:0.6px; line-height:1;">RENT RECEIPT</div>
+                <div style="font-size:11px; color:#6B7280; margin-top:2px; font-weight:600;">${monthName} ${yearNum} &nbsp;|&nbsp; ${period.days} Days</div>
             </div>
         </div>
         <div style="text-align:right;">
-            <div style="font-size:10px; color:#888; margin-bottom:1px;">RECEIPT NO.</div>
+            <div style="font-size:10px; color:#6B7280; margin-bottom:1px; font-weight:700; letter-spacing:0.4px;">RECEIPT NO.</div>
             <div style="font-size:15px; font-weight:800; color:#111;">${receiptNo}</div>
             <div style="font-size:10px; color:#666; margin-top:2px;">Date: ${today}</div>
-            <div style="display:inline-block; background:${statusBg}; color:#FFF; padding:3px 12px; border-radius:10px; font-size:10px; font-weight:700; margin-top:4px; letter-spacing:0.5px;">${statusLabel}</div>
+            <div style="display:inline-block; background:${statusBg}; color:#FFF; padding:3px 12px; border-radius:10px; font-size:10px; font-weight:800; margin-top:4px; letter-spacing:0.4px;">${statusLabel}</div>
         </div>
     </div>
-    <div style="border-top:2.5px solid #7C3AED; margin-bottom:14px;"></div>
+    <div style="border-top:2px solid #111827; margin-bottom:14px;"></div>
 
     <!-- ═══ PARTIES ═══ -->
     <div style="display:flex; gap:12px; margin-bottom:14px;">
-        <div style="flex:1; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:6px; padding:9px 12px;">
+        <div style="flex:1; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:9px 12px;">
             <div class="section-label">From — Landlord</div>
             <div style="font-weight:700; font-size:12.5px;">${property?.owner_name || '—'}</div>
             <div style="font-size:12px; color:#444; margin-top:2px;">${property?.name || ''}</div>
             <div style="font-size:12px; color:#555;">${property?.address || ''}</div>
             ${property?.owner_phone ? `<div style="font-size:12px; color:#555; margin-top:2px;">📞 ${property.owner_phone}</div>` : ''}
         </div>
-        <div style="flex:1; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:6px; padding:9px 12px;">
+        <div style="flex:1; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:9px 12px;">
             <div class="section-label">To — Tenant</div>
             <div style="font-weight:700; font-size:12.5px;">${tenant?.name || '—'}</div>
             <div style="font-size:12px; color:#444; margin-top:2px;">Room: <strong>${unit?.name || '—'}</strong></div>
@@ -212,10 +212,10 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     </div>
 
     <!-- ═══ RENT PERIOD BAR ═══ -->
-    <div style="background:#7C3AED; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <div style="color:#EDE9FE; font-size:12px;">Rent Period</div>
+    <div style="background:#111827; border-radius:6px; padding:7px 14px; display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="color:#D1D5DB; font-size:12px; font-weight:600;">Rent Period</div>
         <div style="color:#FFF; font-weight:700; font-size:12px;">${startStr} — ${endStr}</div>
-        <div style="color:#EDE9FE; font-size:12px;">${period.days} Days</div>
+        <div style="color:#D1D5DB; font-size:12px; font-weight:600;">${period.days} Days</div>
     </div>
 
     <!-- ═══ BILL BREAKDOWN ═══ -->
@@ -224,21 +224,21 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead>
                 <tr style="background:#F3F4F6;">
-                    <th style="padding:5px 10px; text-align:left; font-weight:600; color:#555; font-size:11px;">Description</th>
-                    <th style="padding:5px 10px; text-align:right; font-weight:600; color:#555; font-size:11px;">Amount</th>
+                    <th style="padding:5px 10px; text-align:left; font-weight:700; color:#374151; font-size:11px;">Description</th>
+                    <th style="padding:5px 10px; text-align:right; font-weight:700; color:#374151; font-size:11px;">Amount</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">Monthly Rent</td>
-                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(rentAmt)}</td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:800; font-size:16px;">${fmtCur(rentAmt)}</td>
                 </tr>
                 ${electricityAmt > 0 ? `
                 <tr>
                     <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">
                         Electricity${bill.prev_reading != null && bill.curr_reading != null ? ` <span style="color:#888; font-size:11px;">(${bill.curr_reading} - ${bill.prev_reading} = ${Number((bill.curr_reading - bill.prev_reading).toFixed(2))} units @ ${CURRENCY}${unit.electricity_rate || 0}/unit)</span>` : ''}
                     </td>
-                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(electricityAmt)}</td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:800; font-size:16px;">${fmtCur(electricityAmt)}</td>
                 </tr>
                 ` : ''}
                 ${bill.water_amount > 0 ? `
@@ -246,11 +246,11 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
                     <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px;">
                         Water${bill.water_prev_reading != null && bill.water_curr_reading != null ? ` <span style="color:#888; font-size:11px;">(${bill.water_curr_reading} - ${bill.water_prev_reading} = ${Number((bill.water_curr_reading - bill.water_prev_reading).toFixed(2))} units @ ${CURRENCY}${unit.water_rate || 0}/unit)</span>` : ''}
                     </td>
-                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; font-size:14px;">${fmtCur(bill.water_amount)}</td>
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:800; font-size:16px;">${fmtCur(bill.water_amount)}</td>
                 </tr>
                 ` : ''}
                 ${filteredExpenses.length > 0 ? `
-                <tr><td colspan="2" style="padding:4px 10px; font-size:12px; color:#7C3AED; font-weight:700; background:#F8F5FF;">Additional Charges / Discounts</td></tr>
+                <tr><td colspan="2" style="padding:4px 10px; font-size:12px; color:#374151; font-weight:800; background:#F3F4F6;">Additional Charges / Discounts</td></tr>
                 ${expenseRows}
                 ` : ''}
                 ${prevBalance !== 0 ? `
@@ -258,14 +258,14 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
                     <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; font-size:13px; color:${prevBalance > 0 ? '#EF4444' : '#10B981'};">
                         ${prevBalance > 0 ? 'Previous Balance (Due)' : 'Previous Advance'}
                     </td>
-                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:700; color:${prevBalance > 0 ? '#EF4444' : '#10B981'}; font-size:14px;">
+                    <td style="padding:5px 10px; border-bottom:1px solid #F0F0F0; text-align:right; font-weight:800; color:${prevBalance > 0 ? '#EF4444' : '#10B981'}; font-size:16px;">
                         ${prevBalance > 0 ? '+' : '−'}${fmtCur(Math.abs(prevBalance))}
                     </td>
                 </tr>
                 ` : ''}
             </tbody>
             <tfoot>
-                <tr style="background:#7C3AED;">
+                <tr style="background:#111827;">
                     <td style="padding:6px 10px; font-weight:700; color:#FFF; font-size:13px;">TOTAL</td>
                     <td style="padding:6px 10px; text-align:right; font-weight:800; color:#FFF; font-size:15px;">${fmtCur(totalAmt)}</td>
                 </tr>
@@ -277,20 +277,20 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     ${payments.length > 0 ? `
     <div style="margin-bottom:14px;">
         <div class="section-label">Payments Received</div>
-        <table style="width:100%; border-collapse:collapse; background:#F0FDF4; border-radius:6px; overflow:hidden;">
+        <table style="width:100%; border-collapse:collapse; background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; overflow:hidden;">
             <thead>
-                <tr style="background:#D1FAE5;">
-                    <th style="padding:5px 10px; text-align:left; font-size:11px; font-weight:600; color:#065F46;">Date</th>
-                    <th style="padding:5px 10px; text-align:left; font-size:11px; font-weight:600; color:#065F46;">Method</th>
-                    <th style="padding:5px 10px; text-align:right; font-size:11px; font-weight:600; color:#065F46;">Amount</th>
+                <tr style="background:#F3F4F6;">
+                    <th style="padding:5px 10px; text-align:left; font-size:11px; font-weight:700; color:#374151;">Date</th>
+                    <th style="padding:5px 10px; text-align:left; font-size:11px; font-weight:700; color:#374151;">Method</th>
+                    <th style="padding:5px 10px; text-align:right; font-size:11px; font-weight:700; color:#374151;">Amount</th>
                 </tr>
             </thead>
             <tbody>
                 ${paymentRows}
             </tbody>
             <tfoot>
-                <tr style="background:#D1FAE5;">
-                    <td colspan="2" style="padding:5px 10px; font-weight:700; color:#065F46; font-size:12px;">Total Paid</td>
+                <tr style="background:#F3F4F6;">
+                    <td colspan="2" style="padding:5px 10px; font-weight:700; color:#374151; font-size:12px;">Total Paid</td>
                     <td style="padding:5px 10px; text-align:right; font-weight:800; color:#10B981; font-size:14px;">${fmtCur(paidAmt)}</td>
                 </tr>
             </tfoot>
@@ -333,7 +333,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     </div>
 
     <!-- ═══ FOOTER ═══ -->
-    <div style="position:absolute; bottom:14px; left:24px; right:24px; border-top:1px solid #DDD6FE; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+    <div style="position:absolute; bottom:14px; left:24px; right:24px; border-top:1px solid #E5E7EB; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
         <div style="font-size:10px; color:#555; font-weight:600;">RentVelo</div>
         <div style="font-size:10px; color:#555;">This is a computer-generated receipt</div>
         <div style="font-size:10px; color:#555;">${today}</div>

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
+import { BarChart3 } from 'lucide-react-native';
 
 interface TrendItem {
     month: number;
@@ -14,6 +15,7 @@ interface TrendItem {
 
 interface CollectionTrendsProps {
     trends: TrendItem[];
+    propertyCount?: number;
     isPrivacyMode?: boolean;
 }
 
@@ -21,28 +23,50 @@ const CHART_HEIGHT = 140;
 const BAR_WIDTH = 20;
 const BAR_GAP = 6;
 
-export default function CollectionTrends({ trends, isPrivacyMode }: CollectionTrendsProps) {
+export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyMode }: CollectionTrendsProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
-    const maxVal = Math.max(...trends.map(t => Math.max(t.expected, t.collected)), 1);
-    const totalCollected = trends.reduce((s, t) => s + t.collected, 0);
-    const totalExpected = trends.reduce((s, t) => s + t.expected, 0);
+    const visibleTrends = trends.filter(t => t.expected > 0 || t.collected > 0);
+    const maxVal = Math.max(...visibleTrends.map(t => Math.max(t.expected, t.collected)), 1);
+    const totalCollected = visibleTrends.reduce((s, t) => s + t.collected, 0);
+    const totalExpected = visibleTrends.reduce((s, t) => s + t.expected, 0);
     const collectionRate = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
-    const bestMonth = [...trends].sort((a, b) => b.collected - a.collected)[0];
+    const bestMonth = [...visibleTrends].sort((a, b) => b.collected - a.collected)[0];
+    const title = visibleTrends.length >= 6 ? 'Last 6 Months' : visibleTrends.length <= 1 ? 'This Month' : 'Recent Collection Trends';
+    const periodLabel = visibleTrends.length >= 6 ? 'Last 6 Months' : 'Period Collected';
 
     const chartWidth = Dimensions.get('window').width - 64; // padding
     const groupWidth = (BAR_WIDTH * 2) + BAR_GAP;
-    const totalGrouping = trends.length * groupWidth;
-    const spacing = (chartWidth - totalGrouping) / (trends.length + 1);
+    const totalGrouping = visibleTrends.length * groupWidth;
+    const spacing = (chartWidth - totalGrouping) / (visibleTrends.length + 1);
+
+    if (visibleTrends.length === 0) {
+        return (
+            <View style={styles.container}>
+                <Text style={styles.title}>Collection Trends</Text>
+                <View style={styles.emptyState}>
+                    <View style={styles.emptyIconBox}>
+                        <BarChart3 size={28} color={theme.colors.accent} />
+                    </View>
+                    <Text style={styles.emptyTitle}>No Trends Yet</Text>
+                    <Text style={styles.emptyText}>
+                        {propertyCount > 0
+                            ? 'Trends will appear after rent bills or payments are recorded.'
+                            : 'Add your first property to start seeing collection trends.'}
+                    </Text>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Collection Trends</Text>
+            <Text style={styles.title}>{title}</Text>
 
             {/* Chart */}
             <View style={styles.chartContainer}>
                 <Svg width={chartWidth} height={CHART_HEIGHT + 28}>
-                    {trends.map((item, i) => {
+                    {visibleTrends.map((item, i) => {
                         const x = spacing + i * (groupWidth + spacing);
                         const expectedH = (item.expected / maxVal) * CHART_HEIGHT;
                         const collectedH = (item.collected / maxVal) * CHART_HEIGHT;
@@ -110,7 +134,7 @@ export default function CollectionTrends({ trends, isPrivacyMode }: CollectionTr
                     <Text style={styles.statValue}>
                         {isPrivacyMode ? `${CURRENCY} •••` : `${CURRENCY}${(totalCollected / 1000).toFixed(1)}K`}
                     </Text>
-                    <Text style={styles.statLabel}>YTD Collected</Text>
+                    <Text style={styles.statLabel}>{periodLabel}</Text>
                 </View>
             </View>
         </View>
@@ -134,6 +158,32 @@ const getStyles = (theme: any) => StyleSheet.create({
     chartContainer: {
         alignItems: 'center',
         marginBottom: theme.spacing.s,
+    },
+    emptyState: {
+        alignItems: 'center',
+        paddingVertical: theme.spacing.l,
+        paddingHorizontal: theme.spacing.m,
+    },
+    emptyIconBox: {
+        width: 56,
+        height: 56,
+        borderRadius: 18,
+        backgroundColor: theme.colors.accentLight,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: theme.spacing.m,
+    },
+    emptyTitle: {
+        fontSize: 16,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+        marginBottom: theme.spacing.xs,
+    },
+    emptyText: {
+        fontSize: 13,
+        lineHeight: 20,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
     },
     legendRow: {
         flexDirection: 'row',
