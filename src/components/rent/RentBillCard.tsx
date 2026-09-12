@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
+import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock, Wallet } from 'lucide-react-native';
 import {
     updateBill, recalculateBill, resetFutureBills,
     getBillExpenses, getBillPayments,
@@ -806,9 +806,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
 
             {/* === BALANCE === */}
             <View style={[styles.balanceRow, isPaid && styles.balanceRowPaid]}>
-                <Text style={[styles.balanceLabel, { color: statusColor }]}>
-                    {isPaid ? 'Fully Paid' : 'Current Balance'}
-                </Text>
+                <View style={styles.balanceLabelRow}>
+                    <Wallet size={16} color={statusColor} />
+                    <Text style={[styles.balanceLabel, { color: isDark ? '#fff' : statusColor }]}>
+                        {isPaid ? 'Fully Paid' : 'Current Balance'}
+                    </Text>
+                </View>
                 <Text style={[styles.amountCol, styles.balanceAmount, { color: statusColor }]}>
                     {formatAmount(Math.abs(bill.balance ?? 0))}
                 </Text>
@@ -897,7 +900,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                         {hasPaid ? (
                                             <FileText size={18} color="#FFF" />
                                         ) : (
-                                            <Send size={18} color="#FFF" />
+                                            <Send size={18} color={isDark ? bgColor : "#FFF"}/>
                                         )}
                                     </Animated.View>
                                 </>
@@ -1311,6 +1314,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     balanceRowPaid: {
         backgroundColor: theme.colors.successLight,
+    },
+    balanceLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 1,
+        paddingRight: 8,
     },
     balanceLabel: {
         fontSize: 14,
