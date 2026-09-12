@@ -1,4 +1,4 @@
-import { properties, units, tenants, rentBills, payments, billExpenses, meterReadings, documents, rentReceiptConfig, notifications } from '../src/db/schema';
+import { properties, units, tenants, rentBills, payments, billExpenses, meterReadings, documents, rentReceiptConfig, notifications, paymentAccounts } from '../src/db/schema';
 import { generateBillsForProperty, recalculateBill } from '../src/db/billService';
 import { and, eq } from 'drizzle-orm';
 
@@ -13,7 +13,8 @@ export async function generateRealUsageData(db: any) {
 
     // Wipe all tables in order respecting foreign keys (cascades usually handle this, but being thorough)
     await db.delete(notifications).execute();
-    await db.delete(rentReceiptConfig).execute().catch(() => { }); // might not exist
+    await db.delete(rentReceiptConfig).execute().catch(() => { });
+    await db.delete(paymentAccounts).execute().catch(() => { });
     await db.delete(documents).execute();
     await db.delete(meterReadings).execute();
     await db.delete(billExpenses).execute();

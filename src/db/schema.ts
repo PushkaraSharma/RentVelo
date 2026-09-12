@@ -24,6 +24,7 @@ export const properties = sqliteTable('properties', {
     build_date: text('build_date'),
     owner_email: text('owner_email'),
     last_increment_date: integer('last_increment_date', { mode: 'timestamp' }),
+    default_payment_account_id: integer('default_payment_account_id'),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -58,6 +59,7 @@ export const units = sqliteTable('units', {
     room_group: text('room_group'), // PG only: groups beds into a physical room (e.g. "Room A")
     bed_number: text('bed_number'), // PG only: bed identifier within room (e.g. "Bed 1")
     sequence: integer('sequence'), // Optional sequence for custom ordering
+    payment_account_id: integer('payment_account_id'),
     created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -185,6 +187,27 @@ export const rentReceiptConfig = sqliteTable('rent_receipt_config', {
 
 export type RentReceiptConfig = InferSelectModel<typeof rentReceiptConfig>;
 export type NewRentReceiptConfig = InferInsertModel<typeof rentReceiptConfig>;
+
+export const paymentAccounts = sqliteTable('payment_accounts', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    logo_uri: text('logo_uri'),
+    bank_name: text('bank_name'),
+    bank_acc_number: text('bank_acc_number'),
+    bank_ifsc: text('bank_ifsc'),
+    bank_acc_holder: text('bank_acc_holder'),
+    wallet_type: text('wallet_type'),
+    wallet_phone: text('wallet_phone'),
+    wallet_name: text('wallet_name'),
+    upi_id: text('upi_id'),
+    payment_qr_uri: text('payment_qr_uri'),
+    signature_uri: text('signature_uri'),
+    created_at: integer('created_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+    updated_at: integer('updated_at', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
+});
+
+export type PaymentAccount = InferSelectModel<typeof paymentAccounts>;
+export type NewPaymentAccount = InferInsertModel<typeof paymentAccounts>;
 
 // ===== RENT COLLECTION TABLES =====
 

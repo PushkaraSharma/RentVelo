@@ -64,6 +64,23 @@ export {
     upsertReceiptConfig,
 } from './receiptConfigService';
 
+// Payment account operations
+export {
+    getAllPaymentAccounts,
+    getPaymentAccountById,
+    createPaymentAccount,
+    updatePaymentAccount,
+    deletePaymentAccount,
+    getPaymentAccountUsage,
+    setPropertyDefaultPaymentAccount,
+    assignPaymentAccountToUnits,
+    resolveReceiptConfig,
+    migrateReceiptConfigsToPaymentAccounts,
+    accountToReceiptConfig,
+    hasAnyPaymentDetails,
+} from './paymentAccountService';
+export type { ReceiptConfigLike } from './paymentAccountService';
+
 // Bill operations
 export {
     generateBillsForProperty,

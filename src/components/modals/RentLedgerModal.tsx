@@ -7,7 +7,7 @@ import Button from '../common/Button';
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import { generateRentLedgerHTML } from '../../utils/rentLedgerTemplate';
-import { getReceiptConfigByPropertyId } from '../../db';
+import { resolveReceiptConfig } from '../../db';
 import { useToast } from '../../hooks/useToast';
 
 interface RentLedgerModalProps {
@@ -67,7 +67,7 @@ export default function RentLedgerModal({
         setGenerating(true);
         try {
             // Fetch receipt config for this property
-            const receiptConfig = await getReceiptConfigByPropertyId(property.id);
+            const receiptConfig = await resolveReceiptConfig(property.id, unit?.id);
 
             const options = {
                 includeIdProof,

@@ -16,6 +16,7 @@ import AutoBackupHandler from './src/components/AutoBackupHandler';
 import { ToastProvider } from './src/components/common/ToastProvider';
 import UpdateToast from './src/components/common/UpdateToast';
 import { migrateOldImagesToPermanentStorage } from './src/services/imageMigrationService';
+import { migrateReceiptConfigsToPaymentAccounts } from './src/db/paymentAccountService';
 import { syncNotificationSchedules } from './src/services/pushNotificationService';
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from './src/navigation/RootNavigator';
@@ -73,6 +74,7 @@ export default function App() {
   React.useEffect(() => {
     if (success) {
       syncDatabaseSchema(); // Double check schema after migrations
+      migrateReceiptConfigsToPaymentAccounts();
       migrateOldImagesToPermanentStorage();
     }
   }, [success]);

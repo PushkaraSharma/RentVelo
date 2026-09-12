@@ -3,10 +3,9 @@ import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, D
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock, Wallet } from 'lucide-react-native';
-import {
-    updateBill, recalculateBill, resetFutureBills,
+import { resetFutureBills,
     getBillExpenses, getBillPayments,
-    getReceiptConfigByPropertyId, getPropertyById, getTenantById, getUnitById
+    resolveReceiptConfig, getPropertyById
 } from '../../db';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
@@ -248,7 +247,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             const [payments, freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillPayments(bill.id),
                 getBillExpenses(bill.id),
-                getReceiptConfigByPropertyId(propertyId),
+                resolveReceiptConfig(propertyId, unit?.id),
                 getPropertyById(propertyId),
             ]);
 
@@ -301,7 +300,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         try {
             const [freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillExpenses(bill.id),
-                getReceiptConfigByPropertyId(propertyId),
+                resolveReceiptConfig(propertyId, unit?.id),
                 getPropertyById(propertyId),
             ]);
 
