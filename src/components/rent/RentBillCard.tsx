@@ -662,7 +662,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                             </View>
                         )}
                         {isMovedOut && (
-                            <View style={[styles.leaseBadge, { backgroundColor: isDark ? '#78350F40' : '#FEF3C7' }]}>
+                            <View style={[styles.leaseBadge, styles.movedOutBadge]}>
                                 <Text style={[styles.leaseBadgeText, { color: '#D97706' }]}>Moved Out</Text>
                             </View>
                         )}
@@ -675,7 +675,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     )}
                 </View>
                 <Pressable
-                    style={[styles.paidAmtBadge, isPaid && styles.paidAmtBadgePaid, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial, isLocked && { opacity: 0.8 }]}
+                    style={[
+                        styles.paidAmtBadge,
+                        isPaid && styles.paidAmtBadgePaid,
+                        !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial,
+                        !isPaid && (bill.paid_amount ?? 0) <= 0 && styles.paidAmtBadgeCTA,
+                        isLocked && { opacity: 0.8 },
+                    ]}
                     onPress={() => {
                         if (isLocked) {
                             handleResetBill();
@@ -690,8 +696,22 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         }
                     }}
                 >
-                    <Text style={styles.paidAmtLabel}>PAID AMT</Text>
-                    <Text style={[styles.paidAmtValue, isPaid && styles.paidAmtValueGreen, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtValueOrange]}>
+                    <Text
+                        style={[
+                            styles.paidAmtLabel,
+                            !isPaid && (bill.paid_amount ?? 0) <= 0 && styles.paidAmtOnCTA,
+                        ]}
+                    >
+                        PAID AMT
+                    </Text>
+                    <Text
+                        style={[
+                            styles.paidAmtValue,
+                            isPaid && styles.paidAmtValueGreen,
+                            !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtValueOrange,
+                            !isPaid && (bill.paid_amount ?? 0) <= 0 && styles.paidAmtOnCTA,
+                        ]}
+                    >
                         {(bill.paid_amount ?? 0) > 0 ? formatAmount(bill.paid_amount) : 'Tap to Pay'}
                     </Text>
                 </Pressable>
@@ -837,7 +857,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     way to reach the expense list and undo them. */}
                 {(bill.total_expenses ?? 0) !== 0 && (
                     <Pressable
-                        style={[styles.expenseChip, (bill.total_expenses ?? 0) < 0 && styles.expenseChipCredit]}
+                        style={styles.expenseChip}
                         onPress={() => setShowExpenseList(true)}
                     >
                         <Text style={[styles.expenseChipText, (bill.total_expenses ?? 0) < 0 && styles.expenseChipTextCredit]}>
@@ -856,7 +876,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             <View style={[styles.balanceRow, isPaid && styles.balanceRowPaid]}>
                 <View style={styles.balanceLabelRow}>
                     <Wallet size={16} color={statusColor} />
-                    <Text style={[styles.balanceLabel, { color: isDark ? '#fff' : statusColor }]}>
+                    <Text style={[styles.balanceLabel, { color: statusColor }]}>
                         {isPaid ? 'Fully Paid' : 'Current Balance'}
                     </Text>
                 </View>
@@ -870,7 +890,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 (() => {
                     const hasPaid = (bill.paid_amount ?? 0) > 0;
                     const label = hasPaid ? 'Swipe → Receipt' : 'Swipe → Reminder';
-                    const bgColor = hasPaid ? theme.colors.primary : theme.colors.warning;
+                    const bgColor = hasPaid ? theme.colors.primary : theme.colors.accent;
 
                     const panResponder = PanResponder.create({
                         onStartShouldSetPanResponder: () => true,
@@ -1085,18 +1105,24 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     );
 });
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+const getStyles = (theme: any, isDark: boolean) => {
+    const s = isDark
+        ? { card: '#1C1C1E', inset: '#2A2A2C', raised: '#323234', hairline: '#3A3A3C' }
+        : { card: theme.colors.surface, inset: theme.colors.background, raised: '#F3F4F6', hairline: theme.colors.border };
+
+    return StyleSheet.create({
     card: {
-        backgroundColor: theme.colors.surface,
+        backgroundColor: s.card,
         borderRadius: 20,
         padding: theme.spacing.m,
         marginBottom: theme.spacing.m,
-        borderWidth: 1,
+        borderWidth: isDark ? 0 : 1,
         borderColor: theme.colors.border,
-        ...theme.shadows.small,
+        ...(isDark ? {} : theme.shadows.small),
     },
     paidCard: {
-        borderColor: theme.colors.success,
+        borderColor: theme.colors.success + '40',
+        borderWidth: 1,
     },
     vacantCard: {
         borderStyle: 'dashed' as any,
@@ -1110,7 +1136,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: theme.colors.background,
+        backgroundColor: s.inset,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -1126,7 +1152,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 12,
-        backgroundColor: theme.colors.accentLight,
+        backgroundColor: s.raised,
     },
     addTenantText: {
         fontSize: 13,
@@ -1162,17 +1188,23 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 8,
         borderRadius: 14,
-        backgroundColor: theme.colors.accentLight,
-        borderWidth: 1.5,
-        borderColor: theme.colors.accent + '30',
+        backgroundColor: s.raised,
+        borderWidth: 0,
+        borderColor: 'transparent',
+    },
+    paidAmtBadgeCTA: {
+        backgroundColor: theme.colors.accent,
     },
     paidAmtBadgePaid: {
-        backgroundColor: theme.colors.successLight,
-        borderColor: theme.colors.success + '40',
+        backgroundColor: s.raised,
+        borderColor: 'transparent',
     },
     paidAmtBadgePartial: {
-        backgroundColor: theme.colors.warningLight,
-        borderColor: theme.colors.warning + '40',
+        backgroundColor: s.raised,
+        borderColor: 'transparent',
+    },
+    paidAmtOnCTA: {
+        color: '#FFFFFF',
     },
     paidAmtLabel: {
         fontSize: 9,
@@ -1201,7 +1233,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     electricityRowMetered: {
         marginBottom: theme.spacing.m,
-        backgroundColor: theme.colors.warningLight,
+        backgroundColor: theme.colors.accent + '12',
         borderRadius: 12,
         paddingHorizontal: 12,
         paddingVertical: theme.spacing.s,
@@ -1221,7 +1253,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginHorizontal: theme.spacing.s,
     },
     meterInput: {
-        backgroundColor: theme.colors.surface,
+        backgroundColor: s.raised,
         borderRadius: 8,
         paddingHorizontal: 10,
         paddingVertical: 4,
@@ -1230,7 +1262,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         color: theme.colors.textPrimary,
         minWidth: 68,
         borderWidth: 1,
-        borderColor: theme.colors.border,
+        borderColor: s.hairline,
     },
     meterUnits: {
         fontSize: 12,
@@ -1272,7 +1304,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     // Rent Section
     rentSection: {
-        backgroundColor: theme.colors.background,
+        backgroundColor: theme.colors.accent + '12',
         borderRadius: 12,
         paddingHorizontal: 12,
         paddingVertical: theme.spacing.s,
@@ -1312,7 +1344,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 7,
         borderRadius: 10,
-        backgroundColor: theme.colors.accentLight,
+        backgroundColor: theme.colors.accent + '12',
     },
     addRemoveText: {
         fontSize: 12,
@@ -1326,10 +1358,9 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 6,
         borderRadius: 10,
-        backgroundColor: theme.colors.successLight,
+        backgroundColor: theme.colors.accent + '12',
     },
     expenseChipCredit: {
-        backgroundColor: theme.colors.dangerLight,
     },
     expenseChipText: {
         fontSize: 12,
@@ -1354,14 +1385,14 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: theme.colors.dangerLight,
+        backgroundColor: isDark ? theme.colors.danger + '18' : theme.colors.dangerLight,
         borderRadius: 12,
         paddingHorizontal: 12,
         paddingVertical: 10,
         marginBottom: theme.spacing.s,
     },
     balanceRowPaid: {
-        backgroundColor: theme.colors.successLight,
+        backgroundColor: isDark ? theme.colors.success + '18' : theme.colors.successLight,
     },
     balanceLabelRow: {
         flexDirection: 'row',
@@ -1387,6 +1418,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         justifyContent: 'center',
         overflow: 'hidden',
         marginBottom: 6,
+        backgroundColor: s.raised,
     },
     swipeFill: {
         position: 'absolute',
@@ -1397,6 +1429,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     swipeLabel: {
         fontSize: 14,
         fontWeight: theme.typography.semiBold,
+        color: theme.colors.textPrimary,
     },
     swipeThumb: {
         width: 48,
@@ -1422,14 +1455,14 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     // Locked Card Styles
     lockedCard: {
-        backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
+        backgroundColor: s.card,
         borderColor: theme.colors.border,
     },
     lockedBanner: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: isDark ? theme.colors.surface : '#F3F4F6',
+        backgroundColor: s.raised,
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,
@@ -1449,10 +1482,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderRadius: 4,
     },
     leaseBadgeMonthly: {
-        backgroundColor: isDark ? theme.colors.accentLight : '#E0F2FE', // Blue tint
+        backgroundColor: s.raised,
     },
     leaseBadgeFixed: {
-        backgroundColor: isDark ? theme.colors.warningLight : '#F3E8FF', // Purple-ish / Amber tint
+        backgroundColor: s.raised,
+    },
+    movedOutBadge: {
+        backgroundColor: s.raised,
     },
     leaseBadgeText: {
         fontSize: 10,
@@ -1461,5 +1497,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         textTransform: 'uppercase',
     },
 });
+};
 
 export default RentBillCard;
