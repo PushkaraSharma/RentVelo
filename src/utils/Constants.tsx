@@ -77,13 +77,14 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 1;
+export const OTA_VERSION = 2;
 
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
+        "Direct UPI payment link while sharing rent receipt for fast payments",
+        "Option to assign payment account to room/property for managing multiple payment accounts",
+        "Minor UI improvements in rent collection screen",
         "Option to add extra documents to a tenant's profile",
-        "Rent expenses and discounts now save correctly",
-        "Other minor bug fixes and performance improvements",
     ]
 };
