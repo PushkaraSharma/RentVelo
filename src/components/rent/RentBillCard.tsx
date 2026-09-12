@@ -19,6 +19,7 @@ import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
 import RNShare from 'react-native-share';
 import { getReceiptDefaultFormat, getReceiptDefaultAction } from '../../utils/storage';
+import { buildReminderUpiShareMessage } from '../../utils/upiLink';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -73,7 +74,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [sendingReminder, setSendingReminder] = useState(false);
     const [shareFormatPickerVisible, setShareFormatPickerVisible] = useState(false);
     const [pendingAction, setPendingAction] = useState<'receipt' | 'reminder' | null>(null);
-    const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder' } | null>(null);
+    const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder'; shareCaption?: string } | null>(null);
     const [showResetModal, setShowResetModal] = useState(false);
     const [isReseting, setIsReseting] = useState(false);
     const [meterReadingError, setMeterReadingError] = useState('');
@@ -190,7 +191,24 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    const executeShareHelper = async (uri: string, mimeType: string, dialogTitle: string) => {
+    const buildReminderShareCaption = (
+        receiptConfig: Awaited<ReturnType<typeof resolveReceiptConfig>>,
+        property: Awaited<ReturnType<typeof getPropertyById>>,
+    ): string | undefined => {
+        const balance = bill?.balance ?? 0;
+        const periodLabel = period.end.split(' ').slice(1).join(' ') || `${bill.month}-${bill.year}`;
+        const caption = buildReminderUpiShareMessage({
+            tenantName: tenant?.name,
+            periodLabel,
+            balance,
+            upiId: receiptConfig?.upi_id,
+            payeeName: receiptConfig?.bank_acc_holder || property?.owner_name,
+            transactionNote: `Rent ${periodLabel} - ${unit?.name || ''}`.trim(),
+        });
+        return caption ?? undefined;
+    };
+
+    const executeShareHelper = async (uri: string, mimeType: string, dialogTitle: string, caption?: string) => {
         const defaultAction = getReceiptDefaultAction();
         let skippedFallback = false;
         let finalUri = uri;
@@ -207,15 +225,20 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             console.warn('Failed to rename file, using original uri', e);
         }
 
+        const shareUrl = finalUri.startsWith('file://') ? finalUri : `file://${finalUri}`;
+
         if (Platform.OS === 'android' && defaultAction === 'whatsapp' && tenant?.phone) {
             try {
                 let formattedNumber = tenant.phone.replace(/\D/g, '');
                 if (formattedNumber.length === 10) formattedNumber = '91' + formattedNumber;
                 const shareOptions: any = {
                     social: RNShare.Social.WHATSAPP,
-                    url: finalUri,
+                    url: shareUrl,
                     type: mimeType,
                     whatsAppNumber: formattedNumber,
+                };
+                if (caption) {
+                    shareOptions.message = caption;
                 }
                 await RNShare.shareSingle(shareOptions);
                 return;
@@ -229,6 +252,23 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         }
         if (skippedFallback) return;
+
+        if (caption) {
+            try {
+                await RNShare.open({
+                    url: shareUrl,
+                    message: caption,
+                    type: mimeType,
+                    title: dialogTitle,
+                });
+                return;
+            } catch (err: any) {
+                if (err?.message && String(err.message).includes('User did not share')) {
+                    return;
+                }
+                console.warn('RNShare.open with caption failed, falling back to file-only share:', err);
+            }
+        }
 
         if (await Sharing.isAvailableAsync()) {
             await Sharing.shareAsync(finalUri, {
@@ -327,18 +367,25 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 period,
             });
 
+            const reminderCaption = buildReminderShareCaption(receiptConfig, property);
+
             if (format === 'PDF') {
                 trackEvent(AnalyticsEvents.RENT_REMINDER_SENT, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
                 setSendingReminder(false);
-                executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`)
+                executeShareHelper(
+                    uri,
+                    'application/pdf',
+                    `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`,
+                    reminderCaption,
+                )
                     .catch((shareError) => {
                         console.error('Reminder share error:', shareError);
                         showToast({ type: 'error', title: 'Share failed', message: 'Reminder generated, but sharing failed.' });
                     });
             } else {
-                setShareHtml({ html, action: 'reminder' });
+                setShareHtml({ html, action: 'reminder', shareCaption: reminderCaption });
             }
         } catch (error) {
             console.error('Reminder generation error:', error);
@@ -365,10 +412,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         const uri = await viewShotRef.current.capture();
                         trackEvent(shareHtml?.action === 'receipt' ? AnalyticsEvents.RENT_RECEIPT_GENERATED : AnalyticsEvents.RENT_REMINDER_SENT, { format: 'Image', unit: unit.name });
 
+                        const shareCaption = shareHtml?.action === 'reminder' ? shareHtml.shareCaption : undefined;
                         await executeShareHelper(
                             uri,
                             'image/png',
-                            `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`
+                            `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`,
+                            shareCaption,
                         );
                     } catch (e) {
                         console.error('Image capture error:', e);

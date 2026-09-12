@@ -1,4 +1,5 @@
 import { CURRENCY, formatExpenseLabel } from './Constants';
+import { buildUpiPayUrl } from './upiLink';
 
 interface ReminderData {
     property: any;
@@ -61,6 +62,15 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
     const hasQr = !!receiptConfig?.payment_qr_uri;
     const hasPaymentMethods = hasBank || hasUpi || hasWallet || hasQr;
 
+    const upiPayUrl = hasUpi && balanceAmt > 0
+        ? buildUpiPayUrl({
+            pa: receiptConfig.upi_id,
+            pn: receiptConfig.bank_acc_holder || property?.owner_name,
+            am: balanceAmt,
+            tn: `Rent ${monthName} ${yearNum} - ${unit?.name || ''}`.trim(),
+        })
+        : null;
+
     const walletLabels: Record<string, string> = { google_pay: 'Google Pay', paytm: 'Paytm', phonepe: 'PhonePe', amazon_pay: 'Amazon Pay', other: 'Wallet' };
 
     const bankCol = hasBank ? `
@@ -78,6 +88,7 @@ export const generateRentReminderHTML = (data: ReminderData): string => {
             <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:8px 10px; margin-bottom:${hasWallet ? '4px' : '0'};">
                 <div style="font-size:12px; font-weight:700; color:#374151; margin-bottom:3px;">💳 UPI</div>
                 <div style="font-size:14px; font-weight:600; color:#333; word-break:break-all;">${receiptConfig.upi_id}</div>
+                ${upiPayUrl ? `<div style="margin-top:6px;"><a href="${upiPayUrl}" style="font-size:12px; font-weight:700; color:#2563EB; text-decoration:none;">Tap to pay ${fmtCur(balanceAmt)} via UPI</a></div>` : ''}
             </div>` : ''}
             ${hasWallet ? `
             <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:8px 10px;">
