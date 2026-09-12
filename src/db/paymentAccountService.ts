@@ -9,6 +9,7 @@ import {
     RentReceiptConfig,
 } from './schema';
 import { eq, inArray } from 'drizzle-orm';
+import { markBackupDirty } from '../services/backupFlags';
 
 export { PaymentAccount, NewPaymentAccount };
 
@@ -80,6 +81,7 @@ export const getPaymentAccountById = async (id: number): Promise<PaymentAccount 
 export const createPaymentAccount = async (data: NewPaymentAccount): Promise<number> => {
     const db = getDb();
     const result = await db.insert(paymentAccounts).values(data).returning({ id: paymentAccounts.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -88,6 +90,7 @@ export const updatePaymentAccount = async (id: number, data: Partial<NewPaymentA
     await db.update(paymentAccounts)
         .set({ ...data, updated_at: new Date() })
         .where(eq(paymentAccounts.id, id));
+    markBackupDirty();
 };
 
 export const getPaymentAccountUsage = async (accountId: number): Promise<{
@@ -117,6 +120,7 @@ export const deletePaymentAccount = async (id: number): Promise<{ success: boole
     }
     const db = getDb();
     await db.delete(paymentAccounts).where(eq(paymentAccounts.id, id));
+    markBackupDirty();
     return { success: true };
 };
 
@@ -128,6 +132,7 @@ export const setPropertyDefaultPaymentAccount = async (
     await db.update(properties)
         .set({ default_payment_account_id: accountId, updated_at: new Date() })
         .where(eq(properties.id, propertyId));
+    markBackupDirty();
 };
 
 export const assignPaymentAccountToUnits = async (
@@ -139,6 +144,7 @@ export const assignPaymentAccountToUnits = async (
     await db.update(units)
         .set({ payment_account_id: accountId, updated_at: new Date() })
         .where(inArray(units.id, unitIds));
+    markBackupDirty();
 };
 
 export const resolveReceiptConfig = async (

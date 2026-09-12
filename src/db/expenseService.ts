@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { propertyExpenses, type PropertyExpense, type NewPropertyExpense } from './schema';
 import { eq, and, desc, or, lt } from 'drizzle-orm';
+import { markBackupDirty } from '../services/backupFlags';
 // Re-export types
 export { PropertyExpense };
 
@@ -9,6 +10,7 @@ export { PropertyExpense };
 export const createExpense = async (expense: NewPropertyExpense): Promise<number> => {
     const db = getDb();
     const result = await db.insert(propertyExpenses).values(expense).returning({ id: propertyExpenses.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -81,6 +83,7 @@ export const deleteExpense = async (id: number): Promise<void> => {
             console.warn(`Failed to recalculate bill ${billId} after expense deletion:`, e);
         }
     }
+    markBackupDirty();
 };
 
 export const getExpenseSummary = async (

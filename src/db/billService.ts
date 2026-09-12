@@ -5,6 +5,7 @@ import {
 } from './schema';
 import { eq, and, or, desc, sum, sql, inArray } from 'drizzle-orm';
 import { differenceInDays, isAfter, startOfDay } from 'date-fns';
+import { markBackupDirty } from '../services/backupFlags';
 
 // Re-export types
 export { RentBill, BillExpense };
@@ -514,6 +515,7 @@ export const generateBillsForProperty = async (
     if (property?.type === 'pg') {
         await splitPGUtilities(propertyId, month, year);
     }
+    markBackupDirty();
 };
 
 /**
@@ -1134,6 +1136,7 @@ export const updateBill = async (id: number, data: Partial<NewRentBill>): Promis
     await db.update(rentBills)
         .set({ ...data, updated_at: new Date() })
         .where(eq(rentBills.id, id));
+    markBackupDirty();
 };
 
 /**
@@ -1564,6 +1567,7 @@ export const addPaymentToBill = async (
     }).returning({ id: payments.id });
 
     await recalculateBill(billId);
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -1579,6 +1583,7 @@ export const removePaymentFromBill = async (paymentId: number): Promise<void> =>
     if (billId) {
         await recalculateBill(billId);
     }
+    markBackupDirty();
 };
 
 export const getBillPayments = async (billId: number): Promise<Payment[]> => {

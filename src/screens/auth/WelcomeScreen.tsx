@@ -26,15 +26,15 @@ export default function WelcomeScreen() {
     }, []);
 
     const handleGoogleLogin = async () => {
-        if (__DEV__) {
-            dispatch(login({
-                name: 'Dev User',
-                email: 'dev@rentvelo.app',
-                photoUrl: undefined,
-                isGoogleLinked: true
-            }));
-            return;
-        }
+        // if (__DEV__) {
+        //     dispatch(login({
+        //         name: 'Dev User',
+        //         email: 'dev@rentvelo.app',
+        //         photoUrl: undefined,
+        //         isGoogleLinked: false
+        //     }));
+        //     return;
+        // }
 
         try {
             setGoogleLoading(true);
@@ -44,7 +44,7 @@ export default function WelcomeScreen() {
                     name: user.name || 'User',
                     email: user.email,
                     photoUrl: user.photo || undefined,
-                    isGoogleLinked: true // Integrated flow for both iOS and Android
+                    isGoogleLinked: false
                 }));
 
                 trackEvent(AnalyticsEvents.SIGN_IN, { method: 'google' });
@@ -173,9 +173,7 @@ export default function WelcomeScreen() {
 
                     <View style={styles.footer}>
                         <Text style={styles.securityNote}>
-                            {Platform.OS === 'ios' 
-                                ? 'Sign in to securely manage your properties and backup data manually to Google Drive.'
-                                : 'Sign in to securely backup your data to Google Drive.'}
+                            After you sign in, we will ask permission to back up your data to Google Drive.
                         </Text>
                     </View>
                 </View>

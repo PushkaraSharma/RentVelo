@@ -11,6 +11,8 @@ import { RootState } from '../redux/store';
 // Auth Screens
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
+import BackupConsentScreen from '../screens/auth/BackupConsentScreen';
+import RestoreBackupScreen from '../screens/auth/RestoreBackupScreen';
 import SetupWizardScreen from '../screens/auth/SetupWizardScreen';
 
 // Main Screens
@@ -44,7 +46,7 @@ import ExpectedRevenueScreen from '../screens/dashboard/ExpectedRevenueScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-    const { isAuthenticated, isOnboarded, isSetupComplete } = useSelector((state: RootState) => state.auth);
+    const { isAuthenticated, isOnboarded, isSetupComplete, isBackupConsentResolved, isRestorePending } = useSelector((state: RootState) => state.auth);
 
     React.useEffect(() => {
         trackEvent(AnalyticsEvents.APP_OPENED);
@@ -66,6 +68,10 @@ export default function RootNavigator() {
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                 ) : !isAuthenticated ? (
                     <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                ) : !isBackupConsentResolved ? (
+                    <Stack.Screen name="BackupConsent" component={BackupConsentScreen} />
+                ) : isRestorePending ? (
+                    <Stack.Screen name="RestoreBackup" component={RestoreBackupScreen} />
                 ) : !isSetupComplete ? (
                     <Stack.Screen name="SetupWizard" component={SetupWizardScreen} />
                 ) : (

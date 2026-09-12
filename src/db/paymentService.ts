@@ -2,6 +2,7 @@ import { getDb } from './database';
 import { payments, tenants, units, meterReadings, properties, rentBills, type Payment, type NewPayment, type MeterReading, type NewMeterReading } from './schema';
 import { eq, desc, and, gte, sum } from 'drizzle-orm';
 import { generateBillsForProperty } from './billService';
+import { markBackupDirty } from '../services/backupFlags';
 
 // Re-export types
 export { Payment, MeterReading };
@@ -10,6 +11,7 @@ export { Payment, MeterReading };
 export const createPayment = async (payment: NewPayment): Promise<number> => {
     const db = getDb();
     const result = await db.insert(payments).values(payment).returning({ id: payments.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -44,12 +46,14 @@ export const updatePayment = async (id: number, payment: Partial<NewPayment>): P
     await db.update(payments)
         .set({ ...payment, updated_at: new Date() })
         .where(eq(payments.id, id));
+    markBackupDirty();
 };
 
 // Delete Payment
 export const deletePayment = async (id: number): Promise<void> => {
     const db = getDb();
     await db.delete(payments).where(eq(payments.id, id));
+    markBackupDirty();
 };
 
 // Get Financial Summary
@@ -249,6 +253,7 @@ export const getGlobalTransactions = async (): Promise<{ transactions: GlobalTra
 export const addMeterReading = async (reading: NewMeterReading): Promise<number> => {
     const db = getDb();
     const result = await db.insert(meterReadings).values(reading).returning({ id: meterReadings.id });
+    markBackupDirty();
     return result[0].id;
 };
 

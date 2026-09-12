@@ -51,6 +51,10 @@ export const AnalyticsEvents = {
     BACKUP_CREATED: 'backup_created',
     BACKUP_RESTORED: 'backup_restored',
     AUTO_BACKUP_TOGGLED: 'auto_backup_toggled',
+    BACKUP_BLOCKED_EMPTY_LOCAL: 'backup_blocked_empty_local',
+    RESTORE_OFFERED_ON_LOGIN: 'restore_offered_on_login',
+    AUTO_BACKUP_FAILED: 'auto_backup_failed',
+    CLOUD_BACKUP_CONSENT: 'cloud_backup_consent',
 
     // Utilities
     METER_READING_SAVED: 'meter_reading_saved',

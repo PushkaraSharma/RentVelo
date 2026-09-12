@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { tenants, documents, properties, units, Tenant, NewTenant, Document, NewDocument } from './schema';
 import { eq, desc, and } from 'drizzle-orm';
+import { markBackupDirty } from '../services/backupFlags';
 
 // Re-export types
 export { Tenant, Document };
@@ -44,6 +45,7 @@ export const createTenant = async (tenant: NewTenant): Promise<number> => {
     }
 
     const result = await db.insert(tenants).values(finalTenant).returning({ id: tenants.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -111,6 +113,7 @@ export const updateTenant = async (id: number, tenant: Partial<NewTenant>): Prom
     await db.update(tenants)
         .set({ ...finalTenant, updated_at: new Date() })
         .where(eq(tenants.id, id));
+    markBackupDirty();
 };
 
 // Archive Tenant (Soft Delete)
@@ -119,12 +122,14 @@ export const archiveTenant = async (id: number): Promise<void> => {
     await db.update(tenants)
         .set({ status: 'archived', updated_at: new Date() })
         .where(eq(tenants.id, id));
+    markBackupDirty();
 };
 
 // Hard Delete Tenant
 export const deleteTenant = async (id: number): Promise<void> => {
     const db = getDb();
     await db.delete(tenants).where(eq(tenants.id, id));
+    markBackupDirty();
 };
 
 // ===== DOCUMENT OPERATIONS =====
@@ -133,6 +138,7 @@ export const deleteTenant = async (id: number): Promise<void> => {
 export const addDocument = async (document: NewDocument): Promise<number> => {
     const db = getDb();
     const result = await db.insert(documents).values(document).returning({ id: documents.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -146,4 +152,5 @@ export const getDocumentsByTenantId = async (tenantId: number): Promise<Document
 export const deleteDocument = async (id: number): Promise<void> => {
     const db = getDb();
     await db.delete(documents).where(eq(documents.id, id));
+    markBackupDirty();
 };

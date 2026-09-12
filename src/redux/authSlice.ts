@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { storage } from '../utils/storage';
+import { BACKUP_KEYS } from '../services/backupFlags';
 
 const ONBOARDING_KEY = 'isOnboarded';
 const SETUP_COMPLETE_KEY = 'isSetupComplete';
@@ -9,6 +10,8 @@ interface AuthState {
     isAuthenticated: boolean;
     isOnboarded: boolean;
     isSetupComplete: boolean;
+    isBackupConsentResolved: boolean;
+    isRestorePending: boolean;
     user: {
         name: string;
         email: string;
@@ -32,11 +35,16 @@ const loadAuthState = (): Partial<AuthState> => {
 
 const savedAuthState = loadAuthState();
 
+const existingSetupComplete = storage.getBoolean(SETUP_COMPLETE_KEY) ?? (savedAuthState.isAuthenticated ?? false);
+
 const initialState: AuthState = {
     isAuthenticated: savedAuthState.isAuthenticated ?? false,
     isOnboarded: storage.getBoolean(ONBOARDING_KEY) ?? false,
     // Default to true for existing authenticated users (they don't need the wizard)
-    isSetupComplete: storage.getBoolean(SETUP_COMPLETE_KEY) ?? (savedAuthState.isAuthenticated ?? false),
+    isSetupComplete: existingSetupComplete,
+    // Existing users who already finished setup skip the new consent gate
+    isBackupConsentResolved: storage.getBoolean(BACKUP_KEYS.CONSENT_RESOLVED) ?? existingSetupComplete,
+    isRestorePending: storage.getBoolean(BACKUP_KEYS.RESTORE_PENDING) ?? false,
     user: savedAuthState.user ?? null,
     isGoogleLinked: savedAuthState.isGoogleLinked ?? false,
     googleEmail: savedAuthState.googleEmail ?? null,
@@ -87,6 +95,14 @@ const authSlice = createSlice({
             state.isSetupComplete = true;
             storage.set(SETUP_COMPLETE_KEY, true);
         },
+        resolveBackupConsent: (state) => {
+            state.isBackupConsentResolved = true;
+            storage.set(BACKUP_KEYS.CONSENT_RESOLVED, true);
+        },
+        setRestorePending: (state, action: PayloadAction<boolean>) => {
+            state.isRestorePending = action.payload;
+            storage.set(BACKUP_KEYS.RESTORE_PENDING, action.payload);
+        },
         linkGoogleAccount: (state, action: PayloadAction<{ email: string, name?: string | null, photoUrl?: string | null }>) => {
             state.isGoogleLinked = true;
             state.googleEmail = action.payload.email;
@@ -100,5 +116,5 @@ const authSlice = createSlice({
     },
 });
 
-export const { login, logout, completeOnboarding, completeSetup, linkGoogleAccount, unlinkGoogleAccount } = authSlice.actions;
+export const { login, logout, completeOnboarding, completeSetup, resolveBackupConsent, setRestorePending, linkGoogleAccount, unlinkGoogleAccount } = authSlice.actions;
 export default authSlice.reducer;

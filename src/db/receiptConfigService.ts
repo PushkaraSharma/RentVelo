@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { rentReceiptConfig, RentReceiptConfig, NewRentReceiptConfig } from './schema';
 import { eq } from 'drizzle-orm';
+import { markBackupDirty } from '../services/backupFlags';
 
 // Re-export types
 export { RentReceiptConfig };
@@ -28,4 +29,5 @@ export const upsertReceiptConfig = async (propertyId: number, data: Partial<NewR
         await db.insert(rentReceiptConfig)
             .values({ ...data, property_id: propertyId } as NewRentReceiptConfig);
     }
+    markBackupDirty();
 };

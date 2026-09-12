@@ -9,8 +9,8 @@ export const initGoogleAuth = () => {
     GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         offlineAccess: true,
-        // Using full scopes for "one-step" Drive access, even on iOS per user request.
-        scopes: ['https://www.googleapis.com/auth/drive.appdata', 'https://www.googleapis.com/auth/drive.file'],
+        // Drive scopes are requested only after the user agrees to cloud backup.
+        scopes: ['email', 'profile'],
     });
 };
 
