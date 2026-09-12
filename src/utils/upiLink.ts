@@ -1,4 +1,4 @@
-import { CURRENCY } from './Constants';
+import { CURRENCY, UPI_PAY_PAGE_URL } from './Constants';
 
 export type BuildUpiPayUrlParams = {
     pa: string;
@@ -14,7 +14,8 @@ const trimParam = (value?: string | null, maxLen?: number): string | undefined =
     return maxLen ? trimmed.slice(0, maxLen) : trimmed;
 };
 
-export const buildUpiPayUrl = (params: BuildUpiPayUrlParams): string | null => {
+/** Query string for UPI pay intent (without scheme). */
+export const buildUpiPayQueryString = (params: BuildUpiPayUrlParams): string | null => {
     const pa = trimParam(params.pa);
     if (!pa) return null;
 
@@ -32,11 +33,19 @@ export const buildUpiPayUrl = (params: BuildUpiPayUrlParams): string | null => {
     if (pn) query.pn = pn;
     if (tn) query.tn = tn;
 
-    const qs = Object.entries(query)
+    return Object.entries(query)
         .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
         .join('&');
+};
 
-    return `upi://pay?${qs}`;
+export const buildUpiPayUrl = (params: BuildUpiPayUrlParams): string | null => {
+    const qs = buildUpiPayQueryString(params);
+    return qs ? `upi://pay?${qs}` : null;
+};
+
+export const buildHttpsPayPageUrl = (params: BuildUpiPayUrlParams): string | null => {
+    const qs = buildUpiPayQueryString(params);
+    return qs ? `${UPI_PAY_PAGE_URL}?${qs}` : null;
 };
 
 export type ReminderUpiShareMessageParams = {
@@ -52,13 +61,17 @@ export const buildReminderUpiShareMessage = (params: ReminderUpiShareMessagePara
     const balance = Number(params.balance);
     if (!Number.isFinite(balance) || balance <= 0) return null;
 
-    const upiUrl = buildUpiPayUrl({
+    const payParams: BuildUpiPayUrlParams = {
         pa: params.upiId || '',
         pn: params.payeeName,
         am: balance,
         tn: params.transactionNote,
-    });
-    if (!upiUrl) return null;
+    };
+
+    const payPageUrl = buildHttpsPayPageUrl(payParams);
+    if (!payPageUrl) return null;
+
+    const upiId = trimParam(params.upiId);
 
     const greeting = params.tenantName?.trim()
         ? `Hi ${params.tenantName.trim()},`
@@ -67,5 +80,7 @@ export const buildReminderUpiShareMessage = (params: ReminderUpiShareMessagePara
     const amountStr = `${CURRENCY}${balance.toLocaleString('en-IN')}`;
     const period = params.periodLabel.trim() || 'this period';
 
-    return `${greeting}\n\nPayment reminder: ${amountStr} due for ${period}.\n\nTap to pay via UPI:\n${upiUrl}`;
+    const manualLine = upiId ? `\n\nOr pay manually to UPI ID: ${upiId}` : '';
+
+    return `${greeting}\n\nPayment reminder: ${amountStr} due for ${period}.\n\nTap to pay via UPI:\n${payPageUrl}${manualLine}`;
 };

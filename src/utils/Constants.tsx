@@ -3,6 +3,9 @@ import Constants from 'expo-constants';
 
 export const CURRENCY = '₹';
 
+/** Hosted pay page — WhatsApp linkifies https; page opens the UPI app via upi:// */
+export const UPI_PAY_PAGE_URL = 'https://rentvelo.indieroots.in/pay.html';
+
 /**
  * Bill lines that mirror a property expense are stored with a "Property: " prefix so
  * the reconciler can match legacy rows by label. That prefix is internal bookkeeping
