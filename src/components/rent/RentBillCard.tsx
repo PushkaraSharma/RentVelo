@@ -133,41 +133,42 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         return hasFuturePersistedBills === true;
     }, [hasFuturePersistedBills, bill]);
 
-    const liveElectricityAmount = useMemo(() => {
-        if (unit.electricity_rate === null || !bill) return bill?.electricity_amount ?? 0;
+    const electricityPrev = (bill?.prev_reading !== null && bill?.prev_reading !== 0)
+        ? bill.prev_reading
+        : (unit?.initial_electricity_reading ?? 0);
+    const waterPrev = (bill?.water_prev_reading !== null && bill?.water_prev_reading !== 0)
+        ? bill.water_prev_reading
+        : (unit?.initial_water_reading ?? 0);
+
+    const liveElectricity = useMemo(() => {
+        if (unit.electricity_rate === null || !bill) {
+            return { amount: bill?.electricity_amount ?? 0, units: null as number | null };
+        }
         const val = parseFloat(meterReading);
-        if (isNaN(val)) return bill.electricity_amount ?? 0;
-        const prev = (bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0);
-        if (val < prev) return 0;
-        let unitsUsed = Math.max(0, val - prev);
+        if (isNaN(val)) return { amount: bill.electricity_amount ?? 0, units: null };
+        if (val < electricityPrev) return { amount: 0, units: 0 };
+        let unitsUsed = Math.max(0, val - electricityPrev);
         const defaultUnits = unit.electricity_default_units;
         if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
             unitsUsed = defaultUnits;
         }
-        let amt = unitsUsed * (unit.electricity_rate ?? 0);
-        // PG split: divide metered cost across occupied beds in same room
-        if (unit.room_group && bill) {
-            // Note: For live UI calculation, we'd need occupiedCount. 
-            // For now, let's keep it simple or use a cached count if we had one.
-            // Since we don't have occupiedCount here, it might show full room cost in live UI.
-            // But recalculated bill will show correct split.
-        }
-        return amt;
-    }, [meterReading, bill, unit]);
+        return { amount: unitsUsed * (unit.electricity_rate ?? 0), units: unitsUsed };
+    }, [meterReading, bill, unit, electricityPrev]);
 
-    const liveWaterAmount = useMemo(() => {
-        if (unit.water_rate === null || !bill) return bill?.water_amount ?? 0;
+    const liveWater = useMemo(() => {
+        if (unit.water_rate === null || !bill) {
+            return { amount: bill?.water_amount ?? 0, units: null as number | null };
+        }
         const val = parseFloat(waterReading);
-        if (isNaN(val)) return bill.water_amount ?? 0;
-        const prev = (bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0);
-        if (val < prev) return 0;
-        let unitsUsed = Math.max(0, val - prev);
+        if (isNaN(val)) return { amount: bill.water_amount ?? 0, units: null };
+        if (val < waterPrev) return { amount: 0, units: 0 };
+        let unitsUsed = Math.max(0, val - waterPrev);
         const defaultUnits = unit.water_default_units;
         if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
             unitsUsed = defaultUnits;
         }
-        return unitsUsed * (unit.water_rate ?? 0);
-    }, [waterReading, bill, unit]);
+        return { amount: unitsUsed * (unit.water_rate ?? 0), units: unitsUsed };
+    }, [waterReading, bill, unit, waterPrev]);
 
     // B12: Fix image loading in WebView by converting local files to base64
     const getBase64Image = async (uri: string) => {
@@ -655,9 +656,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         <Zap size={16} color={theme.colors.warning} />
                         {isMetered ? (
                             <View style={styles.meterRow}>
-                                <Text style={styles.meterLabel}>
-                                    Old: {(bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0)}
-                                </Text>
+                                <Text style={styles.meterLabel}>Old: {electricityPrev}</Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
                                     style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
@@ -672,7 +671,10 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     editable={!isLocked}
                                     returnKeyType="done"
                                 />
-                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveElectricityAmount)}</Text>
+                                <Text style={styles.meterUnits}>
+                                    {liveElectricity.units === null ? '—' : `${liveElectricity.units} units`}
+                                </Text>
+                                <Text style={styles.amountCol}>{formatAmount(liveElectricity.amount)}</Text>
                             </View>
                         ) : (
                             <Pressable
@@ -680,7 +682,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                 onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'electricity' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
-                                <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
+                                <Text style={styles.amountCol}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
                                 {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
                             </Pressable>
                         )}
@@ -701,9 +703,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         <Droplets size={16} color={theme.colors.primary} />
                         {isWaterMetered ? (
                             <View style={styles.meterRow}>
-                                <Text style={styles.meterLabel}>
-                                    Old: {(bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0)}
-                                </Text>
+                                <Text style={styles.meterLabel}>Old: {waterPrev}</Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
                                     style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
@@ -718,7 +718,10 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     editable={!isLocked}
                                     returnKeyType="done"
                                 />
-                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveWaterAmount)}</Text>
+                                <Text style={styles.meterUnits}>
+                                    {liveWater.units === null ? '—' : `${liveWater.units} u`}
+                                </Text>
+                                <Text style={styles.amountCol}>{formatAmount(liveWater.amount)}</Text>
                             </View>
                         ) : (
                             <Pressable
@@ -726,7 +729,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                 onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'water' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
-                                <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
+                                <Text style={styles.amountCol}>{formatAmount(bill.water_amount ?? 0)}</Text>
                                 {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
                             </Pressable>
                         )}
@@ -761,13 +764,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                             })()}
                         </Text>
                     </View>
-                    <Text style={styles.rentAmount}>{formatAmount(bill.rent_amount)}</Text>
+                    <Text style={styles.amountCol}>{formatAmount(bill.rent_amount)}</Text>
                 </View>
                 <View style={styles.rentRow}>
                     <Text style={[styles.rentLabel, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
                         {(bill.previous_balance ?? 0) < 0 ? 'Previous Advance' : 'Previous Due'}
                     </Text>
-                    <Text style={[styles.prevBalAmount, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
+                    <Text style={[styles.amountCol, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
                         {(bill.previous_balance ?? 0) < 0 ? '−' : '+'}{formatAmount(Math.abs(bill.previous_balance ?? 0))}
                     </Text>
                 </View>
@@ -797,7 +800,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 <View style={{ flex: 1 }} />
                 <View style={styles.totalCol}>
                     <Text style={styles.totalLabel}>Total</Text>
-                    <Text style={styles.totalAmount}>{formatAmount(bill.total_amount)}</Text>
+                    <Text style={styles.amountCol}>{formatAmount(bill.total_amount)}</Text>
                 </View>
             </View>
 
@@ -806,7 +809,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 <Text style={[styles.balanceLabel, { color: statusColor }]}>
                     {isPaid ? 'Fully Paid' : 'Current Balance'}
                 </Text>
-                <Text style={[styles.balanceAmount, { color: statusColor }]}>
+                <Text style={[styles.amountCol, styles.balanceAmount, { color: statusColor }]}>
                     {formatAmount(Math.abs(bill.balance ?? 0))}
                 </Text>
             </View>
@@ -1149,9 +1152,11 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginBottom: theme.spacing.m,
         backgroundColor: theme.colors.warningLight,
         borderRadius: 12,
-        padding: theme.spacing.s,
+        paddingHorizontal: 12,
+        paddingVertical: theme.spacing.s,
     },
     meterRow: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
     },
@@ -1176,6 +1181,22 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
+    meterUnits: {
+        fontSize: 12,
+        fontWeight: theme.typography.medium,
+        color: theme.colors.textSecondary,
+        marginLeft: theme.spacing.xs,
+        fontVariant: ['tabular-nums'],
+    },
+    amountCol: {
+        marginLeft: 'auto',
+        minWidth: 88,
+        textAlign: 'right',
+        fontSize: 16,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+        fontVariant: ['tabular-nums'],
+    },
     meterErrorText: {
         fontSize: 11,
         color: theme.colors.danger,
@@ -1198,17 +1219,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         color: theme.colors.textSecondary,
         flex: 1,
     },
-    electricityAmt: {
-        fontSize: 14,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
-
     // Rent Section
     rentSection: {
         backgroundColor: theme.colors.background,
         borderRadius: 12,
-        padding: theme.spacing.s,
+        paddingHorizontal: 12,
+        paddingVertical: theme.spacing.s,
         marginBottom: theme.spacing.s,
     },
     rentRow: {
@@ -1221,21 +1237,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 13,
         fontWeight: theme.typography.semiBold,
         color: theme.colors.textPrimary,
+        flexShrink: 1,
+        paddingRight: 8,
     },
     rentPeriod: {
         fontSize: 11,
         color: theme.colors.accent,
         marginTop: 1,
-    },
-    rentAmount: {
-        fontSize: 16,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
-    prevBalAmount: {
-        fontSize: 14,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
     },
 
     // Actions
@@ -1243,6 +1251,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+        paddingRight: 12,
         marginBottom: theme.spacing.s,
     },
     addRemoveBtn: {
@@ -1281,16 +1290,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     totalCol: {
         alignItems: 'flex-end',
+        marginLeft: 'auto',
     },
     totalLabel: {
         fontSize: 11,
         fontWeight: theme.typography.medium,
         color: theme.colors.textSecondary,
-    },
-    totalAmount: {
-        fontSize: 18,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
     },
 
     // Balance
@@ -1300,7 +1305,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         backgroundColor: theme.colors.dangerLight,
         borderRadius: 12,
-        paddingHorizontal: theme.spacing.m,
+        paddingHorizontal: 12,
         paddingVertical: 10,
         marginBottom: theme.spacing.s,
     },
@@ -1312,8 +1317,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontWeight: theme.typography.bold,
     },
     balanceAmount: {
-        fontSize: 20,
-        fontWeight: theme.typography.bold,
+        fontSize: 18,
     },
 
     // Swipe Button

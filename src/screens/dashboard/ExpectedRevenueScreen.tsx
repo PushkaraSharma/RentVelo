@@ -182,7 +182,7 @@ export default function ExpectedRevenueScreen({ navigation }: any) {
                                     <Pressable
                                         key={idx}
                                         style={styles.propertyItem}
-                                        onPress={() => navigation.navigate('TakeRent', { propertyId: prop.id })}
+                                        onPress={() => navigation.navigate('PropertyStatistics', { propertyId: prop.id })}
                                     >
                                         <View style={styles.propHeader}>
                                             <View style={styles.propMain}>

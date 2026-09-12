@@ -331,6 +331,8 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         overflow: 'hidden',
         marginBottom: theme.spacing.l,
         position: 'relative',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
         ...theme.shadows.medium
     },
     editBadge: {
