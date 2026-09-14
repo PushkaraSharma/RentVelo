@@ -12,7 +12,7 @@ import { UserPlus, FileText, Upload, Calendar, X, Mail, MapPin, Briefcase, Users
 import Header from '../../components/common/Header';
 import { createTenant, updateTenant, getTenantById, getPropertyById, getUnitById, addDocument, getDocumentsByTenantId, deleteDocument, Property, Unit, Tenant } from '../../db';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
-import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS } from '../../utils/Constants';
+import { CURRENCY, TITLES, PROFESSIONS, GUEST_COUNTS, LEASE_TYPES, LEASE_PERIOD_UNITS, formatDisplayDate } from '../../utils/Constants';
 import * as Contacts from 'expo-contacts';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import ImagePickerModal from '../../components/common/ImagePickerModal';
@@ -509,14 +509,14 @@ export default function AddTenantScreen({ navigation, route }: any) {
                             <View style={{ flex: 1, marginRight: theme.spacing.m }}>
                                 <Text style={styles.inputLabel}>Move-in Date</Text>
                                 <Pressable style={styles.pickerTrigger} onPress={() => setShowMoveInPicker(true)}>
-                                    <Text style={styles.pickerTriggerText}>{moveInDate.toLocaleDateString()}</Text>
+                                    <Text style={styles.pickerTriggerText}>{formatDisplayDate(moveInDate)}</Text>
                                     <Calendar size={16} color={theme.colors.accent} />
                                 </Pressable>
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.inputLabel}>Rent Start Date</Text>
                                 <Pressable style={styles.pickerTrigger} onPress={() => setShowRentStartPicker(true)}>
-                                    <Text style={styles.pickerTriggerText}>{rentStartDate.toLocaleDateString()}</Text>
+                                    <Text style={styles.pickerTriggerText}>{formatDisplayDate(rentStartDate)}</Text>
                                     <Calendar size={16} color={theme.colors.accent} />
                                 </Pressable>
                             </View>
@@ -567,7 +567,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                 <View style={styles.fixedLeaseContainer}>
                                     <Input
                                         label="Lease Start Date"
-                                        value={leaseStartDate.toLocaleDateString()}
+                                        value={formatDisplayDate(leaseStartDate)}
                                         editable={false}
                                         icon={<Calendar size={20} color={theme.colors.accent} />}
                                         onPress={() => setShowLeaseStartPicker(true)}
@@ -601,7 +601,7 @@ export default function AddTenantScreen({ navigation, route }: any) {
                                         <View style={styles.expiryNote}>
                                             <Info size={16} color={theme.colors.accent} />
                                             <Text style={styles.expiryText}>
-                                                Lease expires on: <Text style={{ fontWeight: 'bold' }}>{calculateExpiry()?.toLocaleDateString()}</Text>
+                                                Lease expires on: <Text style={{ fontWeight: 'bold' }}>{formatDisplayDate(calculateExpiry())}</Text>
                                             </Text>
                                         </View>
                                     )}

@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { Plus, Minus, ChevronDown, Wallet } from 'lucide-react-native';
-import { addExpenseToBill } from '../../db';
+import { addExpenseToBill, getBillExpenses } from '../../db';
 import Toggle from '../common/Toggle';
 import PickerBottomSheet from '../common/PickerBottomSheet';
 import RentModalSheet from './RentModalSheet';
 import { useToast } from '../../hooks/useToast';
 import { hapticsSelection, hapticsMedium, hapticsError } from '../../utils/haptics';
+import { isDuplicateRecurringCategory } from '../../utils/expenseCategory';
 
 interface ExpenseActionsModalProps {
     visible: boolean;
@@ -68,6 +69,22 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
             finalLabel = remarks || 'Discount';
         }
 
+        if (actionType === 'add' && isRecurring) {
+            const existing = await getBillExpenses(bill.id);
+            const activeLabels = existing
+                .filter((e) => e.is_recurring && (e.amount ?? 0) > 0 && !e.label?.endsWith('(Removed)'))
+                .map((e) => e.label || '');
+            if (isDuplicateRecurringCategory(activeLabels, finalLabel)) {
+                hapticsError();
+                showToast({
+                    type: 'error',
+                    title: 'Already exists',
+                    message: `A recurring "${label || 'expense'}" is already on this bill.`,
+                });
+                return;
+            }
+        }
+
         setSubmitting(true);
         try {
             await addExpenseToBill(bill.id, {
@@ -82,7 +99,8 @@ export default function ExpenseActionsModal({ visible, onClose, bill, unit }: Ex
         } catch (error) {
             console.error('Error saving bill expense:', error);
             hapticsError();
-            showToast({ type: 'error', title: 'Error', message: 'Failed to save the expense. Please try again.' });
+            const message = error instanceof Error ? error.message : 'Failed to save the expense. Please try again.';
+            showToast({ type: 'error', title: 'Error', message });
         } finally {
             setSubmitting(false);
         }

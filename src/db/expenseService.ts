@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { propertyExpenses, type PropertyExpense, type NewPropertyExpense } from './schema';
 import { eq, and, desc, or, lt } from 'drizzle-orm';
+import { normalizeExpenseCategory } from '../utils/expenseCategory';
 // Re-export types
 export { PropertyExpense };
 
@@ -8,6 +9,18 @@ export { PropertyExpense };
 
 export const createExpense = async (expense: NewPropertyExpense): Promise<number> => {
     const db = getDb();
+
+    if (expense.frequency === 'monthly') {
+        const existing = await getRecurringExpenses(expense.property_id);
+        const newKey = normalizeExpenseCategory(expense.expense_type);
+        const duplicate = existing.some(
+            (e) => normalizeExpenseCategory(e.expense_type) === newKey
+        );
+        if (duplicate) {
+            throw new Error(`A monthly recurring "${expense.expense_type}" expense already exists for this property.`);
+        }
+    }
+
     const result = await db.insert(propertyExpenses).values(expense).returning({ id: propertyExpenses.id });
     return result[0].id;
 };

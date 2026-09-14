@@ -1,4 +1,4 @@
-import { CURRENCY, formatExpenseLabel } from './Constants';
+import { CURRENCY, formatExpenseLabel, formatPaymentMethodLabel } from './Constants';
 
 interface ReceiptData {
     property: any;
@@ -78,7 +78,7 @@ export const generateRentReceiptHTML = (data: ReceiptData): string => {
     const paymentRows = payments.map(p => `
         <tr>
             <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; font-size:11px;">${fmtDate(p.payment_date || p.created_at)}</td>
-            <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; font-size:11px;">${p.payment_method || 'Cash'}</td>
+            <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; font-size:11px;">${formatPaymentMethodLabel(p.payment_method)}</td>
             <td style="padding:4px 10px; border-bottom:1px solid #E5E7EB; text-align:right; font-weight:700; font-size:11px; color:#059669;">${fmtCur(p.amount)}</td>
         </tr>
     `).join('');

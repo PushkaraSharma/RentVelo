@@ -118,10 +118,8 @@ export default function TenantDetailScreen({ navigation, route }: any) {
 
     // Aggregated stats from bills
     const totalPaid = bills.reduce((sum, b) => sum + (b.paid_amount ?? 0), 0);
-    const totalOutstanding = bills.reduce((sum, b) => {
-        const bal = b.balance ?? 0;
-        return sum + (bal > 0 ? bal : 0);
-    }, 0);
+    const latestBalance = bills[0]?.balance ?? 0;
+    const totalOutstanding = latestBalance > 0 ? latestBalance : 0;
 
     const openPreview = (uri: string, title: string) => {
         setPreviewImageUri(getFullImageUri(uri) || uri);

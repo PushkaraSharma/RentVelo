@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Image } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { Banknote, CreditCard, Building2, Landmark, Camera, Check, Image as ImageIcon, X, Edit2 } from 'lucide-react-native';
+import { Banknote, CreditCard, Landmark, Shield, Camera, Check, Image as ImageIcon, X, Edit2 } from 'lucide-react-native';
 import { addPaymentToBill } from '../../db/billService';
+import { getTenantById } from '../../db/tenantService';
 import { syncNotificationSchedules } from '../../services/pushNotificationService';
+import { useToast } from '../../hooks/useToast';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import { saveImageToPermanentStorage } from '../../services/imageService';
 import ImagePickerModal from '../common/ImagePickerModal';
@@ -20,17 +22,19 @@ interface ReceivePaymentModalProps {
     onClose: () => void;
     bill: any;
     unit: any;
+    tenant?: any;
 }
 
 const PAYMENT_METHODS = [
     { id: 'cash', label: 'Cash', icon: Banknote, color: '#10B981' },
     { id: 'upi', label: 'UPI', icon: CreditCard, color: '#8B5CF6' },
     { id: 'bank_transfer', label: 'Bank', icon: Landmark, color: '#3B82F6' },
-    { id: 'cheque', label: 'Cheque', icon: Building2, color: '#F59E0B' },
+    { id: 'from_deposit', label: 'Deposit', icon: Shield, color: '#F59E0B' },
 ];
 
-export default function ReceivePaymentModal({ visible, onClose, bill, unit }: ReceivePaymentModalProps) {
+export default function ReceivePaymentModal({ visible, onClose, bill, unit, tenant: tenantProp }: ReceivePaymentModalProps) {
     const { theme } = useAppTheme();
+    const { showToast } = useToast();
     const styles = getStyles(theme);
     const [amount, setAmount] = useState('');
     const [method, setMethod] = useState('cash');
@@ -40,6 +44,7 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
     const [paymentDate, setPaymentDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showPhotoPreview, setShowPhotoPreview] = useState(false);
+    const [tenant, setTenant] = useState<any>(tenantProp ?? null);
 
     const {
         visible: showImagePicker,
@@ -49,12 +54,35 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
         handleGallery
     } = useImagePicker((uri) => setPhotoUri(uri));
 
+    useEffect(() => {
+        if (!visible) return;
+        if (tenantProp) {
+            setTenant(tenantProp);
+            return;
+        }
+        if (bill?.tenant_id) {
+            getTenantById(bill.tenant_id).then(setTenant).catch(() => setTenant(null));
+        }
+    }, [visible, bill?.tenant_id, tenantProp]);
+
     const currentBalance = bill?.balance ?? 0;
+    const depositAvailable = tenant?.security_deposit ?? 0;
 
     const handleAddPayment = async () => {
         const amt = parseFloat(amount);
         if (isNaN(amt) || amt <= 0) {
             hapticsError();
+            showToast({ type: 'error', title: 'Invalid amount', message: 'Enter a valid payment amount.' });
+            return;
+        }
+
+        if (method === 'from_deposit' && amt > depositAvailable) {
+            hapticsError();
+            showToast({
+                type: 'error',
+                title: 'Insufficient deposit',
+                message: `Only ${CURRENCY}${depositAvailable.toLocaleString('en-IN')} available in security deposit.`,
+            });
             return;
         }
 
@@ -79,9 +107,14 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 unit_id: bill.unit_id,
             });
 
+            if (method === 'from_deposit' && bill?.tenant_id) {
+                const updated = await getTenantById(bill.tenant_id);
+                if (updated) setTenant(updated);
+            }
+
             trackEvent(AnalyticsEvents.RENT_COLLECTED, { amount: amt, method: method });
             await syncNotificationSchedules();
-            incrementActionAndReview(); // Trigger logic for store review
+            incrementActionAndReview();
             hapticsMedium();
             setAmount('');
             setRemarks('');
@@ -91,6 +124,11 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
         } catch (err: any) {
             hapticsError();
             console.error('Error adding payment:', err);
+            showToast({
+                type: 'error',
+                title: 'Payment failed',
+                message: err?.message || 'Could not record payment.',
+            });
         } finally {
             setLoading(false);
         }
@@ -145,6 +183,11 @@ export default function ReceivePaymentModal({ visible, onClose, bill, unit }: Re
                 <Text style={styles.balanceInfoText}>
                     Current Balance: {CURRENCY}{currentBalance.toLocaleString('en-IN')}
                 </Text>
+                {method === 'from_deposit' && (
+                    <Text style={[styles.balanceInfoText, styles.depositInfoText]}>
+                        Deposit available: {CURRENCY}{depositAvailable.toLocaleString('en-IN')}
+                    </Text>
+                )}
             </View>
 
             {/* Remarks & Extra */}
@@ -278,11 +321,16 @@ const getStyles = (theme: any) => StyleSheet.create({
         paddingHorizontal: theme.spacing.m,
         marginBottom: theme.spacing.l,
         alignItems: 'center',
+        gap: 4,
     },
     balanceInfoText: {
         fontSize: 14,
         fontWeight: theme.typography.bold,
         color: theme.colors.danger,
+    },
+    depositInfoText: {
+        fontSize: 13,
+        color: theme.colors.textPrimary,
     },
     extrasRow: {
         flexDirection: 'row',

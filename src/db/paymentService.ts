@@ -404,6 +404,7 @@ export const getPropertyStatistics = async (propertyId: number, month: number, y
             if (p.payment_method === 'cash') cash += p.amount;
             else if (p.payment_method === 'upi') upi += p.amount;
             else if (p.payment_method === 'bank_transfer') bank_transfer += p.amount;
+            // cheque, from_deposit, and other roll into other for dashboard breakdown
             else other += p.amount;
         });
     }

@@ -14,6 +14,28 @@ export const UPI_PAY_PAGE_URL = 'https://rentvelo.indieroots.in/pay.html';
 export const formatExpenseLabel = (label?: string | null): string =>
     (label ?? '').replace(/^Property:\s*/, '');
 
+/** DD/MM/YYYY for in-app date fields (en-IN). */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+    cash: 'Cash',
+    upi: 'UPI',
+    bank_transfer: 'Bank',
+    cheque: 'Cheque',
+    from_deposit: 'From Deposit',
+    other: 'Other',
+};
+
+export const formatPaymentMethodLabel = (method?: string | null): string => {
+    if (!method) return 'Cash';
+    return PAYMENT_METHOD_LABELS[method] ?? method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+export const formatDisplayDate = (value: Date | string | number | null | undefined): string => {
+    if (value == null) return '—';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 export const PROPERTY_TYPES = [
     { id: 'house', label: 'House', icon: Home },
     { id: 'building', label: 'Building', icon: Building },

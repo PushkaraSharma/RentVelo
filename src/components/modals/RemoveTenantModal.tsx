@@ -13,8 +13,9 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, Info, X } from 'lucide-react-native';
 import Button from '../common/Button';
 import Input from '../common/Input';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatDisplayDate } from '../../utils/Constants';
 
 interface RemoveTenantModalProps {
     visible: boolean;
@@ -90,19 +91,8 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                             <Text style={styles.inputLabel}>Move-out Date</Text>
                             <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
                                 <Calendar size={20} color={theme.colors.accent} />
-                                <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
+                                <Text style={styles.datePickerText}>{formatDisplayDate(moveOutDate)}</Text>
                             </Pressable>
-
-                            {showDatePicker && (
-                                <DateTimePicker
-                                    value={moveOutDate}
-                                    mode="date"
-                                    onChange={(event: any, date?: Date) => {
-                                        setShowDatePicker(false);
-                                        if (date) onDateChange(date);
-                                    }}
-                                />
-                            )}
 
                             <View style={styles.noteBox}>
                                 <Info size={16} color={theme.colors.textSecondary} />
@@ -126,6 +116,17 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            <DateTimePickerModal
+                isVisible={showDatePicker}
+                mode="date"
+                date={moveOutDate}
+                onConfirm={(date) => {
+                    setShowDatePicker(false);
+                    onDateChange(date);
+                }}
+                onCancel={() => setShowDatePicker(false)}
+            />
         </Modal>
     );
 };

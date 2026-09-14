@@ -5,6 +5,7 @@ import { CURRENCY, formatExpenseLabel } from '../../utils/Constants';
 import { Trash2, Zap } from 'lucide-react-native';
 import { getBillExpenses, removeExpense } from '../../db';
 import RentModalSheet from './RentModalSheet';
+import ConfirmationModal from '../common/ConfirmationModal';
 
 interface ExpenseListModalProps {
     visible: boolean;
@@ -19,6 +20,7 @@ export default function ExpenseListModal({ visible, onClose, bill, unit, locked 
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     const [expenses, setExpenses] = useState<any[]>([]);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: number; isRecurring: boolean } | null>(null);
 
     useEffect(() => {
         if (visible && bill) loadExpenses();
@@ -41,8 +43,10 @@ export default function ExpenseListModal({ visible, onClose, bill, unit, locked 
         }
     };
 
-    const handleDelete = async (expenseId: number) => {
-        await removeExpense(expenseId);
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+        await removeExpense(deleteTarget.id);
+        setDeleteTarget(null);
         await loadExpenses();
     };
 
@@ -87,7 +91,10 @@ export default function ExpenseListModal({ visible, onClose, bill, unit, locked 
                                     {item.amount < 0 ? '−' : ''}{CURRENCY}{Math.abs(item.amount).toLocaleString('en-IN')}
                                 </Text>
                                 {bill.id && !locked && (
-                                    <Pressable style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
+                                    <Pressable
+                                        style={styles.deleteBtn}
+                                        onPress={() => setDeleteTarget({ id: item.id, isRecurring: !!item.is_recurring })}
+                                    >
                                         <Trash2 size={18} color={theme.colors.danger} />
                                     </Pressable>
                                 )}
@@ -102,6 +109,18 @@ export default function ExpenseListModal({ visible, onClose, bill, unit, locked 
                 <Text style={styles.footerLabel}>Total Exp Added</Text>
                 <Text style={styles.footerAmount}>{CURRENCY}{total.toLocaleString('en-IN')}</Text>
             </View>
+
+            <ConfirmationModal
+                visible={!!deleteTarget}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleDelete}
+                title={deleteTarget?.isRecurring ? 'Remove for this bill only?' : 'Remove expense?'}
+                message={
+                    deleteTarget?.isRecurring
+                        ? 'This removes the recurring charge only for this tenant\'s bill this month. To delete the recurring expense entirely, go to Property → Expenses. Future months will still include it unless removed there.'
+                        : 'Remove this expense from this bill?'
+                }
+            />
         </RentModalSheet>
     );
 }
@@ -131,6 +150,8 @@ const getStyles = (theme: any) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
+        flex: 1,
+        minWidth: 0,
     },
     expenseIcon: {
         width: 40,
@@ -177,11 +198,13 @@ const getStyles = (theme: any) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
+        flexShrink: 0,
     },
     expenseAmount: {
         fontSize: 15,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
+        textAlign: 'right',
     },
     deleteBtn: {
         width: 30,

@@ -121,7 +121,7 @@ export const payments = sqliteTable('payments', {
     amount: real('amount').notNull(),
     payment_date: integer('payment_date', { mode: 'timestamp' }).default(sql`(strftime('%s', 'now'))`),
     payment_type: text('payment_type', { enum: ['rent', 'security_deposit', 'advance', 'maintenance', 'other'] }),
-    payment_method: text('payment_method', { enum: ['cash', 'upi', 'bank_transfer', 'cheque', 'other'] }),
+    payment_method: text('payment_method', { enum: ['cash', 'upi', 'bank_transfer', 'cheque', 'from_deposit', 'other'] }),
     status: text('status', { enum: ['pending', 'paid', 'overdue', 'cancelled'] }).default('pending'),
     notes: text('notes'),
     photo_uri: text('photo_uri'),

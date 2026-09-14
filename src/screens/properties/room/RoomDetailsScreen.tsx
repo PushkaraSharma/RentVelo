@@ -46,11 +46,10 @@ import {
     adjustBillForMoveOut,
     getBillsByTenantId,
 } from '../../../db';
-import { CURRENCY } from '../../../utils/Constants';
+import { CURRENCY, formatDisplayDate } from '../../../utils/Constants';
 import { useFocusEffect } from '@react-navigation/native';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import RemoveTenantModal from '../../../components/modals/RemoveTenantModal';
 import MoveTenantModal from '../../../components/modals/MoveTenantModal';
@@ -292,8 +291,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 <View style={styles.dateRow}>
                     <Calendar size={14} color={theme.colors.textSecondary} />
                     <Text style={styles.dateText}>
-                        {new Date(tenant.move_in_date).toLocaleDateString()}
-                        {tenant.move_out_date ? ` - ${new Date(tenant.move_out_date).toLocaleDateString()}` : ' - Present'}
+                        {formatDisplayDate(tenant.move_in_date)}
+                        {tenant.move_out_date ? ` - ${formatDisplayDate(tenant.move_out_date)}` : ' - Present'}
                     </Text>
                 </View>
                 {isActive && (
@@ -304,7 +303,6 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                 e.stopPropagation();
                                 setSelectedTenant(tenant);
                                 setRefundAmount(tenant.security_deposit?.toString() || '0');
-                                // Fetch live balance from latest bill
                                 try {
                                     const bills = await getBillsByTenantId(tenant.id);
                                     const latestBill = bills[0];
@@ -531,7 +529,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                     <Text style={styles.infoKey}>Current Tenant Since</Text>
                                     <Text style={styles.infoValue}>
                                         {currentTenant.move_in_date
-                                            ? new Date(currentTenant.move_in_date).toLocaleDateString()
+                                            ? formatDisplayDate(currentTenant.move_in_date)
                                             : '—'}
                                     </Text>
                                 </View>
@@ -564,7 +562,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                     <Text style={styles.infoKey}>Last Vacancy</Text>
                                     <Text style={styles.infoValue}>
                                         {pastTenants[0].move_out_date
-                                            ? new Date(pastTenants[0].move_out_date).toLocaleDateString()
+                                            ? formatDisplayDate(pastTenants[0].move_out_date)
                                             : '—'}
                                     </Text>
                                 </View>

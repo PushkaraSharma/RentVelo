@@ -1044,6 +1044,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowReceivePayment(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                tenant={tenant}
             />
             <PaidAmountModal
                 visible={showPaidAmount}

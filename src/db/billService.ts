@@ -5,6 +5,9 @@ import {
 } from './schema';
 import { eq, and, or, desc, sum, sql, inArray } from 'drizzle-orm';
 import { differenceInDays, isAfter, startOfDay } from 'date-fns';
+import { isDuplicateRecurringCategory, normalizeExpenseCategory } from '../utils/expenseCategory';
+import { getRecurringExpenses } from './expenseService';
+import { getTenantById, updateTenant } from './tenantService';
 
 // Re-export types
 export { RentBill, BillExpense };
@@ -49,6 +52,57 @@ export const getUsagePeriod = (
  */
 const isWaivedLabel = (label: string | null | undefined): boolean =>
     !!label && (label.endsWith('(Removed)') || label.endsWith('(Waived)'));
+
+const getBillPeriodEnd = (b: Pick<RentBill, 'period_end' | 'month' | 'year'>): Date => {
+    if (b.period_end) return new Date(b.period_end);
+    return new Date(b.year, b.month, 0, 23, 59, 59);
+};
+
+/**
+ * Meter readings belong to the room. Find the latest bill on this unit whose period
+ * ended before the target period starts (includes an earlier tenant in the same month).
+ */
+const resolveChainedPrevReadings = async (
+    db: ReturnType<typeof getDb>,
+    params: {
+        unitId: number;
+        unit: { initial_electricity_reading?: number | null; initial_water_reading?: number | null };
+        month: number;
+        year: number;
+        periodStart: Date;
+        excludeBillId?: number;
+    }
+): Promise<{ prevReading: number | null; waterPrevReading: number | null }> => {
+    const { unitId, unit, month, year, periodStart, excludeBillId } = params;
+    let prevReading: number | null = unit.initial_electricity_reading ?? 0;
+    let waterPrevReading: number | null = unit.initial_water_reading ?? 0;
+
+    const periodStartMs = startOfDay(periodStart).getTime();
+
+    const unitBills = await db.select().from(rentBills).where(
+        and(
+            eq(rentBills.unit_id, unitId),
+            sql`(${rentBills.year} * 12 + ${rentBills.month}) <= ${year * 12 + month}`,
+            excludeBillId ? sql`${rentBills.id} != ${excludeBillId}` : sql`1=1`
+        )
+    );
+
+    const priorBill = unitBills
+        // Same-day handoff (move-out and move-in on the 14th) still belongs to the prior tenant.
+        .filter((b) => startOfDay(getBillPeriodEnd(b)).getTime() <= periodStartMs)
+        .sort((a, b) => getBillPeriodEnd(b).getTime() - getBillPeriodEnd(a).getTime())[0];
+
+    if (priorBill) {
+        if (priorBill.curr_reading !== null && priorBill.curr_reading !== undefined) {
+            prevReading = priorBill.curr_reading;
+        }
+        if (priorBill.water_curr_reading !== null && priorBill.water_curr_reading !== undefined) {
+            waterPrevReading = priorBill.water_curr_reading;
+        }
+    }
+
+    return { prevReading, waterPrevReading };
+};
 
 /**
  * Matches bills strictly later than the given month.
@@ -309,18 +363,6 @@ export const generateBillsForProperty = async (
                 previousBalance = -(tenant.advance_rent);
             }
 
-            // B17: Carry over electricity readings
-            let prevReading = unit.initial_electricity_reading ?? 0;
-            if (prevBill.length > 0 && prevBill[0].curr_reading !== null && prevBill[0].curr_reading !== undefined) {
-                prevReading = prevBill[0].curr_reading;
-            }
-
-            // Initialize water readings
-            let waterPrevReading = unit.initial_water_reading ?? 0;
-            if (prevBill.length > 0 && prevBill[0].water_curr_reading !== null && prevBill[0].water_curr_reading !== undefined) {
-                waterPrevReading = prevBill[0].water_curr_reading;
-            }
-
             // Get utilities (PG-aware fixed costs)
             let electricityAmount = 0;
             let waterAmount = 0;
@@ -391,11 +433,33 @@ export const generateBillsForProperty = async (
                 rentAmount = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
             }
 
+            const chainedPrev = await resolveChainedPrevReadings(db, {
+                unitId: unit.id,
+                unit,
+                month,
+                year,
+                periodStart: finalPeriodStart,
+            });
+            const prevReading = chainedPrev.prevReading;
+            const waterPrevReading = chainedPrev.waterPrevReading;
+
             const totalAmount = rentAmount + electricityAmount + waterAmount + previousBalance;
 
             // ── PERSISTENCE RULE: NEVER MODIFY EXISTING BILLS ──
             // Only insert if missing. If it exists, we skip it entirely to preserve user data (readings/balances).
             if (existingBill.length > 0) {
+                const bill = existingBill[0];
+                const readingUpdates: Record<string, unknown> = {};
+                if ((bill.curr_reading === null || bill.curr_reading === undefined) && bill.prev_reading !== prevReading) {
+                    readingUpdates.prev_reading = prevReading;
+                }
+                if ((bill.water_curr_reading === null || bill.water_curr_reading === undefined) && bill.water_prev_reading !== waterPrevReading) {
+                    readingUpdates.water_prev_reading = waterPrevReading;
+                }
+                if (Object.keys(readingUpdates).length > 0) {
+                    readingUpdates.updated_at = new Date();
+                    await db.update(rentBills).set(readingUpdates).where(eq(rentBills.id, bill.id));
+                }
                 continue;
             }
 
@@ -548,37 +612,53 @@ export const adjustBillForMoveOut = async (
 
     const bill = existingBills[0];
 
-    // Don't touch fully paid bills
-    if (bill.status === 'paid' || bill.status === 'overpaid') return;
-
     // Get the unit for rent_amount
     const unitResult = await db.select().from(units).where(eq(units.id, unitId)).limit(1);
     if (unitResult.length === 0) return;
     const unit = unitResult[0];
 
-    // Calculate pro-rated rent
-    const periodStart = bill.period_start ? new Date(bill.period_start) : new Date(moveOutYear, moveOutMonth - 1, 1);
-    const daysInMonth = new Date(moveOutYear, moveOutMonth, 0).getDate();
-    const startDay = periodStart.getDate();
-    const endDay = moveOutDate.getDate();
-    const daysOccupied = endDay - startDay + 1;
+    const isPaid = bill.status === 'paid' || bill.status === 'overpaid';
+    const updates: Record<string, unknown> = {
+        // Always record occupancy end so the next tenant can chain meter readings.
+        period_end: moveOutDate,
+        updated_at: new Date(),
+    };
 
-    let newRentAmount = unit.rent_amount;
-    if (daysOccupied < daysInMonth) {
-        newRentAmount = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
+    if (!isPaid) {
+        const periodStart = bill.period_start ? new Date(bill.period_start) : new Date(moveOutYear, moveOutMonth - 1, 1);
+        const daysInMonth = new Date(moveOutYear, moveOutMonth, 0).getDate();
+        const startDay = periodStart.getDate();
+        const endDay = moveOutDate.getDate();
+        const daysOccupied = endDay - startDay + 1;
+
+        let newRentAmount = unit.rent_amount;
+        if (daysOccupied < daysInMonth) {
+            newRentAmount = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
+        }
+
+        const totalAmount = newRentAmount + (bill.electricity_amount ?? 0) + (bill.water_amount ?? 0) + (bill.previous_balance ?? 0) + (bill.total_expenses ?? 0);
+        const balance = totalAmount - (bill.paid_amount ?? 0);
+
+        updates.rent_amount = newRentAmount;
+        updates.total_amount = totalAmount;
+        updates.balance = balance;
+        updates.status = balance <= 0 ? (balance < 0 ? 'overpaid' : 'paid') : ((bill.paid_amount ?? 0) > 0 ? 'partial' : 'pending');
     }
 
-    // Update the bill
-    const totalAmount = newRentAmount + (bill.electricity_amount ?? 0) + (bill.water_amount ?? 0) + (bill.previous_balance ?? 0) + (bill.total_expenses ?? 0);
-    const balance = totalAmount - (bill.paid_amount ?? 0);
+    await db.update(rentBills).set(updates).where(eq(rentBills.id, bill.id));
 
-    await db.update(rentBills).set({
-        period_end: moveOutDate,
-        rent_amount: newRentAmount,
-        total_amount: totalAmount,
-        balance: balance,
-        status: balance <= 0 ? (balance < 0 ? 'overpaid' : 'paid') : ((bill.paid_amount ?? 0) > 0 ? 'partial' : 'pending'),
-    }).where(eq(rentBills.id, bill.id));
+    const roomMeterUpdates: Record<string, unknown> = {};
+    if (bill.curr_reading !== null && bill.curr_reading !== undefined) {
+        roomMeterUpdates.initial_electricity_reading = bill.curr_reading;
+    }
+    if (bill.water_curr_reading !== null && bill.water_curr_reading !== undefined) {
+        roomMeterUpdates.initial_water_reading = bill.water_curr_reading;
+    }
+    if (Object.keys(roomMeterUpdates).length > 0) {
+        await db.update(units).set(roomMeterUpdates).where(eq(units.id, unitId));
+    }
+
+    await recalculateBill(bill.id, true);
 };
 
 /**
@@ -1176,38 +1256,25 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     const isLocked = await hasComplexFutureBills(bill.unit_id, bill.month, bill.year);
 
     if (unit) {
-        // P2: Single prev-bill query for both electricity and water sync.
-        // Deliberately scoped to the unit rather than the tenant: this only feeds meter
-        // readings, and the meter belongs to the room. Scoping it by tenant would reset an
-        // incoming tenant to the unit's initial reading and bill them for months of usage.
-        const prevBillArr = await db.select().from(rentBills).where(
-            and(
-                eq(rentBills.unit_id, bill.unit_id),
-                sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
-            )
-        ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
+        const billPeriodStart = bill.period_start
+            ? new Date(bill.period_start)
+            : new Date(bill.year, bill.month - 1, 1);
 
-        const prevBill = prevBillArr[0] || null;
+        const chainedPrev = await resolveChainedPrevReadings(db, {
+            unitId: bill.unit_id,
+            unit,
+            month: bill.month,
+            year: bill.year,
+            periodStart: billPeriodStart,
+            excludeBillId: bill.id,
+        });
 
-        // Sync electricity
-        if (!prevBill) {
-            if (!isLocked && prevReading !== unit.initial_electricity_reading) {
-                prevReading = unit.initial_electricity_reading;
-                needsUpdate = true;
-            }
-        } else if (prevBill.curr_reading !== null && prevBill.curr_reading !== prevReading) {
-            prevReading = prevBill.curr_reading;
+        if (!isLocked && prevReading !== chainedPrev.prevReading) {
+            prevReading = chainedPrev.prevReading;
             needsUpdate = true;
         }
-
-        // Sync water (reuse same prevBill)
-        if (!prevBill) {
-            if (!isLocked && waterPrevReading !== unit.initial_water_reading) {
-                waterPrevReading = unit.initial_water_reading;
-                needsUpdate = true;
-            }
-        } else if (prevBill.water_curr_reading !== null && prevBill.water_curr_reading !== waterPrevReading) {
-            waterPrevReading = prevBill.water_curr_reading;
+        if (!isLocked && waterPrevReading !== chainedPrev.waterPrevReading) {
+            waterPrevReading = chainedPrev.waterPrevReading;
             needsUpdate = true;
         }
 
@@ -1321,6 +1388,42 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         })
         .where(eq(rentBills.id, billId));
 
+    // Cascade meter readings to later bills on the same unit in the same month (tenant handoff).
+    const thisPeriodEnd = getBillPeriodEnd(bill);
+    const sameMonthBills = await db.select().from(rentBills).where(
+        and(
+            eq(rentBills.unit_id, bill.unit_id),
+            eq(rentBills.month, bill.month),
+            eq(rentBills.year, bill.year),
+            sql`${rentBills.id} != ${bill.id}`
+        )
+    );
+
+    for (const successor of sameMonthBills) {
+        const succStart = successor.period_start
+            ? new Date(successor.period_start)
+            : new Date(successor.year, successor.month - 1, 1);
+        if (startOfDay(succStart).getTime() < startOfDay(thisPeriodEnd).getTime()) continue;
+
+        const updates: Record<string, unknown> = {};
+        let needsSuccessorRecalc = false;
+
+        if (bill.curr_reading !== null && bill.curr_reading !== undefined && successor.prev_reading !== bill.curr_reading) {
+            updates.prev_reading = bill.curr_reading;
+            needsSuccessorRecalc = true;
+        }
+        if (bill.water_curr_reading !== null && bill.water_curr_reading !== undefined && successor.water_prev_reading !== bill.water_curr_reading) {
+            updates.water_prev_reading = bill.water_curr_reading;
+            needsSuccessorRecalc = true;
+        }
+
+        if (needsSuccessorRecalc) {
+            updates.updated_at = new Date();
+            await db.update(rentBills).set(updates).where(eq(rentBills.id, successor.id));
+            await recalculateBill(successor.id, true);
+        }
+    }
+
     // B3 & B17: Cascade to next month — update previous_balance and prev_reading in ONE batch.
     // A unit can hold more than one bill in a month once a tenant moves out and another
     // moves in, so every next-month bill is considered rather than an arbitrary first row.
@@ -1421,6 +1524,18 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
     const amount = expense.amount ?? 0;
     const rawLabel = expense.label || 'Custom Expense';
 
+    if (expense.is_recurring === true && amount > 0) {
+        const existingOnBill = await db.select({ label: billExpenses.label }).from(billExpenses).where(
+            and(eq(billExpenses.bill_id, billId), eq(billExpenses.is_recurring, true))
+        );
+        const activeLabels = existingOnBill
+            .map((e) => e.label)
+            .filter((l): l is string => !!l && !isWaivedLabel(l));
+        if (isDuplicateRecurringCategory(activeLabels, rawLabel)) {
+            throw new Error(`A recurring "${rawLabel.split(' - ')[0]}" expense is already on this bill.`);
+        }
+    }
+
     // A discount/waiver is lost income rather than a landlord cost, so it is never
     // mirrored into property_expenses. Leaving property_expense_id null and the label
     // unprefixed also keeps it outside syncPropertyExpensesLazily's scope, which would
@@ -1445,6 +1560,12 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
     const { usageMonth, usageYear } = getUsagePeriod(propertyResult[0], bill.month, bill.year);
 
     const isRecurring = expense.is_recurring === true;
+    if (isRecurring) {
+        const existingRecurring = await getRecurringExpenses(bill.property_id);
+        if (existingRecurring.some((e) => normalizeExpenseCategory(e.expense_type) === normalizeExpenseCategory(rawLabel))) {
+            throw new Error(`A monthly recurring "${rawLabel.split(' - ')[0]}" expense already exists for this property.`);
+        }
+    }
     const propExpResult = await db.insert(propertyExpenses).values({
         property_id: bill.property_id,
         amount,
@@ -1553,6 +1674,19 @@ export const addPaymentToBill = async (
     const bill = await getBillById(billId);
     if (!bill) throw new Error('Bill not found');
 
+    const amount = paymentData.amount;
+    const isFromDeposit = paymentData.payment_method === 'from_deposit';
+
+    if (isFromDeposit) {
+        if (!bill.tenant_id) throw new Error('Bill has no tenant');
+        const tenant = await getTenantById(bill.tenant_id);
+        if (!tenant) throw new Error('Tenant not found');
+        const available = tenant.security_deposit ?? 0;
+        if (amount > available) {
+            throw new Error(`Insufficient security deposit. Available: ₹${available.toLocaleString('en-IN')}`);
+        }
+    }
+
     const result = await db.insert(payments).values({
         ...paymentData,
         bill_id: billId,
@@ -1563,17 +1697,32 @@ export const addPaymentToBill = async (
         status: 'paid',
     }).returning({ id: payments.id });
 
+    if (isFromDeposit && bill.tenant_id) {
+        const tenant = await getTenantById(bill.tenant_id);
+        const currentDeposit = tenant?.security_deposit ?? 0;
+        await updateTenant(bill.tenant_id, {
+            security_deposit: Math.max(0, currentDeposit - amount),
+        });
+    }
+
     await recalculateBill(billId);
     return result[0].id;
 };
 
 export const removePaymentFromBill = async (paymentId: number): Promise<void> => {
     const db = getDb();
-    // Get the bill_id before deleting
     const payment = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
     if (payment.length === 0) return;
 
-    const billId = payment[0].bill_id;
+    const row = payment[0];
+    const billId = row.bill_id;
+
+    if (row.payment_method === 'from_deposit' && row.tenant_id) {
+        const tenant = await getTenantById(row.tenant_id);
+        const restored = (tenant?.security_deposit ?? 0) + (row.amount ?? 0);
+        await updateTenant(row.tenant_id, { security_deposit: restored });
+    }
+
     await db.delete(payments).where(eq(payments.id, paymentId));
 
     if (billId) {

@@ -6,14 +6,14 @@ import {
     Pressable,
     KeyboardAvoidingView,
     Platform,
-    Dimensions,
     Modal
 } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, ChevronRight, X } from 'lucide-react-native';
 import Button from '../common/Button';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatDisplayDate } from '../../utils/Constants';
 
 interface MoveTenantModalProps {
     visible: boolean;
@@ -50,6 +50,10 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
     const styles = getStyles(theme);
     const insets = useSafeAreaInsets();
     const [showDatePicker, setShowDatePicker] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!visible) setShowDatePicker(false);
+    }, [visible]);
 
     return (
         <Modal
@@ -95,19 +99,8 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
                         <Text style={[styles.inputLabel, { marginTop: 15 }]}>Move Date</Text>
                         <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
                             <Calendar size={20} color={theme.colors.accent} />
-                            <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
+                            <Text style={styles.datePickerText}>{formatDisplayDate(moveOutDate)}</Text>
                         </Pressable>
-
-                        {showDatePicker && (
-                            <DateTimePicker
-                                value={moveOutDate}
-                                mode="date"
-                                onChange={(event: any, date?: Date) => {
-                                    setShowDatePicker(false);
-                                    if (date) onDateChange(date);
-                                }}
-                            />
-                        )}
 
                         <View style={[styles.modalActions]}>
                             <Button
@@ -125,6 +118,17 @@ const MoveTenantModal: React.FC<MoveTenantModalProps> = ({
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            <DateTimePickerModal
+                isVisible={showDatePicker}
+                mode="date"
+                date={moveOutDate}
+                onConfirm={(date) => {
+                    setShowDatePicker(false);
+                    onDateChange(date);
+                }}
+                onCancel={() => setShowDatePicker(false)}
+            />
         </Modal>
     );
 };
