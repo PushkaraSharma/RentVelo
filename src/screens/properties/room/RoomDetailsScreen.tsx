@@ -44,6 +44,7 @@ import {
     deleteUnit,
     getBillSummaryByUnitId,
     doesBillPeriodMatchMoveOut,
+    adjustBillForMoveOut,
     getBillsByTenantId,
 } from '../../../db';
 import { CURRENCY, formatDisplayDate } from '../../../utils/Constants';
@@ -135,7 +136,9 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     const handleRemoveTenant = async () => {
         if (!selectedTenant) return;
         try {
-            if (moveOutDate && selectedTenant.unit_id) {
+            const isPostPaid = property?.rent_payment_type === 'previous_month';
+
+            if (isPostPaid && moveOutDate && selectedTenant.unit_id) {
                 const { matches } = await doesBillPeriodMatchMoveOut(
                     selectedTenant.id,
                     selectedTenant.unit_id,
@@ -155,6 +158,14 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 status: 'inactive',
                 move_out_date: moveOutDate,
             });
+
+            if (!isPostPaid && moveOutDate && selectedTenant.unit_id) {
+                await adjustBillForMoveOut(
+                    selectedTenant.id,
+                    selectedTenant.unit_id,
+                    new Date(moveOutDate)
+                );
+            }
 
             setShowRemoveModal(false);
             loadData();
@@ -616,6 +627,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 onRefundAmountChange={setRefundAmount}
                 onSubmit={handleRemoveTenant}
                 liveBalance={liveBalance}
+                isPostPaid={property?.rent_payment_type === 'previous_month'}
             />
 
             <MoveTenantModal

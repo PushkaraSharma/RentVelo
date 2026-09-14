@@ -655,9 +655,9 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onLongPress={isLocked ? handleResetBill : undefined}
                 delayLongPress={500}
             >
-                <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.roomName}>{unit.name}</Text>
+                <View style={styles.topRowLeft}>
+                    <View style={styles.titleBadgeRow}>
+                        <Text style={styles.roomName} numberOfLines={2}>{unit.name}</Text>
                         {tenant?.lease_type && (
                             <View style={[styles.leaseBadge, tenant.lease_type === 'fixed' ? styles.leaseBadgeFixed : styles.leaseBadgeMonthly]}>
                                 <Text style={styles.leaseBadgeText}>
@@ -1171,11 +1171,23 @@ const getStyles = (theme: any, isDark: boolean) => {
             alignItems: 'flex-start',
             justifyContent: 'space-between',
             marginBottom: theme.spacing.m,
+            gap: 8,
+        },
+        topRowLeft: {
+            flex: 1,
+            minWidth: 0,
+        },
+        titleBadgeRow: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 6,
         },
         roomName: {
             fontSize: 16,
             fontWeight: theme.typography.bold,
             color: theme.colors.accent,
+            flexShrink: 1,
         },
         tenantName: {
             fontSize: 13,
@@ -1196,6 +1208,7 @@ const getStyles = (theme: any, isDark: boolean) => {
             backgroundColor: s.raised,
             borderWidth: 0,
             borderColor: 'transparent',
+            flexShrink: 0,
         },
         paidAmtBadgeCTA: {
             backgroundColor: theme.colors.accent,
@@ -1485,6 +1498,7 @@ const getStyles = (theme: any, isDark: boolean) => {
             paddingHorizontal: 6,
             paddingVertical: 2,
             borderRadius: 4,
+            flexShrink: 0,
         },
         leaseBadgeMonthly: {
             backgroundColor: s.raised,

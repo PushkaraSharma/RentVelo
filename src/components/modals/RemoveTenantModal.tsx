@@ -27,6 +27,7 @@ interface RemoveTenantModalProps {
     onRefundAmountChange: (amount: string) => void;
     onSubmit: () => void;
     liveBalance?: number;
+    isPostPaid?: boolean;
 }
 
 const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
@@ -39,6 +40,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
     onRefundAmountChange,
     onSubmit,
     liveBalance,
+    isPostPaid,
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
@@ -97,7 +99,9 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                             <View style={styles.noteBox}>
                                 <Info size={16} color={theme.colors.textSecondary} />
                                 <Text style={styles.noteText}>
-                                    Update this tenant's current rent card end date in Take Rent to the move-out date before removing. Even if removed, tenant details stay in past records.
+                                    {isPostPaid
+                                        ? "Update this tenant's current rent card end date in Take Rent to the move-out date before removing. Even if removed, tenant details stay in past records."
+                                        : 'Even if removed, tenant details will be saved in past records.'}
                                 </Text>
                             </View>
 
