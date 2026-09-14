@@ -1,0 +1,29 @@
+appId: com.indieroots.rentVelo
+---
+# 01_login.yaml
+- launchApp:
+    clearState: true # Start fresh
+
+# Wait for the login screen to appear
+- assertVisible: "Automated Collections"
+- tapOn: "Next"
+- assertVisible: "Get Started"
+- tapOn: "Get Started"
+- assertVisible: "Simplify Your\nRentals"
+- tapOn: "\uf1a0, Continue with Google"
+- tapOn: "Continue"
+- tapOn: "Pushkara Sharma pushkara@relfor.com"
+- scrollUntilVisible:
+    element: "Privacy"
+- tapOn: "Continue"
+
+
+
+
+
+
+
+
+
+
+

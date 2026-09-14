@@ -3,7 +3,7 @@ import {
     View, Text, StyleSheet, ScrollView, Pressable, Image,
     TextInput, Dimensions
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../../theme/ThemeContext';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../../components/common/Header';
@@ -35,11 +35,11 @@ const EXPENSE_CATEGORIES = [
     'Gas cylinder', 'Monthly Maintenance', 'Electricity Bill', 'Gas Bill', 'Other'
 ];
 
-const { width } = Dimensions.get('window');
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function ExpensesScreen({ navigation, route }: any) {
     const { theme, isDark } = useAppTheme();
+    const insets = useSafeAreaInsets();
     const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
     const propertyId = route?.params?.propertyId;
@@ -135,6 +135,26 @@ export default function ExpensesScreen({ navigation, route }: any) {
             hapticsError();
             showToast({ type: 'error', title: 'Error', message: 'Please select at least one room' });
             return;
+        }
+
+        if (expenseFrequency === 'monthly') {
+            const { getRecurringExpenses } = await import('../../../db');
+            const recurring = await getRecurringExpenses(propertyId);
+            const newKey = expenseType.trim().toLowerCase();
+            const duplicate = recurring.some(
+                (e) => (e.expense_type || '').trim().toLowerCase() === newKey
+            ) || expenses.some(
+                (e) => e.frequency === 'monthly' && (e.expense_type || '').trim().toLowerCase() === newKey
+            );
+            if (duplicate) {
+                hapticsError();
+                showToast({
+                    type: 'error',
+                    title: 'Already exists',
+                    message: `A monthly "${expenseType}" expense already exists for this property.`,
+                });
+                return;
+            }
         }
 
         setAddLoading(true);
@@ -302,24 +322,22 @@ export default function ExpensesScreen({ navigation, route }: any) {
                                             expense.distribute_type === 'rooms' ? theme.colors.accent : '#F59E0B'
                                         } />
                                     </View>
-                                    <View style={{ flex: 1 }}>
+                                    <View style={{ flex: 1, minWidth: 0 }}>
                                         <Text style={styles.expenseType}>{expense.expense_type}</Text>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                            {expense.frequency === 'monthly' && (
-                                                <View style={styles.recurringBadge}>
-                                                    <Text style={styles.recurringBadgeText}>Monthly</Text>
-                                                </View>
-                                            )}
-                                            <Text style={styles.expenseDistribute}>
-                                                {expense.distribute_type === 'rooms' ? `Rooms: ${unitNames}` : 'Owner'}
-                                            </Text>
-                                        </View>
+                                        {expense.frequency === 'monthly' && (
+                                            <View style={styles.recurringBadge}>
+                                                <Text style={styles.recurringBadgeText}>Monthly</Text>
+                                            </View>
+                                        )}
+                                        <Text style={styles.expenseDistribute} numberOfLines={2}>
+                                            {expense.distribute_type === 'rooms' ? `Rooms: ${unitNames}` : 'Owner'}
+                                        </Text>
                                         {expense.remarks ? (
                                             <Text style={styles.expenseRemarks} numberOfLines={1}>{expense.remarks}</Text>
                                         ) : null}
                                     </View>
                                 </View>
-                                <View style={{ alignItems: 'flex-end', gap: 12, flexDirection: 'row' }}>
+                                <View style={styles.expenseRight}>
                                     {expense.image_uri && (
                                         <ImageIcon size={16} color={theme.colors.accent} />
                                     )}
@@ -414,7 +432,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
                                 style={styles.imageFull}
                                 resizeMode="cover"
                             />
-                            <Pressable 
+                            <Pressable
                                 style={styles.removeImageBtn}
                                 onPress={() => {
                                     hapticsSelection();
@@ -530,7 +548,7 @@ export default function ExpensesScreen({ navigation, route }: any) {
 
             {/* FAB */}
             <Pressable
-                style={styles.fab}
+                style={[styles.fab, { bottom: insets.bottom + 24 }]}
                 onPress={() => setShowAddModal(true)}
             >
                 <Plus color={theme.colors.background} size={24} />
@@ -582,7 +600,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     fab: {
         position: 'absolute',
-        bottom: 24,
         right: 24,
         width: 56,
         height: 56,
@@ -679,7 +696,8 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
-        marginRight: theme.spacing.m,
+        minWidth: 0,
+        marginRight: theme.spacing.s,
     },
     expenseIconBg: {
         width: 40,
@@ -697,22 +715,32 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     expenseDistribute: {
         fontSize: 12,
         color: theme.colors.textSecondary,
+        marginTop: 4,
+    },
+    expenseRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexShrink: 0,
+        gap: 8,
+    },
+    expenseAmount: {
+        fontSize: 16,
+        fontWeight: theme.typography.bold,
+        color: theme.colors.textPrimary,
+        textAlign: 'right',
+        minWidth: 56,
     },
     expenseRemarks: {
         fontSize: 11,
         color: theme.colors.textTertiary,
         marginTop: 2,
     },
-    expenseAmount: {
-        fontSize: theme.typography.m,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.danger,
-    },
     recurringBadge: {
         backgroundColor: isDark ? '#10B98130' : '#ECFDF5',
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
+        alignSelf: 'flex-start',
     },
     recurringBadgeText: {
         fontSize: 10,

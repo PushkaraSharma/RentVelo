@@ -1,6 +1,24 @@
-import { getAnalytics, logEvent, setUserProperty, setUserId } from '@react-native-firebase/analytics';
+import { getAnalytics, logEvent, setUserProperty, setUserId, setAnalyticsCollectionEnabled } from '@react-native-firebase/analytics';
+import { Platform } from 'react-native';
 
 const analytics = getAnalytics();
+
+/**
+ * In dev builds, we disable analytics collection entirely so that
+ * test events, setUserId, and user properties never reach Google's servers.
+ *
+ * In production, we explicitly enable collection (overrides the
+ * firebase.json `analytics_auto_collection_enabled: false` default).
+ *
+ * Note: automatic screen_view events are disabled via firebase.json
+ * (`google_analytics_automatic_screen_reporting_enabled: false`).
+ * We only send screen_view events we explicitly track via trackScreenView().
+ */
+if (__DEV__) {
+    setAnalyticsCollectionEnabled(analytics, false);
+} else {
+    setAnalyticsCollectionEnabled(analytics, true);
+}
 
 /**
  * Analytics event names for RentVelo pilot.
@@ -52,13 +70,17 @@ export const AnalyticsEvents = {
 /**
  * Track a custom analytics event.
  * All events are batched and sent by Firebase SDK automatically.
+ * In dev builds, events are only logged to console (never sent to GA).
  */
 export const trackEvent = async (
     eventName: string,
     params?: Record<string, string | number | boolean>
 ) => {
     try {
-        console.log("logging event", eventName, params);
+        if (__DEV__) {
+            console.log(`[Analytics:DEV] Event: ${eventName}`, params);
+            return;
+        }
         await logEvent(analytics, eventName, params);
     } catch (error) {
         // Silently fail — analytics should never crash the app
@@ -68,9 +90,15 @@ export const trackEvent = async (
 
 /**
  * Set the current screen name for screen-view tracking.
+ * Note: Automatic screen_view events are disabled via firebase.json.
+ * Only screens explicitly tracked here will appear in GA.
  */
 export const trackScreenView = async (screenName: string) => {
     try {
+        if (__DEV__) {
+            console.log(`[Analytics:DEV] Screen: ${screenName}`);
+            return;
+        }
         await logEvent(analytics, 'screen_view', {
             screen_name: screenName,
             screen_class: screenName,
@@ -84,10 +112,18 @@ export const trackScreenView = async (screenName: string) => {
  * Set user properties for portfolio size.
  * Helps segment "Professional" vs "Casual" landlords.
  */
-export const setPortfolioStats = async (stats: { propertyCount: number; tenantCount: number }) => {
+export const setPortfolioStats = async (stats: { propertyCount: number; tenantCount: number; totalUnits?: number }) => {
     try {
+        if (__DEV__) {
+            console.log('[Analytics:DEV] Portfolio stats:', stats);
+            return;
+        }
         await setUserProperty(analytics, 'total_properties', stats.propertyCount.toString());
         await setUserProperty(analytics, 'total_tenants', stats.tenantCount.toString());
+
+        if (stats.totalUnits !== undefined) {
+            await setUserProperty(analytics, 'total_units', stats.totalUnits.toString());
+        }
 
         // Also bucket them for easier filtering in Google Analytics
         const segment = stats.propertyCount > 5 ? 'professional' : 'casual';
@@ -104,6 +140,10 @@ export const setPortfolioStats = async (stats: { propertyCount: number; tenantCo
  */
 export const setAnalyticsUser = async (user: { email: string; name: string } | null) => {
     try {
+        if (__DEV__) {
+            console.log('[Analytics:DEV] Set user:', user);
+            return;
+        }
         if (user) {
             await setUserId(analytics, user.email);
             await setUserProperty(analytics, 'email', user.email);
@@ -122,6 +162,10 @@ export const setAnalyticsUser = async (user: { email: string; name: string } | n
  */
 export const setAnalyticsProperties = async (properties: Record<string, string | null>) => {
     try {
+        if (__DEV__) {
+            console.log('[Analytics:DEV] Set properties:', properties);
+            return;
+        }
         for (const [key, value] of Object.entries(properties)) {
             await setUserProperty(analytics, key, value);
         }
@@ -130,3 +174,54 @@ export const setAnalyticsProperties = async (properties: Record<string, string |
     }
 };
 
+/**
+ * Set enriched user properties for better audience segmentation.
+ * Called on login and app open to keep properties fresh.
+ *
+ * Supported properties:
+ *   - auth_method: "google" | "apple"
+ *   - platform: "ios" | "android"
+ *   - app_version: e.g. "0.0.4_5"
+ *   - dark_mode: "true" | "false"
+ *   - has_backup: "true" | "false"
+ *   - receipt_format: "pdf" | "image" | "ask"
+ *   - days_since_signup: e.g. "45"
+ */
+export const setEnrichedUserProperties = async (props: {
+    authMethod?: 'google' | 'apple';
+    appVersion?: string;
+    darkMode?: boolean;
+    hasBackup?: boolean;
+    receiptFormat?: string;
+    daysSinceSignup?: number;
+}) => {
+    try {
+        if (__DEV__) {
+            console.log('[Analytics:DEV] Enriched properties:', props);
+            return;
+        }
+        // Always set platform
+        await setUserProperty(analytics, 'platform', Platform.OS);
+
+        if (props.authMethod) {
+            await setUserProperty(analytics, 'auth_method', props.authMethod);
+        }
+        if (props.appVersion) {
+            await setUserProperty(analytics, 'app_version', props.appVersion);
+        }
+        if (props.darkMode !== undefined) {
+            await setUserProperty(analytics, 'dark_mode', props.darkMode.toString());
+        }
+        if (props.hasBackup !== undefined) {
+            await setUserProperty(analytics, 'has_backup', props.hasBackup.toString());
+        }
+        if (props.receiptFormat) {
+            await setUserProperty(analytics, 'receipt_format', props.receiptFormat);
+        }
+        if (props.daysSinceSignup !== undefined) {
+            await setUserProperty(analytics, 'days_since_signup', props.daysSinceSignup.toString());
+        }
+    } catch (error) {
+        console.debug('[Analytics] Failed to set enriched properties:', error);
+    }
+};

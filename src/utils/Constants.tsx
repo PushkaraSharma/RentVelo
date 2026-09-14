@@ -3,6 +3,39 @@ import Constants from 'expo-constants';
 
 export const CURRENCY = '₹';
 
+/** Hosted pay page — WhatsApp linkifies https; page opens the UPI app via upi:// */
+export const UPI_PAY_PAGE_URL = 'https://rentvelo.indieroots.in/pay.html';
+
+/**
+ * Bill lines that mirror a property expense are stored with a "Property: " prefix so
+ * the reconciler can match legacy rows by label. That prefix is internal bookkeeping
+ * and should never be shown to a landlord or a tenant.
+ */
+export const formatExpenseLabel = (label?: string | null): string =>
+    (label ?? '').replace(/^Property:\s*/, '');
+
+/** DD/MM/YYYY for in-app date fields (en-IN). */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+    cash: 'Cash',
+    upi: 'UPI',
+    bank_transfer: 'Bank',
+    cheque: 'Cheque',
+    from_deposit: 'From Deposit',
+    other: 'Other',
+};
+
+export const formatPaymentMethodLabel = (method?: string | null): string => {
+    if (!method) return 'Cash';
+    return PAYMENT_METHOD_LABELS[method] ?? method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+export const formatDisplayDate = (value: Date | string | number | null | undefined): string => {
+    if (value == null) return '—';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 export const PROPERTY_TYPES = [
     { id: 'house', label: 'House', icon: Home },
     { id: 'building', label: 'Building', icon: Building },
@@ -69,14 +102,14 @@ export const GUEST_COUNTS = [
     '1 Person', '2 People', '3 People', '4 People', '5+ People'
 ];
 
-export const OTA_VERSION = 1;
+export const OTA_VERSION = 0;
 
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
-        "Added Rent Increment feature",
-        "Resolve receipt related issue",
-        "Bug fixes",
-        "Added Notification feature"
+        "Direct UPI payment link while sharing rent receipt for fast payments",
+        "Option to assign payment account to room/property for managing multiple payment accounts",
+        "Minor UI improvements in rent collection screen",
+        "Option to add extra documents to a tenant's profile",
     ]
 };

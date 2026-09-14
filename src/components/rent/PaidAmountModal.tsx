@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, Modal, Image, SafeAreaView } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { CURRENCY } from '../../utils/Constants';
+import { CURRENCY, formatPaymentMethodLabel } from '../../utils/Constants';
 import { Plus, Banknote, Trash2, Image as ImageIcon, X } from 'lucide-react-native';
 import { getBillPayments, removePaymentFromBill } from '../../db';
 import RentModalSheet from './RentModalSheet';
@@ -92,7 +92,10 @@ export default function PaidAmountModal({ visible, onClose, bill, unit, onAddPay
                                         <Text style={styles.paymentAmount}>
                                             {CURRENCY}{item.amount?.toLocaleString('en-IN')}
                                         </Text>
-                                        <Text style={styles.paymentDate}>{formatDate(item.payment_date)}</Text>
+                                        <Text style={styles.paymentDate}>
+                                            {formatPaymentMethodLabel(item.payment_method)}
+                                            {item.payment_date ? ` · ${formatDate(item.payment_date)}` : ''}
+                                        </Text>
                                     </View>
 
                                     <View style={styles.actionsRow}>

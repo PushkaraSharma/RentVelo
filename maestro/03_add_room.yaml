@@ -1,0 +1,40 @@
+appId: com.indieroots.rentVelo
+---
+# 03_add_room.yaml
+- launchApp:
+    clearState: false
+
+# Ensure we are on Dashboard/Properties
+- tapOn: "Properties, tab, 2 of 3"
+
+# Tap on the first property (Maestro Test Villa)
+- tapOn: "Maestro Test Villa"
+
+# Tap on Rooms
+- tapOn: "Rooms"
+
+# Tap Add First Room or the FAB
+- tapOn: "Add First Room"
+
+# Wait for screen to load
+- assertVisible: "Create New Room"
+
+# Fill out the form
+- tapOn: "ROOM NAME / NO"
+- inputText: "Room 101"
+- hideKeyboard
+
+- tapOn: "MONTHLY RENT"
+- inputText: "5000"
+- hideKeyboard
+
+- swipe:
+    direction: UP
+    duration: 500
+
+# Tap create
+- tapOn: "Create Room"
+
+# Verify success
+- assertVisible: "Room Created!"
+- tapOn: "Got it"

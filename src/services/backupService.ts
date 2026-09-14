@@ -161,19 +161,22 @@ export const backupToGoogleDrive = async (): Promise<BackupResult> => {
 
         // We use a multipart upload to set metadata (name, parent folder) and content
         const boundary = 'foo_bar_baz';
-        const metadata = {
-            name: BACKUP_FILE_NAME,
-            parents: ['appDataFolder'],
-        };
-
+        
         let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
         let method = 'POST';
+
+        const metadata: any = {
+            name: BACKUP_FILE_NAME,
+        };
 
         // If file exists, update it instead of creating a new one
         if (existingFileId) {
             url = `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart`;
             method = 'PATCH';
             // Metadata is only needed if changing name/parents, but patching content is fine
+        } else {
+            // Only set parents when creating a new file
+            metadata.parents = ['appDataFolder'];
         }
 
         const multipartRequestBody =

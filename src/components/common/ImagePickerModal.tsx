@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ImagePickerModalProps {
     visible: boolean;
@@ -27,6 +28,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
+    const insets = useSafeAreaInsets();
 
     return (
         <Modal
@@ -36,7 +38,7 @@ const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
             onRequestClose={onClose}
         >
             <Pressable style={styles.overlay} onPress={onClose}>
-                <View style={styles.content}>
+                <View style={[styles.content, { paddingBottom: insets.bottom }]}>
                     <View style={styles.header}>
                         <Text style={styles.title}>{title}</Text>
                         <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -87,7 +89,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: theme.colors.background,
         borderTopLeftRadius: theme.borderRadius.xl,
         borderTopRightRadius: theme.borderRadius.xl,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
     },
     header: {
         flexDirection: 'row',

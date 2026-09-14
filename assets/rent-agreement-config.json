@@ -1,0 +1,375 @@
+{
+  "version": "1.0",
+  "supported_states": [
+    "DL",
+    "MH",
+    "KA",
+    "TS",
+    "UP",
+    "HR"
+  ],
+  "agreement_types": [
+    "residential_rent_agreement",
+    "leave_and_license"
+  ],
+  "common_variables": [
+    {
+      "key": "agreement_date",
+      "label": "Agreement Date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "key": "landlord_name",
+      "label": "Landlord Full Name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "key": "landlord_address",
+      "label": "Landlord Address",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "key": "tenant_name",
+      "label": "Tenant Full Name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "key": "tenant_address",
+      "label": "Tenant Permanent Address",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "key": "property_address",
+      "label": "Rental Property Address",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "key": "property_type",
+      "label": "Property Type",
+      "type": "select",
+      "options": [
+        "Apartment",
+        "Independent House",
+        "Builder Floor",
+        "Commercial"
+      ],
+      "required": true
+    },
+    {
+      "key": "monthly_rent",
+      "label": "Monthly Rent",
+      "type": "currency",
+      "required": true
+    },
+    {
+      "key": "security_deposit",
+      "label": "Security Deposit",
+      "type": "currency",
+      "required": true
+    },
+    {
+      "key": "lease_start_date",
+      "label": "Lease Start Date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "key": "lease_end_date",
+      "label": "Lease End Date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "key": "lock_in_period_months",
+      "label": "Lock-in Period (Months)",
+      "type": "number",
+      "required": false
+    },
+    {
+      "key": "notice_period_days",
+      "label": "Notice Period (Days)",
+      "type": "number",
+      "required": true
+    },
+    {
+      "key": "maintenance_paid_by",
+      "label": "Maintenance Paid By",
+      "type": "select",
+      "options": [
+        "Landlord",
+        "Tenant",
+        "Shared"
+      ],
+      "required": true
+    },
+    {
+      "key": "utility_paid_by",
+      "label": "Utilities Paid By",
+      "type": "select",
+      "options": [
+        "Tenant",
+        "Landlord",
+        "Shared"
+      ],
+      "required": true
+    },
+    {
+      "key": "rent_due_date",
+      "label": "Monthly Rent Due Date",
+      "type": "number",
+      "required": true
+    },
+    {
+      "key": "late_fee_amount",
+      "label": "Late Fee Amount",
+      "type": "currency",
+      "required": false
+    },
+    {
+      "key": "pets_allowed",
+      "label": "Pets Allowed",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "subletting_allowed",
+      "label": "Subletting Allowed",
+      "type": "boolean",
+      "required": false
+    }
+  ],
+  "common_clauses": [
+    {
+      "id": "parties_clause",
+      "title": "Parties to Agreement",
+      "required": true,
+      "states": ["ALL"],
+      "template": "This Rental Agreement is executed between {{landlord_name}} (hereinafter referred to as the 'Landlord') and {{tenant_name}} (hereinafter referred to as the 'Tenant')."
+    },
+    {
+      "id": "property_description_clause",
+      "title": "Property Description",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The Landlord agrees to let out the property situated at {{property_address}} to the Tenant for residential purposes."
+    },
+    {
+      "id": "rent_clause",
+      "title": "Monthly Rent",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The Tenant shall pay a monthly rent of INR {{monthly_rent}} on or before the {{rent_due_date}} day of each month."
+    },
+    {
+      "id": "security_deposit_clause",
+      "title": "Security Deposit",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The Tenant has paid INR {{security_deposit}} as refundable security deposit to the Landlord."
+    },
+    {
+      "id": "term_clause",
+      "title": "Lease Duration",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The tenancy shall commence from {{lease_start_date}} and continue until {{lease_end_date}}."
+    },
+    {
+      "id": "lockin_clause",
+      "title": "Lock-in Period",
+      "required": false,
+      "states": ["ALL"],
+      "template": "Neither party shall terminate this agreement during the lock-in period of {{lock_in_period_months}} months."
+    },
+    {
+      "id": "maintenance_clause",
+      "title": "Maintenance Charges",
+      "required": true,
+      "states": ["ALL"],
+      "template": "Maintenance charges shall be borne by {{maintenance_paid_by}}."
+    },
+    {
+      "id": "utilities_clause",
+      "title": "Utilities",
+      "required": true,
+      "states": ["ALL"],
+      "template": "Electricity, water, gas, internet, and utility charges shall be paid by {{utility_paid_by}}."
+    },
+    {
+      "id": "late_payment_clause",
+      "title": "Late Payment",
+      "required": false,
+      "states": ["ALL"],
+      "template": "In case of delay in rent payment, a late fee of INR {{late_fee_amount}} may be charged."
+    },
+    {
+      "id": "notice_clause",
+      "title": "Notice Period",
+      "required": true,
+      "states": ["ALL"],
+      "template": "Either party may terminate this agreement by providing {{notice_period_days}} days prior written notice."
+    },
+    {
+      "id": "inspection_clause",
+      "title": "Inspection Rights",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The Landlord may inspect the premises upon prior notice to the Tenant."
+    },
+    {
+      "id": "damage_clause",
+      "title": "Damages",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The Tenant shall be liable for damages caused beyond normal wear and tear."
+    },
+    {
+      "id": "subletting_clause",
+      "title": "Subletting",
+      "required": false,
+      "states": ["ALL"],
+      "template": "Subletting of the premises is {{subletting_allowed}}."
+    },
+    {
+      "id": "pets_clause",
+      "title": "Pets",
+      "required": false,
+      "states": ["ALL"],
+      "template": "Keeping pets inside the premises is {{pets_allowed}}."
+    },
+    {
+      "id": "illegal_activity_clause",
+      "title": "Illegal Activities",
+      "required": true,
+      "states": ["ALL"],
+      "template": "The Tenant shall not engage in any illegal or unlawful activities on the premises."
+    },
+    {
+      "id": "governing_law_clause",
+      "title": "Governing Law",
+      "required": true,
+      "states": ["ALL"],
+      "template": "This agreement shall be governed by the laws applicable in the State of execution."
+    }
+  ],
+  "state_specific_clauses": {
+    "DL": [
+      {
+        "id": "delhi_stamp_clause",
+        "title": "Delhi Stamp Duty Compliance",
+        "required": true,
+        "template": "This agreement shall be stamped in accordance with the applicable provisions of Delhi stamp laws."
+      },
+      {
+        "id": "delhi_registration_clause",
+        "title": "Delhi Registration",
+        "required": false,
+        "template": "If the tenancy exceeds 11 months, the agreement may require registration under applicable law."
+      }
+    ],
+    "MH": [
+      {
+        "id": "mh_leave_license_clause",
+        "title": "Leave and License Nature",
+        "required": true,
+        "template": "This agreement is executed as a Leave and License Agreement under applicable Maharashtra laws."
+      },
+      {
+        "id": "mh_police_verification_clause",
+        "title": "Police Verification",
+        "required": true,
+        "template": "The Tenant shall cooperate with police verification formalities as required in Maharashtra."
+      },
+      {
+        "id": "mh_eregistration_clause",
+        "title": "e-Registration",
+        "required": true,
+        "template": "The parties agree to complete e-registration and biometric authentication if applicable."
+      }
+    ],
+    "KA": [
+      {
+        "id": "ka_kaveri_clause",
+        "title": "Kaveri Registration",
+        "required": false,
+        "template": "The parties may register this agreement using the Kaveri online registration platform."
+      },
+      {
+        "id": "ka_notice_standard_clause",
+        "title": "Standard Notice",
+        "required": true,
+        "template": "A standard notice period shall apply unless otherwise mutually agreed."
+      }
+    ],
+    "TS": [
+      {
+        "id": "ts_estamp_clause",
+        "title": "Telangana e-Stamp",
+        "required": true,
+        "template": "The agreement may be executed using Telangana approved e-stamp mechanisms."
+      },
+      {
+        "id": "ts_police_verification_clause",
+        "title": "Police Verification",
+        "required": false,
+        "template": "Tenant police verification may be conducted if required by local authorities."
+      }
+    ],
+    "UP": [
+      {
+        "id": "up_tenancy_act_clause",
+        "title": "UP Tenancy Compliance",
+        "required": true,
+        "template": "The parties agree to comply with the Uttar Pradesh tenancy regulations applicable to urban premises."
+      },
+      {
+        "id": "up_registration_clause",
+        "title": "Registration Compliance",
+        "required": false,
+        "template": "Registration may be mandatory depending upon the lease duration under applicable Uttar Pradesh laws."
+      }
+    ],
+    "HR": [
+      {
+        "id": "hr_estamp_clause",
+        "title": "Haryana e-Stamp",
+        "required": true,
+        "template": "This agreement may be executed using Haryana approved e-stamping facilities."
+      },
+      {
+        "id": "hr_jurisdiction_clause",
+        "title": "Jurisdiction",
+        "required": true,
+        "template": "Courts located within Haryana shall have jurisdiction over disputes arising from this agreement."
+      }
+    ]
+  },
+  "optional_user_defined_clauses": [
+    {
+      "id": "guest_policy",
+      "title": "Guest Policy"
+    },
+    {
+      "id": "painting_clause",
+      "title": "Painting and Alterations"
+    },
+    {
+      "id": "parking_clause",
+      "title": "Parking Usage"
+    },
+    {
+      "id": "society_rules_clause",
+      "title": "Society Rules"
+    },
+    {
+      "id": "smoking_clause",
+      "title": "Smoking Restriction"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ import { useToast } from '../../../hooks/useToast';
 import ImagePickerModal from '../../../components/common/ImagePickerModal';
 import PromptModal from '../../../components/common/PromptModal';
 import ImagePreviewModal from '../../../components/common/ImagePreviewModal';
+import { incrementActionAndReview } from '../../../services/storeReviewService';
 
 
 export default function AddPropertyScreen({ navigation, route }: any) {
@@ -309,6 +310,7 @@ export default function AddPropertyScreen({ navigation, route }: any) {
 
                 setCreatedPropertyId(newId);
                 trackEvent(AnalyticsEvents.PROPERTY_ADDED, { type: propertyType, is_multi_unit: isMultiUnit.toString() });
+                incrementActionAndReview();
                 setShowSuccessModal(true);
             }
         } catch (error: any) {

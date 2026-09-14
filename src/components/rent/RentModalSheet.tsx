@@ -33,8 +33,11 @@ export default function RentModalSheet({
     const styles = getStyles(theme);
     const insets = useSafeAreaInsets();
 
+    // onRequestClose is required on Android: without it the hardware back button
+    // dismisses the modal natively while `visible` stays true, leaving the sheet
+    // impossible to reopen.
     return (
-        <Modal visible={visible} transparent animationType="fade">
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}>
                 <Pressable style={styles.overlay} onPress={onClose}>
                     <Pressable style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]} onPress={e => e.stopPropagation()}>

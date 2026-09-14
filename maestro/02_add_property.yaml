@@ -1,0 +1,48 @@
+appId: com.indieroots.rentVelo
+---
+# 02_add_property.yaml
+- launchApp:
+      clearState: false # We want to stay logged in from the previous step
+
+# Ensure we are on Dashboard
+- assertVisible: "WELCOME BACK"
+
+# Navigate to Properties
+- tapOn: "Properties, tab, 2 of 3"
+- waitForAnimationToEnd
+
+# Tap the Add Property button (+)
+- tapOn:
+    id: "add-property-fab"
+
+# Wait for screen to load
+- assertVisible: "Create New Property"
+
+# Fill out the form
+- tapOn: "PROPERTY NAME"
+- inputText: "Maestro Test Villa"
+- hideKeyboard
+
+- tapOn: "ADDRESS"
+- inputText: "123 Automation Lane"
+- hideKeyboard
+
+- swipe:
+      direction: UP
+      duration: 500
+
+- tapOn: "TOTAL FLOORS"
+- inputText: "2"
+- hideKeyboard
+
+# Select property type (assuming there's text 'House' or 'Flat')
+- tapOn: "House"
+
+# Tap create
+- tapOn: "Create Property"
+
+# Verify Success modal
+- assertVisible: ".*Property Created!.*"
+
+# Close modal
+- tapOn: "Done, Go Back"

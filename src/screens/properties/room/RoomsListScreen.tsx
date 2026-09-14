@@ -190,7 +190,7 @@ export default function RoomsListScreen({ navigation, route }: any) {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Header title={isPG ? 'Rooms & Beds' : 'Rooms'} subTitle={property?.name} />
             <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
                 {isPG ? (

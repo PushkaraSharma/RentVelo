@@ -64,10 +64,29 @@ export {
     upsertReceiptConfig,
 } from './receiptConfigService';
 
+// Payment account operations
+export {
+    getAllPaymentAccounts,
+    getPaymentAccountById,
+    createPaymentAccount,
+    updatePaymentAccount,
+    deletePaymentAccount,
+    getPaymentAccountUsage,
+    setPropertyDefaultPaymentAccount,
+    assignPaymentAccountToUnits,
+    resolveReceiptConfig,
+    migrateReceiptConfigsToPaymentAccounts,
+    accountToReceiptConfig,
+    hasAnyPaymentDetails,
+} from './paymentAccountService';
+export type { ReceiptConfigLike } from './paymentAccountService';
+
 // Bill operations
 export {
     generateBillsForProperty,
     getBillsForPropertyMonth,
+    getUsagePeriod,
+    BILL_ADVANCE_DAYS,
     getBillById,
     updateBill,
     recalculateBill,
@@ -79,11 +98,15 @@ export {
     getBillPayments,
     resetBill,
     resetFutureBills,
-    persistVirtualBill,
     syncPendingBillsWithUnitSettings,
     savePGUtilityReading,
     getBillsByTenantId,
     getBillSummaryByUnitId,
+    getOpenBillForMoveOut,
+    doesBillPeriodMatchMoveOut,
+    adjustBillForMoveOut,
+    getExpectedRevenueBreakdown,
+    type ExpectedRevenueBreakdown
 } from './billService';
 
 // Notification operations

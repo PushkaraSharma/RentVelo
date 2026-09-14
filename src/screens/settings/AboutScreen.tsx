@@ -23,7 +23,7 @@ export default function AboutScreen({ navigation }: any) {
         }
     };
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Header title="About App" />
 
             <ScrollView contentContainerStyle={styles.content}>
@@ -109,7 +109,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     logoSection: {
         alignItems: 'center',
-        marginBottom: theme.spacing.xxl,
+        marginBottom: theme.spacing.xl,
     },
     logoPlaceholder: {
         width: 100,
@@ -160,7 +160,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 16,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-        marginBottom: theme.spacing.l,
+        marginBottom: theme.spacing.s,
         textAlign: 'center',
     },
     linkRow: {

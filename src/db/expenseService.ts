@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { propertyExpenses, type PropertyExpense, type NewPropertyExpense } from './schema';
 import { eq, and, desc, or, lt } from 'drizzle-orm';
+import { normalizeExpenseCategory } from '../utils/expenseCategory';
 // Re-export types
 export { PropertyExpense };
 
@@ -8,6 +9,18 @@ export { PropertyExpense };
 
 export const createExpense = async (expense: NewPropertyExpense): Promise<number> => {
     const db = getDb();
+
+    if (expense.frequency === 'monthly') {
+        const existing = await getRecurringExpenses(expense.property_id);
+        const newKey = normalizeExpenseCategory(expense.expense_type);
+        const duplicate = existing.some(
+            (e) => normalizeExpenseCategory(e.expense_type) === newKey
+        );
+        if (duplicate) {
+            throw new Error(`A monthly recurring "${expense.expense_type}" expense already exists for this property.`);
+        }
+    }
+
     const result = await db.insert(propertyExpenses).values(expense).returning({ id: propertyExpenses.id });
     return result[0].id;
 };
@@ -54,7 +67,33 @@ export const getExpensesByPropertyMonth = async (
 
 export const deleteExpense = async (id: number): Promise<void> => {
     const db = getDb();
+    
+    // 1. Delete linked bill_expenses first to avoid FK constraint errors 
+    //    and ensure rent totals are updated on next balance refresh.
+    //    We also need to know which bills were affected to recalculate them.
+    const { billExpenses } = require('./schema');
+    const { recalculateBill } = require('./billService');
+
+    const linkedBillExpenses = await db.select({ bill_id: billExpenses.bill_id })
+        .from(billExpenses)
+        .where(eq(billExpenses.property_expense_id, id));
+    
+    const affectedBillIds = Array.from(new Set(linkedBillExpenses.map(be => be.bill_id)));
+
+    // Delete the linked bill expenses
+    await db.delete(billExpenses).where(eq(billExpenses.property_expense_id, id));
+
+    // 2. Delete the root property expense
     await db.delete(propertyExpenses).where(eq(propertyExpenses.id, id));
+
+    // 3. Optional: Recalculate bills if any were affected
+    for (const billId of affectedBillIds) {
+        try {
+            await recalculateBill(billId);
+        } catch (e) {
+            console.warn(`Failed to recalculate bill ${billId} after expense deletion:`, e);
+        }
+    }
 };
 
 export const getExpenseSummary = async (

@@ -6,7 +6,7 @@ import { Provider } from 'react-redux';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { store } from './src/redux/store';
 import RootNavigator from './src/navigation/RootNavigator';
-import { db, migrations } from './src/db/database';
+import { db, migrations, syncDatabaseSchema } from './src/db/database';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { theme } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -16,9 +16,13 @@ import AutoBackupHandler from './src/components/AutoBackupHandler';
 import { ToastProvider } from './src/components/common/ToastProvider';
 import UpdateToast from './src/components/common/UpdateToast';
 import { migrateOldImagesToPermanentStorage } from './src/services/imageMigrationService';
+import { migrateReceiptConfigsToPaymentAccounts } from './src/db/paymentAccountService';
 import { syncNotificationSchedules } from './src/services/pushNotificationService';
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from './src/navigation/RootNavigator';
+
+// @ts-expect-error
+globalThis.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true
 
 export default function App() {
   const { success, error } = useMigrations(db, migrations);
@@ -69,6 +73,8 @@ export default function App() {
 
   React.useEffect(() => {
     if (success) {
+      syncDatabaseSchema(); // Double check schema after migrations
+      migrateReceiptConfigsToPaymentAccounts();
       migrateOldImagesToPermanentStorage();
     }
   }, [success]);

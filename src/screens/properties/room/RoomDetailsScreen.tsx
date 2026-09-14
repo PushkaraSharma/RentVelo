@@ -42,13 +42,15 @@ import {
     getAllProperties,
     getUnitsByPropertyId,
     deleteUnit,
-    getBillSummaryByUnitId
+    getBillSummaryByUnitId,
+    doesBillPeriodMatchMoveOut,
+    adjustBillForMoveOut,
+    getBillsByTenantId,
 } from '../../../db';
-import { CURRENCY } from '../../../utils/Constants';
+import { CURRENCY, formatDisplayDate } from '../../../utils/Constants';
 import { useFocusEffect } from '@react-navigation/native';
 import Button from '../../../components/common/Button';
 import Input from '../../../components/common/Input';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import PickerBottomSheet from '../../../components/common/PickerBottomSheet';
 import RemoveTenantModal from '../../../components/modals/RemoveTenantModal';
 import MoveTenantModal from '../../../components/modals/MoveTenantModal';
@@ -77,6 +79,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     // Form states
     const [moveOutDate, setMoveOutDate] = useState(new Date());
     const [refundAmount, setRefundAmount] = useState('');
+    const [liveBalance, setLiveBalance] = useState<number>(0);
 
     // Move Tenant Form
     const [targetPropertyId, setTargetPropertyId] = useState<number | null>(null);
@@ -133,11 +136,37 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     const handleRemoveTenant = async () => {
         if (!selectedTenant) return;
         try {
+            const isPostPaid = property?.rent_payment_type === 'previous_month';
+
+            if (isPostPaid && moveOutDate && selectedTenant.unit_id) {
+                const { matches } = await doesBillPeriodMatchMoveOut(
+                    selectedTenant.id,
+                    selectedTenant.unit_id,
+                    new Date(moveOutDate)
+                );
+                if (!matches) {
+                    showToast({
+                        type: 'error',
+                        title: 'Update rent card first',
+                        message: 'Set this tenant\'s current rent card end date in Take Rent to the move-out date, then try again.',
+                    });
+                    return;
+                }
+            }
+
             await updateTenant(selectedTenant.id, {
                 status: 'inactive',
                 move_out_date: moveOutDate,
-                // In a real app, record the refund in payments/transaction log
             });
+
+            if (!isPostPaid && moveOutDate && selectedTenant.unit_id) {
+                await adjustBillForMoveOut(
+                    selectedTenant.id,
+                    selectedTenant.unit_id,
+                    new Date(moveOutDate)
+                );
+            }
+
             setShowRemoveModal(false);
             loadData();
             showToast({ type: 'success', title: 'Success', message: 'Tenant moved out successfully.' });
@@ -280,18 +309,25 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 <View style={styles.dateRow}>
                     <Calendar size={14} color={theme.colors.textSecondary} />
                     <Text style={styles.dateText}>
-                        {new Date(tenant.move_in_date).toLocaleDateString()}
-                        {tenant.move_out_date ? ` - ${new Date(tenant.move_out_date).toLocaleDateString()}` : ' - Present'}
+                        {formatDisplayDate(tenant.move_in_date)}
+                        {tenant.move_out_date ? ` - ${formatDisplayDate(tenant.move_out_date)}` : ' - Present'}
                     </Text>
                 </View>
                 {isActive && (
                     <View style={styles.activeActions}>
                         <Pressable
                             style={[styles.actionChip, { backgroundColor: isDark ? '#EF444420' : '#FEE2E2' }]}
-                            onPress={(e) => {
+                            onPress={async (e) => {
                                 e.stopPropagation();
                                 setSelectedTenant(tenant);
                                 setRefundAmount(tenant.security_deposit?.toString() || '0');
+                                try {
+                                    const bills = await getBillsByTenantId(tenant.id);
+                                    const latestBill = bills[0];
+                                    setLiveBalance(latestBill?.balance ?? 0);
+                                } catch {
+                                    setLiveBalance(tenant.balance_amount ?? 0);
+                                }
                                 setShowRemoveModal(true);
                             }}
                         >
@@ -328,7 +364,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             {/* Header */}
             <Header
                 title={isPGBed ? (unit?.bed_number || unit?.name) : (unit?.name || 'Room Details')}
@@ -511,7 +547,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                     <Text style={styles.infoKey}>Current Tenant Since</Text>
                                     <Text style={styles.infoValue}>
                                         {currentTenant.move_in_date
-                                            ? new Date(currentTenant.move_in_date).toLocaleDateString()
+                                            ? formatDisplayDate(currentTenant.move_in_date)
                                             : '—'}
                                     </Text>
                                 </View>
@@ -544,7 +580,7 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                                     <Text style={styles.infoKey}>Last Vacancy</Text>
                                     <Text style={styles.infoValue}>
                                         {pastTenants[0].move_out_date
-                                            ? new Date(pastTenants[0].move_out_date).toLocaleDateString()
+                                            ? formatDisplayDate(pastTenants[0].move_out_date)
                                             : '—'}
                                     </Text>
                                 </View>
@@ -590,6 +626,8 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
                 refundAmount={refundAmount}
                 onRefundAmountChange={setRefundAmount}
                 onSubmit={handleRemoveTenant}
+                liveBalance={liveBalance}
+                isPostPaid={property?.rent_payment_type === 'previous_month'}
             />
 
             <MoveTenantModal

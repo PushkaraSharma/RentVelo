@@ -62,7 +62,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         >
             <View style={styles.modalOverlay}>
                 <Pressable style={styles.dismissArea} onPress={onClose} />
-                <View style={styles.modalContent}>
+                <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom, 20) }]}>
                     <View style={styles.header}>
                         <View style={styles.iconContainer}>
                             {getIcon()}
@@ -75,7 +75,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                         {children && <View style={styles.customContent}>{children}</View>}
                     </View>
 
-                    <View style={[styles.actions, { paddingBottom: insets.bottom }]}>
+                    <View style={[styles.actions]}>
                         <Button
                             title={cancelText}
                             onPress={onClose}
@@ -116,7 +116,6 @@ const getStyles = (theme: any, isDark: boolean, variant: string) => StyleSheet.c
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 24,
         paddingHorizontal: 24,
         alignItems: 'center'
     },

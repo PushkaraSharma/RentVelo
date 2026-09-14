@@ -5,9 +5,227 @@ import {
 } from './schema';
 import { eq, and, or, desc, sum, sql, inArray } from 'drizzle-orm';
 import { differenceInDays, isAfter, startOfDay } from 'date-fns';
+import { isDuplicateRecurringCategory, normalizeExpenseCategory } from '../utils/expenseCategory';
+import { getRecurringExpenses } from './expenseService';
+import { getTenantById, updateTenant } from './tenantService';
 
 // Re-export types
 export { RentBill, BillExpense };
+
+/**
+ * How many days before a month starts its bills may be generated and collected.
+ * The rent screen lets the landlord open the upcoming month this early, so generation
+ * has to allow the same window or that month renders with no bills at all.
+ */
+export const BILL_ADVANCE_DAYS = 3;
+
+/** "Today" shifted by the advance window, i.e. the latest month bills may exist for. */
+const getBillingHorizon = (): { month: number; year: number } => {
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + BILL_ADVANCE_DAYS);
+    return { month: horizon.getMonth() + 1, year: horizon.getFullYear() };
+};
+
+/**
+ * Resolve the "usage month" that a bill covers.
+ * Post-paid properties bill the previous month's occupancy, so period dates and
+ * property expenses are keyed one month behind the bill itself. Anything that
+ * writes or reads month-scoped bill data must agree on this shift.
+ */
+export const getUsagePeriod = (
+    property: { rent_payment_type?: string | null } | null | undefined,
+    month: number,
+    year: number
+): { usageMonth: number; usageYear: number } => {
+    if (property?.rent_payment_type !== 'previous_month') {
+        return { usageMonth: month, usageYear: year };
+    }
+    return month === 1
+        ? { usageMonth: 12, usageYear: year - 1 }
+        : { usageMonth: month - 1, usageYear: year };
+};
+
+/**
+ * A zeroed bill line whose label carries a "(Removed)" or "(Waived)" suffix.
+ * The marker records a deliberate removal for one month only, so the lazy syncs
+ * must leave it alone and must never carry it into a later month's bill.
+ */
+const isWaivedLabel = (label: string | null | undefined): boolean =>
+    !!label && (label.endsWith('(Removed)') || label.endsWith('(Waived)'));
+
+const getBillPeriodEnd = (b: Pick<RentBill, 'period_end' | 'month' | 'year'>): Date => {
+    if (b.period_end) return new Date(b.period_end);
+    return new Date(b.year, b.month, 0, 23, 59, 59);
+};
+
+const resolveBillPeriodStart = (
+    bill: Pick<RentBill, 'period_start' | 'month' | 'year'>,
+    property?: { rent_payment_type?: string | null } | null
+): Date => {
+    if (bill.period_start) return startOfDay(new Date(bill.period_start));
+    const { usageMonth, usageYear } = getUsagePeriod(property, bill.month, bill.year);
+    return startOfDay(new Date(usageYear, usageMonth - 1, 1));
+};
+
+const resolveBillPeriodEnd = (
+    bill: Pick<RentBill, 'period_end' | 'month' | 'year'>,
+    property?: { rent_payment_type?: string | null } | null
+): Date => {
+    if (bill.period_end) return startOfDay(new Date(bill.period_end));
+    const { usageMonth, usageYear } = getUsagePeriod(property, bill.month, bill.year);
+    return startOfDay(new Date(usageYear, usageMonth, 0));
+};
+
+const loadPropertyForUnit = async (unitId: number) => {
+    const db = getDb();
+    const unitResult = await db.select().from(units).where(eq(units.id, unitId)).limit(1);
+    if (unitResult.length === 0) return null;
+    const propResult = await db.select().from(properties)
+        .where(eq(properties.id, unitResult[0].property_id)).limit(1);
+    return propResult[0] ?? null;
+};
+
+/**
+ * The rent card the landlord should edit before move-out: the most recent bill
+ * whose period started on or before the move-out date (not the calendar month
+ * of move-out, which misses post-paid collection rows).
+ */
+export const getOpenBillForMoveOut = async (
+    tenantId: number,
+    unitId: number,
+    moveOutDate: Date
+): Promise<RentBill | null> => {
+    const db = getDb();
+    const bills = await db.select().from(rentBills).where(
+        and(eq(rentBills.tenant_id, tenantId), eq(rentBills.unit_id, unitId))
+    );
+    if (bills.length === 0) return null;
+
+    const property = await loadPropertyForUnit(unitId);
+    const moveOutMs = startOfDay(moveOutDate).getTime();
+
+    const candidates = bills
+        .filter((b) => resolveBillPeriodStart(b, property).getTime() <= moveOutMs)
+        .sort((a, b) => {
+            const ym = (b.year * 12 + b.month) - (a.year * 12 + a.month);
+            if (ym !== 0) return ym;
+            return resolveBillPeriodStart(b, property).getTime() - resolveBillPeriodStart(a, property).getTime();
+        });
+
+    return candidates[0] ?? null;
+};
+
+/**
+ * Remove is allowed when there is no bill yet, or the open card already ends
+ * on the move-out date (the landlord's manual Take Rent edit).
+ */
+export const doesBillPeriodMatchMoveOut = async (
+    tenantId: number,
+    unitId: number,
+    moveOutDate: Date
+): Promise<{ matches: boolean; bill: RentBill | null }> => {
+    const bill = await getOpenBillForMoveOut(tenantId, unitId, moveOutDate);
+    if (!bill) return { matches: true, bill: null };
+
+    const property = await loadPropertyForUnit(unitId);
+    const matches = resolveBillPeriodEnd(bill, property).getTime() === startOfDay(moveOutDate).getTime();
+    return { matches, bill };
+};
+
+/**
+ * Meter readings belong to the room. Find the latest bill on this unit whose period
+ * ended before the target period starts (includes an earlier tenant in the same month).
+ */
+const resolveChainedPrevReadings = async (
+    db: ReturnType<typeof getDb>,
+    params: {
+        unitId: number;
+        unit: { initial_electricity_reading?: number | null; initial_water_reading?: number | null };
+        month: number;
+        year: number;
+        periodStart: Date;
+        excludeBillId?: number;
+    }
+): Promise<{ prevReading: number | null; waterPrevReading: number | null }> => {
+    const { unitId, unit, month, year, periodStart, excludeBillId } = params;
+    let prevReading: number | null = unit.initial_electricity_reading ?? 0;
+    let waterPrevReading: number | null = unit.initial_water_reading ?? 0;
+
+    const periodStartMs = startOfDay(periodStart).getTime();
+
+    const unitBills = await db.select().from(rentBills).where(
+        and(
+            eq(rentBills.unit_id, unitId),
+            sql`(${rentBills.year} * 12 + ${rentBills.month}) <= ${year * 12 + month}`,
+            excludeBillId ? sql`${rentBills.id} != ${excludeBillId}` : sql`1=1`
+        )
+    );
+
+    const priorBill = unitBills
+        // Same-day handoff (move-out and move-in on the 14th) still belongs to the prior tenant.
+        .filter((b) => startOfDay(getBillPeriodEnd(b)).getTime() <= periodStartMs)
+        .sort((a, b) => getBillPeriodEnd(b).getTime() - getBillPeriodEnd(a).getTime())[0];
+
+    if (priorBill) {
+        if (priorBill.curr_reading !== null && priorBill.curr_reading !== undefined) {
+            prevReading = priorBill.curr_reading;
+        }
+        if (priorBill.water_curr_reading !== null && priorBill.water_curr_reading !== undefined) {
+            waterPrevReading = priorBill.water_curr_reading;
+        }
+    }
+
+    return { prevReading, waterPrevReading };
+};
+
+/**
+ * Matches bills strictly later than the given month.
+ */
+const isAfterMonthFilter = (month: number, year: number) => or(
+    sql`${rentBills.year} > ${year}`,
+    and(eq(rentBills.year, year), sql`${rentBills.month} > ${month}`)
+);
+
+/**
+ * The single definition of what makes a bill "complex" enough to lock earlier months:
+ * it carries manual user input — a payment, a meter reading, or a hand-added expense.
+ * Clean auto-generated shells must not lock anything, otherwise routine bill generation
+ * would freeze the month the user is trying to edit.
+ *
+ * Requires billExpenses to be left-joined onto rentBills by the caller.
+ */
+const complexBillInputFilter = () => or(
+    sql`${rentBills.paid_amount} > 0`,
+    sql`${rentBills.curr_reading} IS NOT NULL`,
+    sql`${rentBills.water_curr_reading} IS NOT NULL`,
+    and(
+        sql`${billExpenses.id} IS NOT NULL`,
+        eq(billExpenses.is_recurring, false),
+        sql`${billExpenses.property_expense_id} IS NULL`
+    )
+);
+
+/**
+ * Single-unit form of the lock test. getBillsForPropertyMonth runs the same criteria as
+ * one batched query for the whole property; both must agree or the UI will present a bill
+ * as editable while the service layer silently refuses to recalculate it.
+ */
+const hasComplexFutureBills = async (unitId: number, month: number, year: number): Promise<boolean> => {
+    const db = getDb();
+    const rows = await db.select({ id: rentBills.id })
+        .from(rentBills)
+        .leftJoin(billExpenses, eq(rentBills.id, billExpenses.bill_id))
+        .where(
+            and(
+                eq(rentBills.unit_id, unitId),
+                isAfterMonthFilter(month, year),
+                complexBillInputFilter()
+            )
+        )
+        .limit(1);
+
+    return rows.length > 0;
+};
 
 /**
  * Helper: count occupied beds in a PG room_group for a given month.
@@ -51,29 +269,18 @@ export const generateBillsForProperty = async (
 ): Promise<void> => {
     const db = getDb();
 
-    // Skip bill generation for future months — they will be virtual
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    // Current/Future months (relative to today) are treated as virtual simulations until specialized action is taken
-    const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
-    const isStrictlyFuture = (year > currentYear) || (year === currentYear && month > currentMonth);
-    if (isFutureMonth) return;
+    // Skip bill generation beyond the billing horizon. The horizon includes the advance
+    // window so the upcoming month the rent screen already lets the landlord open actually
+    // has bills; without this the screen renders a list of empty cards.
+    const { month: horizonMonth, year: horizonYear } = getBillingHorizon();
+    const isBeyondHorizon = (year > horizonYear) || (year === horizonYear && month > horizonMonth);
+    if (isBeyondHorizon) return;
 
     // Get property to check rent_payment_type
     const propertyResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
     const property = propertyResult[0];
-    const isPostPaid = property?.rent_payment_type === 'previous_month';
 
-    let usageMonth = month;
-    let usageYear = year;
-    if (isPostPaid) {
-        usageMonth = month - 1;
-        if (usageMonth < 1) { 
-            usageMonth = 12; 
-            usageYear--; 
-        }
-    }
+    const { usageMonth, usageYear } = getUsagePeriod(property, month, year);
     const usageMonthStart = new Date(usageYear, usageMonth - 1, 1);
 
     // Get all units for this property (sorted same as room list)
@@ -143,249 +350,402 @@ export const generateBillsForProperty = async (
         }
     }
 
+    // Pre-compute usage month boundaries as timestamps for inactive tenant filtering
+    const usageMonthEndDate = new Date(usageYear, usageMonth, 0, 23, 59, 59);
+    const usageMonthStartTs = Math.floor(usageMonthStart.getTime() / 1000);
+    const usageMonthEndTs = Math.floor(usageMonthEndDate.getTime() / 1000);
+
     for (const unit of propertyUnits) {
-        // Find active tenant for this unit
+        // ── Find ALL tenants who occupied this unit during the usage month ──
+        // 1. Active tenants (currently living)
         const activeTenants = await db.select()
             .from(tenants)
-            .where(and(eq(tenants.unit_id, unit.id), eq(tenants.status, 'active')))
-            .limit(1);
+            .where(and(eq(tenants.unit_id, unit.id), eq(tenants.status, 'active')));
 
-        if (activeTenants.length === 0) continue; // Skip vacant rooms
+        // 2. Inactive tenants whose move_out_date falls within the usage month
+        const movedOutTenants = await db.select()
+            .from(tenants)
+            .where(and(
+                eq(tenants.unit_id, unit.id),
+                eq(tenants.status, 'inactive'),
+                sql`${tenants.move_out_date} >= ${usageMonthStartTs}`,
+                sql`${tenants.move_out_date} <= ${usageMonthEndTs}`
+            ));
 
-        const tenant = activeTenants[0];
+        const relevantTenants = [...activeTenants, ...movedOutTenants];
+        if (relevantTenants.length === 0) continue; // Skip vacant rooms
 
-        // Determine the "Usage Month" for gating
-        // B2: Skip if month is before tenant's rent_start_date
-        if (tenant.rent_start_date) {
-            const rsd = new Date(tenant.rent_start_date);
-            const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
-            if (usageMonthStart < rsdMonthStart) continue;
-        }
+        for (const tenant of relevantTenants) {
+            const isMovedOutTenant = tenant.status === 'inactive';
 
-        // B5: Skip if lease has expired (fixed lease type)
-        if (tenant.lease_type === 'fixed' && tenant.lease_end_date) {
-            const led = new Date(tenant.lease_end_date);
-            if (usageMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) continue;
-        }
-
-        // Check if a bill already exists for this unit+month+year
-        const existingBill = await db.select()
-            .from(rentBills)
-            .where(
-                and(
-                    eq(rentBills.unit_id, unit.id),
-                    eq(rentBills.month, month),
-                    eq(rentBills.year, year)
-                )
-            )
-            .limit(1);
-
-        if (existingBill.length > 0) {
-            const bill = existingBill[0];
-            // If the bill is already fully paid, we don't want to touch it at all
-            if (bill.status === 'paid' || bill.status === 'overpaid') continue;
-            // Otherwise, we continue but we'll use an UPDATE instead of an INSERT later
-            // (The code below will recalculate prev_reading and previous_balance)
-        }
-
-        // Calculate previous balance from last month's bill
-        let previousBalance = 0;
-        const prevMonth = month === 1 ? 12 : month - 1;
-        const prevYear = month === 1 ? year - 1 : year;
-
-        const prevBill = await db.select()
-            .from(rentBills)
-            .where(
-                and(
-                    eq(rentBills.unit_id, unit.id),
-                    eq(rentBills.month, prevMonth),
-                    eq(rentBills.year, prevYear)
-                )
-            )
-            .limit(1);
-
-        if (prevBill.length > 0) {
-            previousBalance = prevBill[0].balance ?? 0;
-        } else if (tenant.advance_rent && tenant.advance_rent > 0) {
-            // B4: First bill uses advance_rent as credit (negative = advance)
-            previousBalance = -(tenant.advance_rent);
-        }
-
-        // B17: Carry over electricity readings
-        let prevReading = unit.initial_electricity_reading ?? 0;
-        if (prevBill.length > 0 && prevBill[0].curr_reading !== null && prevBill[0].curr_reading !== undefined) {
-            prevReading = prevBill[0].curr_reading;
-        }
-
-        // Initialize water readings
-        let waterPrevReading = unit.initial_water_reading ?? 0;
-        if (prevBill.length > 0 && prevBill[0].water_curr_reading !== null && prevBill[0].water_curr_reading !== undefined) {
-            waterPrevReading = prevBill[0].water_curr_reading;
-        }
-
-        // Get utilities (PG-aware fixed costs)
-        let electricityAmount = 0;
-        let waterAmount = 0;
-        if (!unit.is_metered && unit.electricity_fixed_amount) {
-            if (unit.room_group) {
-                // Pre-split for PG to avoid incorrect initial totals/balances
-                const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
-                electricityAmount = Math.round((unit.electricity_fixed_amount / occupiedCount) * 100) / 100;
-            } else {
-                electricityAmount = unit.electricity_fixed_amount;
+            // Determine the "Usage Month" for gating
+            // B2: Skip if month is before tenant's rent_start_date
+            if (tenant.rent_start_date) {
+                const rsd = new Date(tenant.rent_start_date);
+                const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
+                if (usageMonthStart < rsdMonthStart) continue;
             }
-        }
-        if (unit.water_fixed_amount) {
-            if (unit.room_group) {
-                const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
-                waterAmount = Math.round((unit.water_fixed_amount / occupiedCount) * 100) / 100;
-            } else {
-                waterAmount = unit.water_fixed_amount;
+
+            // B5: Skip if lease has expired (fixed lease type) — only for active tenants
+            if (!isMovedOutTenant && tenant.lease_type === 'fixed' && tenant.lease_end_date) {
+                const led = new Date(tenant.lease_end_date);
+                if (usageMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) continue;
             }
-        }
 
-        // B10: Generate unique bill number using MAX id
-        const maxBill = await db.select({ id: rentBills.id }).from(rentBills)
-            .where(eq(rentBills.property_id, propertyId)).orderBy(desc(rentBills.id)).limit(1);
-        const nextNum = (maxBill[0]?.id ?? 0) + 1;
-        const billNumber = `B-${nextNum.toString().padStart(4, '0')}`;
+            // Stretched move-out card already covers occupancy — do not create
+            // a second bill for the leftover days in a later usage month.
+            if (isMovedOutTenant && tenant.move_out_date) {
+                const existingForTenant = await db.select().from(rentBills).where(
+                    and(eq(rentBills.unit_id, unit.id), eq(rentBills.tenant_id, tenant.id))
+                );
+                const moveOutMs = startOfDay(new Date(tenant.move_out_date)).getTime();
+                const alreadyCovered = existingForTenant.some(
+                    (b) => resolveBillPeriodEnd(b, property).getTime() >= moveOutMs
+                );
+                if (alreadyCovered) continue;
+            }
 
-        // Calculate total
-        const rentAmount = unit.rent_amount;
-        const totalAmount = rentAmount + electricityAmount + waterAmount + previousBalance;
+            // Check if a bill already exists for this unit+tenant+month+year
+            const existingBill = await db.select()
+                .from(rentBills)
+                .where(
+                    and(
+                        eq(rentBills.unit_id, unit.id),
+                        eq(rentBills.tenant_id, tenant.id),
+                        eq(rentBills.month, month),
+                        eq(rentBills.year, year)
+                    )
+                )
+                .limit(1);
 
-        // ── PERSISTENCE RULE: NEVER MODIFY EXISTING BILLS ──
-        // Only insert if missing. If it exists, we skip it entirely to preserve user data (readings/balances).
-        if (existingBill.length > 0) {
-            continue;
-        }
+            if (existingBill.length > 0) {
+                const bill = existingBill[0];
+                // If the bill is already fully paid, we don't want to touch it at all
+                if (bill.status === 'paid' || bill.status === 'overpaid') continue;
+                // Otherwise, we continue but we'll use an UPDATE instead of an INSERT later
+                // (The code below will recalculate prev_reading and previous_balance)
+            }
 
-        // Only reach here for NEW records that need to be created
-        const result = await db.insert(rentBills).values({
-            property_id: propertyId,
-            unit_id: unit.id,
-            tenant_id: tenant.id,
-            month,
-            year,
-            rent_amount: rentAmount,
-            electricity_amount: electricityAmount,
-            water_amount: waterAmount,
-            previous_balance: previousBalance,
-            prev_reading: prevReading,
-            water_prev_reading: waterPrevReading,
-            total_expenses: 0,
-            total_amount: totalAmount,
-            paid_amount: 0,
-            balance: totalAmount,
-            status: 'pending',
-            bill_number: billNumber,
-        }).returning({ id: rentBills.id });
+            // Calculate previous balance from last month's bill (scoped to this tenant)
+            let previousBalance = 0;
+            const prevMonth = month === 1 ? 12 : month - 1;
+            const prevYear = month === 1 ? year - 1 : year;
+
+            const prevBill = await db.select()
+                .from(rentBills)
+                .where(
+                    and(
+                        eq(rentBills.unit_id, unit.id),
+                        eq(rentBills.tenant_id, tenant.id),
+                        eq(rentBills.month, prevMonth),
+                        eq(rentBills.year, prevYear)
+                    )
+                )
+                .limit(1);
+
+            if (prevBill.length > 0) {
+                previousBalance = prevBill[0].balance ?? 0;
+            } else if (tenant.advance_rent && tenant.advance_rent > 0) {
+                // B4: First bill uses advance_rent as credit (negative = advance)
+                previousBalance = -(tenant.advance_rent);
+            }
+
+            // Get utilities (PG-aware fixed costs)
+            let electricityAmount = 0;
+            let waterAmount = 0;
+            if (!unit.is_metered && unit.electricity_fixed_amount) {
+                if (unit.room_group) {
+                    const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
+                    electricityAmount = Math.round((unit.electricity_fixed_amount / occupiedCount) * 100) / 100;
+                } else {
+                    electricityAmount = unit.electricity_fixed_amount;
+                }
+            }
+            if (unit.water_fixed_amount) {
+                if (unit.room_group) {
+                    const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
+                    waterAmount = Math.round((unit.water_fixed_amount / occupiedCount) * 100) / 100;
+                } else {
+                    waterAmount = unit.water_fixed_amount;
+                }
+            }
+
+            // B10: Generate unique bill number using MAX id
+            const maxBill = await db.select({ id: rentBills.id }).from(rentBills)
+                .where(eq(rentBills.property_id, propertyId)).orderBy(desc(rentBills.id)).limit(1);
+            const nextNum = (maxBill[0]?.id ?? 0) + 1;
+            const billNumber = `B-${nextNum.toString().padStart(4, '0')}`;
+
+            // Calculate rent (pro-rata for move-in and/or move-out month)
+            let rentAmount = unit.rent_amount;
+            // The period this bill covers (Usage Month)
+            let finalPeriodStart = new Date(usageYear, usageMonth - 1, 1);
+            let finalPeriodEnd = new Date(usageYear, usageMonth, 0, 23, 59, 59);
+            let daysInMonth = new Date(usageYear, usageMonth, 0).getDate();
+
+            if (unit.rent_cycle === 'relative' && tenant.rent_start_date) {
+                const rsd = new Date(tenant.rent_start_date);
+                const cycleDay = rsd.getDate();
+                if (cycleDay > 1) {
+                    finalPeriodStart = new Date(usageYear, usageMonth - 1, cycleDay);
+                    finalPeriodEnd = new Date(usageYear, usageMonth, cycleDay - 1, 23, 59, 59);
+                    daysInMonth = differenceInDays(startOfDay(finalPeriodEnd), startOfDay(finalPeriodStart)) + 1;
+                }
+            } else {
+                // First of month cycle logic
+                // Pro-rata for move-in: adjust period_start
+                if (tenant.rent_start_date) {
+                    const rsd = new Date(tenant.rent_start_date);
+                    const rsdMonthStart = new Date(rsd.getFullYear(), rsd.getMonth(), 1);
+                    const currentUsageMonthStart = new Date(usageYear, usageMonth - 1, 1);
+
+                    if (rsdMonthStart.getTime() === currentUsageMonthStart.getTime() && rsd.getDate() > 1) {
+                        finalPeriodStart = rsd;
+                    }
+                }
+            }
+
+            // Pro-rata for move-out: adjust period_end
+            if (isMovedOutTenant && tenant.move_out_date) {
+                const mod = new Date(tenant.move_out_date);
+                if (mod >= finalPeriodStart && mod <= finalPeriodEnd) {
+                    finalPeriodEnd = mod;
+                }
+            }
+
+            // Calculate pro-rated rent based on actual period
+            const daysOccupied = differenceInDays(startOfDay(finalPeriodEnd), startOfDay(finalPeriodStart)) + 1;
+            
+            if (daysOccupied < daysInMonth && daysOccupied > 0) {
+                rentAmount = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
+            }
+
+            const chainedPrev = await resolveChainedPrevReadings(db, {
+                unitId: unit.id,
+                unit,
+                month,
+                year,
+                periodStart: finalPeriodStart,
+            });
+            const prevReading = chainedPrev.prevReading;
+            const waterPrevReading = chainedPrev.waterPrevReading;
+
+            const totalAmount = rentAmount + electricityAmount + waterAmount + previousBalance;
+
+            // ── PERSISTENCE RULE: NEVER MODIFY EXISTING BILLS ──
+            // Only insert if missing. If it exists, we skip it entirely to preserve user data (readings/balances).
+            if (existingBill.length > 0) {
+                const bill = existingBill[0];
+                const readingUpdates: Record<string, unknown> = {};
+                if ((bill.curr_reading === null || bill.curr_reading === undefined) && bill.prev_reading !== prevReading) {
+                    readingUpdates.prev_reading = prevReading;
+                }
+                if ((bill.water_curr_reading === null || bill.water_curr_reading === undefined) && bill.water_prev_reading !== waterPrevReading) {
+                    readingUpdates.water_prev_reading = waterPrevReading;
+                }
+                if (Object.keys(readingUpdates).length > 0) {
+                    readingUpdates.updated_at = new Date();
+                    await db.update(rentBills).set(readingUpdates).where(eq(rentBills.id, bill.id));
+                }
+                continue;
+            }
+
+            // Only reach here for NEW records that need to be created
+            const result = await db.insert(rentBills).values({
+                property_id: propertyId,
+                unit_id: unit.id,
+                tenant_id: tenant.id,
+                month,
+                year,
+                rent_amount: rentAmount,
+                electricity_amount: electricityAmount,
+                water_amount: waterAmount,
+                previous_balance: previousBalance,
+                prev_reading: prevReading,
+                water_prev_reading: waterPrevReading,
+                total_expenses: 0,
+                total_amount: totalAmount,
+                paid_amount: 0,
+                balance: totalAmount,
+                status: 'pending',
+                bill_number: billNumber,
+                period_start: finalPeriodStart,
+                period_end: finalPeriodEnd,
+            }).returning({ id: rentBills.id });
 
         const newBillId = result[0].id;
 
-        // Copy recurring expenses from previous month's bill
-        if (prevBill.length > 0) {
-            const recurringExps = await db.select().from(billExpenses).where(
-                and(eq(billExpenses.bill_id, prevBill[0].id), eq(billExpenses.is_recurring, true))
-            );
-            for (const exp of recurringExps) {
-                await db.insert(billExpenses).values({
-                    bill_id: newBillId,
-                    property_id: propertyId,
-                    unit_id: unit.id,
-                    expense_name: exp.expense_name,
-                    amount: exp.amount,
-                    is_recurring: true,
-                    property_expense_id: exp.property_expense_id
-                });
+            // Copy recurring expenses from previous month's bill
+            if (prevBill.length > 0) {
+                const prevRecurringExps = await db.select().from(billExpenses).where(
+                    and(eq(billExpenses.bill_id, prevBill[0].id), eq(billExpenses.is_recurring, true))
+                );
+                // Skip zeroed markers: they record a removal for the previous month only,
+                // and copying them forward would silently make that removal permanent.
+                const recurringExps = prevRecurringExps.filter(e => !isWaivedLabel(e.label));
+                for (const exp of recurringExps) {
+                    await db.insert(billExpenses).values({
+                        bill_id: newBillId,
+                        label: exp.label,
+                        amount: exp.amount,
+                        is_recurring: true,
+                        property_expense_id: exp.property_expense_id
+                    });
+                }
+                if (recurringExps.length > 0) {
+                    const totalExps = recurringExps.reduce((sum, e) => sum + (e.amount ?? 0), 0);
+                    const finalTotal = totalAmount + totalExps;
+                    await db.update(rentBills).set({
+                        total_expenses: totalExps,
+                        total_amount: finalTotal,
+                        balance: finalTotal
+                    }).where(eq(rentBills.id, newBillId));
+                }
             }
-            if (recurringExps.length > 0) {
-                const totalExps = recurringExps.reduce((sum, e) => sum + (e.amount ?? 0), 0);
-                const finalTotal = totalAmount + totalExps;
-                await db.update(rentBills).set({
-                    total_expenses: totalExps,
-                    total_amount: finalTotal,
-                    balance: finalTotal
-                }).where(eq(rentBills.id, newBillId));
-            }
-        }
 
-        // ── Distribute Property Expenses to this newly created bill ──
-        const propExpenses = await db.select().from(propertyExpenses)
-            .where(
-                and(
-                    eq(propertyExpenses.property_id, propertyId),
-                    eq(propertyExpenses.distribute_type, 'rooms'),
-                    or(
-                        and(eq(propertyExpenses.month, usageMonth), eq(propertyExpenses.year, usageYear)),
-                        eq(propertyExpenses.frequency, 'monthly')
+            // ── Distribute Property Expenses to this newly created bill ──
+            const propExpenses = await db.select().from(propertyExpenses)
+                .where(
+                    and(
+                        eq(propertyExpenses.property_id, propertyId),
+                        eq(propertyExpenses.distribute_type, 'rooms'),
+                        or(
+                            and(eq(propertyExpenses.month, usageMonth), eq(propertyExpenses.year, usageYear)),
+                            eq(propertyExpenses.frequency, 'monthly')
+                        )
                     )
-                )
-            );
-        // Add non-monthly property expenses to the new bill (if any)
-        for (const propExp of propExpenses) {
-            try {
-                const distributedTo = JSON.parse(propExp.distributed_unit_ids || '[]');
-                if (distributedTo.includes(unit.id) && propExp.frequency !== 'monthly') {
-                    const splitAmount = propExp.amount / distributedTo.length;
-                    await db.insert(billExpenses).values({
-                        bill_id: newBillId,
-                        property_expense_id: propExp.id,
-                        label: `Property: ${propExp.expense_type}`,
-                        amount: Math.round(splitAmount)
-                    });
+                );
+            // Add non-monthly property expenses to the new bill (if any)
+            for (const propExp of propExpenses) {
+                try {
+                    const distributedTo = JSON.parse(propExp.distributed_unit_ids || '[]');
+                    if (distributedTo.includes(unit.id) && propExp.frequency !== 'monthly') {
+                        const splitAmount = propExp.amount / distributedTo.length;
+                        await db.insert(billExpenses).values({
+                            bill_id: newBillId,
+                            property_expense_id: propExp.id,
+                            label: `Property: ${propExp.expense_type}`,
+                            amount: Math.round(splitAmount)
+                        });
+                    }
+                } catch (e) {
+                    // Ignore parse errors
                 }
-            } catch (e) {
-                // Ignore parse errors
             }
-        }
 
-        // Add monthly property expenses to the new bill (with created_at guard)
-        // Guard: Don't apply monthly expenses that were created AFTER this bill's usage month!
-        const billMonthEnd = new Date(usageYear, usageMonth, 0, 23, 59, 59);
-        for (const propExp of propExpenses) {
-            try {
-                const distributedTo = JSON.parse(propExp.distributed_unit_ids || '[]');
-                if (distributedTo.includes(unit.id) && propExp.frequency === 'monthly') {
-                    const createdAt = propExp.created_at instanceof Date ? propExp.created_at : new Date(propExp.created_at!);
-                    if (createdAt > billMonthEnd) continue;
+            // Add monthly property expenses to the new bill
+            // Guard: Don't apply monthly expenses whose start month is AFTER this bill's usage month
+            for (const propExp of propExpenses) {
+                try {
+                    const distributedTo = JSON.parse(propExp.distributed_unit_ids || '[]');
+                    if (distributedTo.includes(unit.id) && propExp.frequency === 'monthly') {
+                        // Skip if this bill month is before the expense's designated start month
+                        if (usageYear < propExp.year || (usageYear === propExp.year && usageMonth < propExp.month)) continue;
 
-                    const splitAmount = propExp.amount / distributedTo.length;
-                    await db.insert(billExpenses).values({
-                        bill_id: newBillId,
-                        property_expense_id: propExp.id,
-                        label: `Property: ${propExp.expense_type}`,
-                        amount: Math.round(splitAmount),
-                        is_recurring: true
-                    });
+                        const splitAmount = propExp.amount / distributedTo.length;
+                        await db.insert(billExpenses).values({
+                            bill_id: newBillId,
+                            property_expense_id: propExp.id,
+                            label: `Property: ${propExp.expense_type}`,
+                            amount: Math.round(splitAmount),
+                            is_recurring: true
+                        });
+                    }
+                } catch (e) {
+                    // Ignore parse errors
                 }
-            } catch (e) {
-                // Ignore parse errors
             }
-        }
 
-        // Update totals if property expenses were distributed
-        if (distributedTotal > 0) {
-            const currentBill = await getBillById(newBillId);
-            if (currentBill) {
-                const newTotalExp = (currentBill.total_expenses ?? 0) + distributedTotal;
-                const newTotal = (currentBill.rent_amount ?? 0) + (currentBill.electricity_amount ?? 0) + (currentBill.water_amount ?? 0) + newTotalExp + (currentBill.previous_balance ?? 0);
-                await db.update(rentBills)
-                    .set({
-                        total_expenses: newTotalExp,
-                        total_amount: newTotal,
-                        balance: newTotal,
-                        updated_at: new Date(),
-                    })
-                    .where(eq(rentBills.id, newBillId));
-            }
-        }
+            // Recalculate bill totals (handles property expenses, recurring expenses, etc.)
+            await recalculateBill(newBillId);
+        } // End of tenant loop
     } // End of unit loop
 
     // ── PG Utility Split: split fixed electricity/water across occupied beds (Runs once per room group) ──
     if (property?.type === 'pg') {
         await splitPGUtilities(propertyId, month, year);
     }
+};
+
+/**
+ * Proactively adjust an existing bill when a tenant moves out mid-month.
+ * Sets period_end to moveOutDate and pro-rates rent accordingly.
+ * Called from handleRemoveTenant so data is correct immediately.
+ */
+export const adjustBillForMoveOut = async (
+    tenantId: number,
+    unitId: number,
+    moveOutDate: Date
+): Promise<void> => {
+    const db = getDb();
+
+    // Find the bill for the move-out month
+    const moveOutMonth = moveOutDate.getMonth() + 1;
+    const moveOutYear = moveOutDate.getFullYear();
+
+    const existingBills = await db.select()
+        .from(rentBills)
+        .where(
+            and(
+                eq(rentBills.unit_id, unitId),
+                eq(rentBills.tenant_id, tenantId),
+                eq(rentBills.month, moveOutMonth),
+                eq(rentBills.year, moveOutYear)
+            )
+        )
+        .limit(1);
+
+    if (existingBills.length === 0) return; // No bill to adjust
+
+    const bill = existingBills[0];
+
+    // Get the unit for rent_amount
+    const unitResult = await db.select().from(units).where(eq(units.id, unitId)).limit(1);
+    if (unitResult.length === 0) return;
+    const unit = unitResult[0];
+
+    const isPaid = bill.status === 'paid' || bill.status === 'overpaid';
+    const updates: Record<string, unknown> = {
+        // Always record occupancy end so the next tenant can chain meter readings.
+        period_end: moveOutDate,
+        updated_at: new Date(),
+    };
+
+    if (!isPaid) {
+        const periodStart = bill.period_start ? new Date(bill.period_start) : new Date(moveOutYear, moveOutMonth - 1, 1);
+        const daysInMonth = new Date(moveOutYear, moveOutMonth, 0).getDate();
+        const startDay = periodStart.getDate();
+        const endDay = moveOutDate.getDate();
+        const daysOccupied = endDay - startDay + 1;
+
+        let newRentAmount = unit.rent_amount;
+        if (daysOccupied < daysInMonth) {
+            newRentAmount = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
+        }
+
+        const totalAmount = newRentAmount + (bill.electricity_amount ?? 0) + (bill.water_amount ?? 0) + (bill.previous_balance ?? 0) + (bill.total_expenses ?? 0);
+        const balance = totalAmount - (bill.paid_amount ?? 0);
+
+        updates.rent_amount = newRentAmount;
+        updates.total_amount = totalAmount;
+        updates.balance = balance;
+        updates.status = balance <= 0 ? (balance < 0 ? 'overpaid' : 'paid') : ((bill.paid_amount ?? 0) > 0 ? 'partial' : 'pending');
+    }
+
+    await db.update(rentBills).set(updates).where(eq(rentBills.id, bill.id));
+
+    const roomMeterUpdates: Record<string, unknown> = {};
+    if (bill.curr_reading !== null && bill.curr_reading !== undefined) {
+        roomMeterUpdates.initial_electricity_reading = bill.curr_reading;
+    }
+    if (bill.water_curr_reading !== null && bill.water_curr_reading !== undefined) {
+        roomMeterUpdates.initial_water_reading = bill.water_curr_reading;
+    }
+    if (Object.keys(roomMeterUpdates).length > 0) {
+        await db.update(units).set(roomMeterUpdates).where(eq(units.id, unitId));
+    }
+
+    await recalculateBill(bill.id, true);
 };
 
 /**
@@ -616,17 +976,8 @@ export const getBillsForPropertyMonth = async (
     // Fetch property config once for all units
     const propResult = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1);
     const property = propResult[0];
-    const isPostPaid = property?.rent_payment_type === 'previous_month';
 
-    let usageMonth = month;
-    let usageYear = year;
-    if (isPostPaid) {
-        usageMonth = month - 1;
-        if (usageMonth < 1) { 
-            usageMonth = 12; 
-            usageYear--; 
-        }
-    }
+    const { usageMonth, usageYear } = getUsagePeriod(property, month, year);
 
     // P1: Hoist property expenses query — same for all units
     const hoistedPropExpenses = await db.select().from(propertyExpenses)
@@ -640,13 +991,6 @@ export const getBillsForPropertyMonth = async (
                 )
             )
         );
-
-    // Determine if this is a future month
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const isFutureMonth = (year > currentYear) || (year === currentYear && month > currentMonth);
-    const isStrictlyFuture = (year > currentYear) || (year === currentYear && month > currentMonth);
 
     // 1. Batch fetch all active tenants for these units
     const allActiveTenants = await db.select()
@@ -669,58 +1013,49 @@ export const getBillsForPropertyMonth = async (
             )
         );
 
-    // Create maps for quick lookup
-    const tenantMap = new Map();
+    // Create active tenant map (unit_id -> tenant) for vacant/notMovedIn detection
+    const activeTenantByUnit = new Map();
     allActiveTenants.forEach(t => {
-        if (t.unit_id) tenantMap.set(t.unit_id, t);
+        if (t.unit_id) activeTenantByUnit.set(t.unit_id, t);
     });
 
-    const billMap = new Map();
+    // Group bills by unit_id (multiple bills per unit are now possible)
+    const billsByUnit = new Map<number, any[]>();
     allBills.forEach(b => {
-        billMap.set(b.unit_id, b);
+        if (!billsByUnit.has(b.unit_id)) billsByUnit.set(b.unit_id, []);
+        billsByUnit.get(b.unit_id)!.push(b);
     });
 
-    // 3. Determine locking: check if ANY future month has a persisted bill for each unit
-    // (replaces old 1-deep nextBillStatus check)
+    // Fetch ALL tenants referenced by bills (active + inactive) for name/info display
+    const allBillTenantIds = [...new Set(allBills.map(b => b.tenant_id))];
+    let allBillTenants: any[] = [];
+    if (allBillTenantIds.length > 0) {
+        allBillTenants = await db.select().from(tenants)
+            .where(inArray(tenants.id, allBillTenantIds));
+    }
+    const tenantByIdMap = new Map();
+    allBillTenants.forEach(t => tenantByIdMap.set(t.id, t));
+    // Also add active tenants (in case they don't have a bill yet)
+    allActiveTenants.forEach(t => { if (!tenantByIdMap.has(t.id)) tenantByIdMap.set(t.id, t); });
+
+    // 3. Determine locking: check if ANY future month has a "complex" persisted bill for each unit.
+    // A bill is complex if it has manual user inputs: paid_amount > 0, manual readings, or manual non-recurring local expenses.
+    // Clean auto-generated shells (soft-reset state) do NOT lock the current month.
     const hasFuturePersistedBillsMap = new Map<number, boolean>();
-    // Query: find any persisted bills in ANY month after the viewed month
-    const futureBills = await db.select({ unit_id: rentBills.unit_id }).from(rentBills).where(
-        and(
-            inArray(rentBills.unit_id, unitIds),
-            or(
-                sql`${rentBills.year} > ${year}`,
-                and(eq(rentBills.year, year), sql`${rentBills.month} > ${month}`)
+    const complexFutureBills = await db.select({ unit_id: rentBills.unit_id })
+        .from(rentBills)
+        .leftJoin(billExpenses, eq(rentBills.id, billExpenses.bill_id))
+        .where(
+            and(
+                inArray(rentBills.unit_id, unitIds),
+                isAfterMonthFilter(month, year),
+                complexBillInputFilter()
             )
-        )
-    );
-    const unitsWithFutureBills = new Set(futureBills.map(fb => fb.unit_id));
+        );
+    const unitsWithFutureBills = new Set(complexFutureBills.map(fb => fb.unit_id));
     unitIds.forEach(uid => hasFuturePersistedBillsMap.set(uid, unitsWithFutureBills.has(uid)));
 
-    // 4. For virtual bills: compute auto-increment simulation
-    const getSimulatedRent = (unit: any): number => {
-        if (!property?.auto_increment_rent_enabled || (!property.auto_increment_percent && !property.auto_increment_amount)) {
-            return unit.rent_amount;
-        }
-        const lastInc = property.last_increment_date ? new Date(property.last_increment_date) : null;
-        if (!lastInc) return unit.rent_amount;
-
-        const freq = property.auto_increment_frequency;
-        const monthsRequired = freq === 'half_yearly' ? 6 : 12;
-        const monthsSinceLastInc = (year - lastInc.getFullYear()) * 12 + (month - (lastInc.getMonth() + 1));
-        const cyclesElapsed = Math.floor(monthsSinceLastInc / monthsRequired);
-        if (cyclesElapsed < 1) return unit.rent_amount;
-
-        const fixedAmount = property.auto_increment_amount;
-        const percent = property.auto_increment_percent;
-        if (fixedAmount) {
-            return Math.round(unit.rent_amount + (fixedAmount * cyclesElapsed));
-        } else if (percent) {
-            return Math.round(unit.rent_amount * Math.pow(1 + percent / 100, cyclesElapsed));
-        }
-        return unit.rent_amount;
-    };
-
-    // 5. For virtual bills: get previous month's bills for cascading balance/readings
+    // Batch fetch previous month's bills for recurring expense sync (keyed by tenant_id for multi-tenant support)
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
     const allPrevBills = await db.select().from(rentBills).where(
@@ -730,181 +1065,195 @@ export const getBillsForPropertyMonth = async (
             eq(rentBills.year, prevYear)
         )
     );
-    const prevBillMap = new Map();
-    allPrevBills.forEach(pb => prevBillMap.set(pb.unit_id, pb));
+    // Map prev bills by tenant_id so each tenant's bill chains to their own previous bill
+    const prevBillByTenantMap = new Map();
+    allPrevBills.forEach(pb => prevBillByTenantMap.set(pb.tenant_id, pb));
+    // Keep a unit-level fallback for legacy bills
+    const prevBillByUnitMap = new Map();
+    allPrevBills.forEach(pb => prevBillByUnitMap.set(pb.unit_id, pb));
+
+    const usageStartMs = startOfDay(new Date(usageYear, usageMonth - 1, 1)).getTime();
+    const usageEndMs = startOfDay(new Date(usageYear, usageMonth, 0)).getTime();
+
+    const unitsWithNoBillsThisMonth = propertyUnits
+        .filter((u) => !(billsByUnit.get(u.id)?.length))
+        .map((u) => u.id);
+
+    const leftoverBillsByUnit = new Map<number, RentBill[]>();
+    if (unitsWithNoBillsThisMonth.length > 0) {
+        const leftoverBills = await db.select().from(rentBills).where(
+            inArray(rentBills.unit_id, unitsWithNoBillsThisMonth)
+        );
+        leftoverBills.forEach((b) => {
+            if (!leftoverBillsByUnit.has(b.unit_id)) leftoverBillsByUnit.set(b.unit_id, []);
+            leftoverBillsByUnit.get(b.unit_id)!.push(b);
+        });
+
+        const leftoverTenantIds = [...new Set(leftoverBills.map((b) => b.tenant_id))]
+            .filter((id) => !tenantByIdMap.has(id));
+        if (leftoverTenantIds.length > 0) {
+            const leftoverTenants = await db.select().from(tenants)
+                .where(inArray(tenants.id, leftoverTenantIds));
+            leftoverTenants.forEach((t) => tenantByIdMap.set(t.id, t));
+        }
+    }
+
+    const inactiveOnUnits = await db.select({ unit_id: tenants.unit_id })
+        .from(tenants)
+        .where(and(inArray(tenants.unit_id, unitIds), eq(tenants.status, 'inactive')));
+    const occupiedBeforeByUnit = new Set(
+        inactiveOnUnits.map((t) => t.unit_id).filter((id): id is number => id != null)
+    );
+    leftoverBillsByUnit.forEach((_, unitId) => occupiedBeforeByUnit.add(unitId));
 
     for (const unit of propertyUnits) {
-        const tenant = tenantMap.get(unit.id) || null;
+        const activeTenant = activeTenantByUnit.get(unit.id) || null;
         const hasFutureBills = hasFuturePersistedBillsMap.get(unit.id) || false;
+        const unitBills = billsByUnit.get(unit.id) || [];
 
-        // Determine special states
-        let isNotMovedIn = false;
-        let isLeaseExpired = false;
+        if (unitBills.length === 0) {
+            // No bills for this unit this month — show vacant / notMovedIn / leaseExpired
+            let isNotMovedIn = false;
+            let isLeaseExpired = false;
 
-        if (tenant) {
-            // Check if tenant hasn't moved in yet for this month
-            if (tenant.rent_start_date) {
-                const rsd = new Date(tenant.rent_start_date);
-                const billMonthStart = new Date(year, month - 1, 1);
-                if (billMonthStart < new Date(rsd.getFullYear(), rsd.getMonth(), 1)) {
-                    isNotMovedIn = true;
-                }
-            } else if (tenant.move_in_date) {
-                const mid = new Date(tenant.move_in_date);
-                const billMonthStart = new Date(year, month - 1, 1);
-                if (billMonthStart < new Date(mid.getFullYear(), mid.getMonth(), 1)) {
-                    isNotMovedIn = true;
-                }
-            }
-
-            // Check if lease has expired
-            if (tenant.lease_type === 'fixed' && tenant.lease_end_date) {
-                const led = new Date(tenant.lease_end_date);
-                const billMonthStart = new Date(year, month - 1, 1);
-                if (billMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) {
-                    isLeaseExpired = true;
-                }
-            }
-        }
-
-        let bill = billMap.get(unit.id) || null;
-
-        if (bill) {
-            // Persisted bill — apply lazy syncs (only for current/past months)
-            if (!isFutureMonth) {
-                await applyPenaltiesLazily(bill.id, { property, tenant, unit });
-                if (bill.status !== 'paid' && bill.status !== 'overpaid') {
-                    await syncPropertyExpensesLazily(bill.id, unit.id, usageMonth, usageYear, hoistedPropExpenses);
-                }
-            }
-
-            // Re-fetch the bill in case syncs changed it
-            const updatedBills = await db.select().from(rentBills).where(eq(rentBills.id, bill.id)).limit(1);
-            if (updatedBills.length > 0) {
-                bill = updatedBills[0];
-            }
-        } else if (isFutureMonth && tenant && !isNotMovedIn && !isLeaseExpired) {
-            // ── Construct a VIRTUAL bill (not persisted) ──
-            const prevBill = prevBillMap.get(unit.id);
-
-            // Rent (with auto-increment simulation)
-            const rentAmount = getSimulatedRent(unit);
-
-            // Previous balance
-            let previousBalance = 0;
-            if (prevBill) {
-                previousBalance = prevBill.balance ?? 0;
-            } else if (tenant.advance_rent && tenant.advance_rent > 0) {
-                previousBalance = -(tenant.advance_rent);
-            }
-
-            // Readings
-            const prevReading = prevBill?.curr_reading ?? unit.initial_electricity_reading ?? 0;
-            const waterPrevReading = prevBill?.water_curr_reading ?? unit.initial_water_reading ?? 0;
-
-            // Fixed utility amounts
-            let electricityAmount = 0;
-            let waterAmount = 0;
-            if (!unit.is_metered && unit.electricity_fixed_amount) {
-                electricityAmount = unit.electricity_fixed_amount;
-                if (unit.room_group) {
-                    const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
-                    electricityAmount = Math.round((unit.electricity_fixed_amount / occupiedCount) * 100) / 100;
-                }
-            }
-            if (unit.water_fixed_amount) {
-                waterAmount = unit.water_fixed_amount;
-                if (unit.room_group) {
-                    const occupiedCount = await getOccupiedBedCountForRoom(propertyId, unit.room_group, month, year);
-                    waterAmount = Math.round((unit.water_fixed_amount / occupiedCount) * 100) / 100;
-                }
-            }
-
-            // Recurring expenses from last persisted bill and Property expenses
-            let totalExpenses = 0;
-            const virtualExpensesList: any[] = [];
-            let veId = -1;
-
-            if (prevBill) {
-                const recurringExps = await db.select().from(billExpenses).where(
-                    and(eq(billExpenses.bill_id, prevBill.id), eq(billExpenses.is_recurring, true))
-                );
-                for (const exp of recurringExps) {
-                    totalExpenses += exp.amount ?? 0;
-                    virtualExpensesList.push({ ...exp, id: veId--, bill_id: null });
-                }
-            }
-
-            // Guard: Don't apply monthly expenses that were created AFTER this virtual bill's usage month!
-            const billMonthEndObj = new Date(usageYear, usageMonth, 0, 23, 59, 59);
-
-            for (const propExp of hoistedPropExpenses) {
-                if (!propExp.distributed_unit_ids) continue;
-
-                if (propExp.frequency === 'monthly') {
-                    const createdAt = propExp.created_at instanceof Date ? propExp.created_at : new Date(propExp.created_at!);
-                    if (createdAt > billMonthEndObj) continue;
-                }
-
-                try {
-                    const expUnitIds: number[] = JSON.parse(propExp.distributed_unit_ids);
-                    if (expUnitIds.includes(unit.id)) {
-                        const splitAmt = Math.round(propExp.amount / expUnitIds.length);
-                        totalExpenses += splitAmt;
-                        virtualExpensesList.push({
-                            id: veId--,
-                            bill_id: null,
-                            property_expense_id: propExp.id,
-                            label: `Property: ${propExp.expense_type}`,
-                            amount: splitAmt,
-                            is_recurring: propExp.frequency === 'monthly'
-                        });
+            if (activeTenant) {
+                if (activeTenant.rent_start_date) {
+                    const rsd = new Date(activeTenant.rent_start_date);
+                    const billMonthStart = new Date(year, month - 1, 1);
+                    if (billMonthStart < new Date(rsd.getFullYear(), rsd.getMonth(), 1)) {
+                        isNotMovedIn = true;
                     }
-                } catch (e) { /* skip invalid JSON */ }
+                } else if (activeTenant.move_in_date) {
+                    const mid = new Date(activeTenant.move_in_date);
+                    const billMonthStart = new Date(year, month - 1, 1);
+                    if (billMonthStart < new Date(mid.getFullYear(), mid.getMonth(), 1)) {
+                        isNotMovedIn = true;
+                    }
+                }
+
+                if (activeTenant.lease_type === 'fixed' && activeTenant.lease_end_date) {
+                    const led = new Date(activeTenant.lease_end_date);
+                    const billMonthStart = new Date(year, month - 1, 1);
+                    if (billMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) {
+                        isLeaseExpired = true;
+                    }
+                }
             }
 
-            const totalAmount = rentAmount + electricityAmount + waterAmount + totalExpenses + previousBalance;
+            const leftover = leftoverBillsByUnit.get(unit.id) || [];
+            const overlapping = leftover
+                .filter((b) => {
+                    const startMs = resolveBillPeriodStart(b, property).getTime();
+                    const endMs = resolveBillPeriodEnd(b, property).getTime();
+                    return startMs <= usageEndMs && endMs >= usageStartMs;
+                })
+                .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month))[0];
 
-            bill = {
-                id: null, // Signals this is a VIRTUAL bill
-                property_id: propertyId,
-                unit_id: unit.id,
-                tenant_id: tenant.id,
-                month,
-                year,
-                rent_amount: rentAmount,
-                electricity_amount: electricityAmount,
-                water_amount: waterAmount,
-                previous_balance: previousBalance,
-                prev_reading: prevReading,
-                curr_reading: null,
-                water_prev_reading: waterPrevReading,
-                water_curr_reading: null,
-                total_expenses: totalExpenses,
-                virtual_expenses: virtualExpensesList,
-                total_amount: totalAmount,
-                paid_amount: 0,
-                balance: totalAmount,
-                status: 'pending',
-                bill_number: null,
-                notes: null,
-                period_start: null,
-                period_end: null,
-                created_at: null,
-                updated_at: null,
-            };
+            if (overlapping && (isNotMovedIn || !activeTenant)) {
+                const billTenant = tenantByIdMap.get(overlapping.tenant_id) || null;
+                results.push({
+                    unit,
+                    tenant: billTenant,
+                    bill: overlapping,
+                    isVacant: false,
+                    isNotMovedIn: false,
+                    isLeaseExpired: false,
+                    isMovedOut: billTenant?.status === 'inactive',
+                    hasFuturePersistedBills: hasFutureBills,
+                });
+                continue;
+            }
+
+            if (isNotMovedIn && occupiedBeforeByUnit.has(unit.id)) {
+                results.push({
+                    unit,
+                    tenant: null,
+                    bill: null,
+                    isVacant: true,
+                    isNotMovedIn: false,
+                    isLeaseExpired: false,
+                    isMovedOut: false,
+                    hasFuturePersistedBills: hasFutureBills,
+                });
+                continue;
+            }
+
+            results.push({
+                unit,
+                tenant: activeTenant,
+                bill: null,
+                isVacant: !activeTenant,
+                isNotMovedIn,
+                isLeaseExpired,
+                isMovedOut: false,
+                hasFuturePersistedBills: hasFutureBills,
+            });
+        } else {
+            // One card per bill (supports multiple tenants in same room same month)
+            for (let bill of unitBills) {
+                const billTenant = tenantByIdMap.get(bill.tenant_id) || null;
+                const isMovedOut = billTenant?.status === 'inactive';
+
+                // Persisted bill — apply lazy syncs
+                await applyPenaltiesLazily(bill.id, { property, tenant: billTenant, unit });
+                await syncPropertyExpensesLazily(bill.id, unit.id, usageMonth, usageYear, hoistedPropExpenses);
+
+                // Lazy sync recurring bill expenses from previous month
+                const prevBill = prevBillByTenantMap.get(bill.tenant_id) || prevBillByUnitMap.get(unit.id);
+                if (prevBill) {
+                    await syncRecurringExpensesLazily(bill.id, prevBill.id);
+                }
+
+                // Re-fetch the bill in case syncs changed it
+                const updatedBills = await db.select().from(rentBills).where(eq(rentBills.id, bill.id)).limit(1);
+                if (updatedBills.length > 0) {
+                    bill = updatedBills[0];
+                }
+
+                results.push({
+                    unit,
+                    tenant: billTenant,
+                    bill,
+                    isVacant: false,
+                    isNotMovedIn: false,
+                    isLeaseExpired: false,
+                    isMovedOut,
+                    hasFuturePersistedBills: hasFutureBills,
+                });
+            }
+
+            // Do not append a "Moves in on" placeholder when an old occupant
+            // already has a card for this month. A started tenant with no bill
+            // yet still gets a card so generateBills can catch up.
+            if (activeTenant && !unitBills.some(b => b.tenant_id === activeTenant.id)) {
+                let isNotMovedIn = false;
+                if (activeTenant.rent_start_date) {
+                    const rsd = new Date(activeTenant.rent_start_date);
+                    const billMonthStart = new Date(year, month - 1, 1);
+                    if (billMonthStart < new Date(rsd.getFullYear(), rsd.getMonth(), 1)) {
+                        isNotMovedIn = true;
+                    }
+                } else if (activeTenant.move_in_date) {
+                    const mid = new Date(activeTenant.move_in_date);
+                    const billMonthStart = new Date(year, month - 1, 1);
+                    if (billMonthStart < new Date(mid.getFullYear(), mid.getMonth(), 1)) {
+                        isNotMovedIn = true;
+                    }
+                }
+                if (isNotMovedIn) continue;
+
+                results.push({
+                    unit,
+                    tenant: activeTenant,
+                    bill: null,
+                    isVacant: false,
+                    isNotMovedIn: false,
+                    isLeaseExpired: false,
+                    isMovedOut: false,
+                    hasFuturePersistedBills: hasFutureBills,
+                });
+            }
         }
-
-        results.push({
-            unit,
-            tenant,
-            bill,
-            isVacant: !tenant,
-            isNotMovedIn,
-            isLeaseExpired,
-            hasFuturePersistedBills: hasFutureBills,
-            isStrictlyFuture,
-        });
     }
 
     return results;
@@ -1070,41 +1419,35 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     let waterPrevReading = bill.water_prev_reading;
     let needsUpdate = false;
 
+    // B19: Determine if this bill is "locked" by a future bill. Uses the same test the UI
+    // shows the user, so a bill presented as editable is never silently skipped here.
+    const isLocked = await hasComplexFutureBills(bill.unit_id, bill.month, bill.year);
+
     if (unit) {
-        // P2: Single prev-bill query for both electricity and water sync
-        const prevBillArr = await db.select().from(rentBills).where(
-            and(
-                eq(rentBills.unit_id, bill.unit_id),
-                sql`${rentBills.month} + ${rentBills.year} * 12 < ${bill.month} + ${bill.year} * 12`
-            )
-        ).orderBy(desc(sql`${rentBills.month} + ${rentBills.year} * 12`)).limit(1);
+        const billPeriodStart = bill.period_start
+            ? new Date(bill.period_start)
+            : new Date(bill.year, bill.month - 1, 1);
 
-        const prevBill = prevBillArr[0] || null;
+        const chainedPrev = await resolveChainedPrevReadings(db, {
+            unitId: bill.unit_id,
+            unit,
+            month: bill.month,
+            year: bill.year,
+            periodStart: billPeriodStart,
+            excludeBillId: bill.id,
+        });
 
-        // Sync electricity
-        if (!prevBill) {
-            if (prevReading !== unit.initial_electricity_reading) {
-                prevReading = unit.initial_electricity_reading;
-                needsUpdate = true;
-            }
-        } else if (prevBill.curr_reading !== null && prevBill.curr_reading !== prevReading) {
-            prevReading = prevBill.curr_reading;
+        if (!isLocked && prevReading !== chainedPrev.prevReading) {
+            prevReading = chainedPrev.prevReading;
             needsUpdate = true;
         }
-
-        // Sync water (reuse same prevBill)
-        if (!prevBill) {
-            if (waterPrevReading !== unit.initial_water_reading) {
-                waterPrevReading = unit.initial_water_reading;
-                needsUpdate = true;
-            }
-        } else if (prevBill.water_curr_reading !== null && prevBill.water_curr_reading !== waterPrevReading) {
-            waterPrevReading = prevBill.water_curr_reading;
+        if (!isLocked && waterPrevReading !== chainedPrev.waterPrevReading) {
+            waterPrevReading = chainedPrev.waterPrevReading;
             needsUpdate = true;
         }
 
         // Calculate utility amounts (Electricity) if metered
-        if (unit.electricity_rate !== null && bill.curr_reading !== null) {
+        if (!isLocked && unit.electricity_rate !== null && bill.curr_reading !== null) {
             const prev = (prevReading !== null && prevReading !== 0) ? prevReading : (unit.initial_electricity_reading ?? 0);
             let unitsUsed = Math.max(0, bill.curr_reading - prev);
             const defaultUnits = unit.electricity_default_units;
@@ -1125,13 +1468,13 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
                 electricityAmount = targetElecAmt;
                 needsUpdate = true;
             }
-        } else if (unit.electricity_rate !== null && bill.curr_reading === null) {
+        } else if (!isLocked && unit.electricity_rate !== null && bill.curr_reading === null) {
             // Metered but no reading yet -> cost should be 0
             if (electricityAmount !== 0) {
                 electricityAmount = 0;
                 needsUpdate = true;
             }
-        } else if (unit.electricity_rate === null && unit.electricity_fixed_amount && unit.room_group) {
+        } else if (!isLocked && unit.electricity_rate === null && unit.electricity_fixed_amount && unit.room_group) {
             // PG split for FIXED electricity
             // Only split if current amount is the full unsplit amount (default state)
             if (electricityAmount === unit.electricity_fixed_amount) {
@@ -1145,7 +1488,7 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         }
 
         // Calculate utility amounts (Water) if metered
-        if (unit.water_rate !== null && bill.water_curr_reading !== null) {
+        if (!isLocked && unit.water_rate !== null && bill.water_curr_reading !== null) {
             const prev = (waterPrevReading !== null && waterPrevReading !== 0) ? waterPrevReading : (unit.initial_water_reading ?? 0);
             let unitsUsed = Math.max(0, bill.water_curr_reading - prev);
             const defaultUnits = unit.water_default_units;
@@ -1166,13 +1509,13 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
                 waterAmount = targetWaterAmt;
                 needsUpdate = true;
             }
-        } else if (unit.water_rate !== null && bill.water_curr_reading === null) {
+        } else if (!isLocked && unit.water_rate !== null && bill.water_curr_reading === null) {
             // Metered but no reading yet -> cost should be 0
             if (waterAmount !== 0) {
                 waterAmount = 0;
                 needsUpdate = true;
             }
-        } else if (unit.water_rate === null && unit.water_fixed_amount && unit.room_group) {
+        } else if (!isLocked && unit.water_rate === null && unit.water_fixed_amount && unit.room_group) {
             // PG split for FIXED water
             if (waterAmount === unit.water_fixed_amount) {
                 const occupiedCount = await getOccupiedBedCountForRoom(unit.property_id, unit.room_group, bill.month, bill.year);
@@ -1213,23 +1556,62 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
         })
         .where(eq(rentBills.id, billId));
 
-    // B3 & B17: Cascade to next month — update its previous_balance and prev_reading in ONE batch
+    // Cascade meter readings to later bills on the same unit in the same month (tenant handoff).
+    const thisPeriodEnd = getBillPeriodEnd(bill);
+    const sameMonthBills = await db.select().from(rentBills).where(
+        and(
+            eq(rentBills.unit_id, bill.unit_id),
+            eq(rentBills.month, bill.month),
+            eq(rentBills.year, bill.year),
+            sql`${rentBills.id} != ${bill.id}`
+        )
+    );
+
+    for (const successor of sameMonthBills) {
+        const succStart = successor.period_start
+            ? new Date(successor.period_start)
+            : new Date(successor.year, successor.month - 1, 1);
+        if (startOfDay(succStart).getTime() < startOfDay(thisPeriodEnd).getTime()) continue;
+
+        const updates: Record<string, unknown> = {};
+        let needsSuccessorRecalc = false;
+
+        if (bill.curr_reading !== null && bill.curr_reading !== undefined && successor.prev_reading !== bill.curr_reading) {
+            updates.prev_reading = bill.curr_reading;
+            needsSuccessorRecalc = true;
+        }
+        if (bill.water_curr_reading !== null && bill.water_curr_reading !== undefined && successor.water_prev_reading !== bill.water_curr_reading) {
+            updates.water_prev_reading = bill.water_curr_reading;
+            needsSuccessorRecalc = true;
+        }
+
+        if (needsSuccessorRecalc) {
+            updates.updated_at = new Date();
+            await db.update(rentBills).set(updates).where(eq(rentBills.id, successor.id));
+            await recalculateBill(successor.id, true);
+        }
+    }
+
+    // B3 & B17: Cascade to next month — update previous_balance and prev_reading in ONE batch.
+    // A unit can hold more than one bill in a month once a tenant moves out and another
+    // moves in, so every next-month bill is considered rather than an arbitrary first row.
+    // An outstanding balance is personal and only follows the same tenant; meter readings
+    // belong to the room and carry over to whoever occupies it next.
     const nextMonth = bill.month === 12 ? 1 : bill.month + 1;
     const nextYear = bill.month === 12 ? bill.year + 1 : bill.year;
-    const nextBillResult = await db.select().from(rentBills).where(
+    const nextBills = await db.select().from(rentBills).where(
         and(
             eq(rentBills.unit_id, bill.unit_id),
             eq(rentBills.month, nextMonth),
             eq(rentBills.year, nextYear)
         )
-    ).limit(1);
+    );
 
-    if (nextBillResult.length > 0) {
-        const nextBill = nextBillResult[0];
+    for (const nextBill of nextBills) {
         const updates: any = {};
         let needsRecalculate = false;
 
-        if (nextBill.previous_balance !== balance) {
+        if (nextBill.tenant_id === bill.tenant_id && nextBill.previous_balance !== balance) {
             updates.previous_balance = balance;
             needsRecalculate = true;
         }
@@ -1256,92 +1638,11 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
     return (await getBillById(billId))!;
 };
 
-/**
- * Persist a virtual bill to the database.
- * Called when a user modifies a future virtual bill (payment, expense, meter reading, etc.).
- * Returns the new real bill ID.
- */
-export const persistVirtualBill = async (
-    virtualBill: any
-): Promise<number> => {
-    const db = getDb();
 
-    // Generate bill number
-    const maxBill = await db.select({ id: rentBills.id }).from(rentBills)
-        .where(eq(rentBills.property_id, virtualBill.property_id)).orderBy(desc(rentBills.id)).limit(1);
-    const nextNum = (maxBill[0]?.id ?? 0) + 1;
-    const billNumber = `B-${nextNum.toString().padStart(4, '0')}`;
-
-    const result = await db.insert(rentBills).values({
-        property_id: virtualBill.property_id,
-        unit_id: virtualBill.unit_id,
-        tenant_id: virtualBill.tenant_id,
-        month: virtualBill.month,
-        year: virtualBill.year,
-        rent_amount: virtualBill.rent_amount,
-        electricity_amount: virtualBill.electricity_amount ?? 0,
-        water_amount: virtualBill.water_amount ?? 0,
-        prev_reading: virtualBill.prev_reading,
-        curr_reading: virtualBill.curr_reading,
-        water_prev_reading: virtualBill.water_prev_reading,
-        water_curr_reading: virtualBill.water_curr_reading,
-        previous_balance: virtualBill.previous_balance ?? 0,
-        total_expenses: virtualBill.total_expenses ?? 0,
-        total_amount: virtualBill.total_amount,
-        paid_amount: 0,
-        balance: virtualBill.total_amount,
-        status: 'pending',
-        bill_number: billNumber,
-    }).returning({ id: rentBills.id });
-
-    const newBillId = result[0].id;
-
-    // Use virtual_expenses if available, otherwise fallback to existing logic
-    if (virtualBill.virtual_expenses && virtualBill.virtual_expenses.length > 0) {
-        for (const exp of virtualBill.virtual_expenses) {
-            await db.insert(billExpenses).values({
-                bill_id: newBillId,
-                label: exp.label,
-                amount: exp.amount,
-                is_recurring: exp.is_recurring || false,
-                property_expense_id: exp.property_expense_id,
-            });
-        }
-    } else {
-        // Copy recurring expenses from previous month's bill
-        const prevMonth = virtualBill.month === 1 ? 12 : virtualBill.month - 1;
-        const prevYear = virtualBill.month === 1 ? virtualBill.year - 1 : virtualBill.year;
-        const prevBillResult = await db.select().from(rentBills).where(
-            and(
-                eq(rentBills.unit_id, virtualBill.unit_id),
-                eq(rentBills.month, prevMonth),
-                eq(rentBills.year, prevYear)
-            )
-        ).limit(1);
-
-        if (prevBillResult.length > 0) {
-            const prevBillId = prevBillResult[0].id;
-            const recurringExps = await db.select().from(billExpenses).where(
-                and(eq(billExpenses.bill_id, prevBillId), eq(billExpenses.is_recurring, true))
-            );
-            for (const exp of recurringExps) {
-                await db.insert(billExpenses).values({
-                    bill_id: newBillId,
-                    label: exp.label,
-                    amount: exp.amount,
-                    is_recurring: true,
-                    property_expense_id: exp.property_expense_id,
-                });
-            }
-        }
-    }
-
-    return newBillId;
-};
 
 /**
- * Reset/delete persisted bills for a unit strictly after a given month.
- * Used to unlock Month N by deleting Month N+1 and beyond while preserving Month N.
+ * Reset persisted bills for a unit strictly after a given month to their auto-calculated states.
+ * Wipes manual user inputs (payments, manual expenses, readings) and lets recalculateBill derive totals.
  */
 export const resetFutureBills = async (
     unitId: number,
@@ -1350,8 +1651,10 @@ export const resetFutureBills = async (
 ): Promise<void> => {
     const db = getDb();
 
-    // Find all persisted bills for this unit strictly after the requested month/year.
-    const billsToDelete = await db.select().from(rentBills).where(
+    // Delete all future bills for this unit. 
+    // This effectively "unlocks" previous months by removing any complex persisted state.
+    // Deleting rent_bills will cascade-delete expenses and payments due to schema constraints.
+    await db.delete(rentBills).where(
         and(
             eq(rentBills.unit_id, unitId),
             or(
@@ -1360,14 +1663,6 @@ export const resetFutureBills = async (
             )
         )
     );
-
-    for (const bill of billsToDelete) {
-        // Delete associated expenses and payments
-        await db.delete(billExpenses).where(eq(billExpenses.bill_id, bill.id));
-        await db.delete(payments).where(eq(payments.bill_id, bill.id));
-        // Delete the bill itself
-        await db.delete(rentBills).where(eq(rentBills.id, bill.id));
-    }
 };
 
 /**
@@ -1391,13 +1686,98 @@ export const resetBill = async (billId: number): Promise<void> => {
 
 export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpense, 'bill_id'>): Promise<number> => {
     const db = getDb();
+    const bill = await getBillById(billId);
+    if (!bill) throw new Error('Bill not found');
+
+    const amount = expense.amount ?? 0;
+    const rawLabel = expense.label || 'Custom Expense';
+
+    if (expense.is_recurring === true && amount > 0) {
+        const existingOnBill = await db.select({ label: billExpenses.label }).from(billExpenses).where(
+            and(eq(billExpenses.bill_id, billId), eq(billExpenses.is_recurring, true))
+        );
+        const activeLabels = existingOnBill
+            .map((e) => e.label)
+            .filter((l): l is string => !!l && !isWaivedLabel(l));
+        if (isDuplicateRecurringCategory(activeLabels, rawLabel)) {
+            throw new Error(`A recurring "${rawLabel.split(' - ')[0]}" expense is already on this bill.`);
+        }
+    }
+
+    // A discount/waiver is lost income rather than a landlord cost, so it is never
+    // mirrored into property_expenses. Leaving property_expense_id null and the label
+    // unprefixed also keeps it outside syncPropertyExpensesLazily's scope, which would
+    // otherwise flip the sign back to positive on the next read.
+    if (amount < 0) {
+        const discountResult = await db.insert(billExpenses).values({
+            ...expense,
+            bill_id: billId,
+            property_expense_id: null,
+            label: rawLabel,
+            is_recurring: false,
+        }).returning({ id: billExpenses.id });
+
+        await recalculateBill(billId);
+        return discountResult[0].id;
+    }
+
+    // Also create a property expense record so it shows in the Expenses screen.
+    // It must be stamped with the usage month rather than the bill month, otherwise
+    // the lazy reconciler will not recognise it and deletes the line on next read.
+    const propertyResult = await db.select().from(properties).where(eq(properties.id, bill.property_id)).limit(1);
+    const { usageMonth, usageYear } = getUsagePeriod(propertyResult[0], bill.month, bill.year);
+
+    const isRecurring = expense.is_recurring === true;
+    if (isRecurring) {
+        const existingRecurring = await getRecurringExpenses(bill.property_id);
+        if (existingRecurring.some((e) => normalizeExpenseCategory(e.expense_type) === normalizeExpenseCategory(rawLabel))) {
+            throw new Error(`A monthly recurring "${rawLabel.split(' - ')[0]}" expense already exists for this property.`);
+        }
+    }
+    const propExpResult = await db.insert(propertyExpenses).values({
+        property_id: bill.property_id,
+        amount,
+        expense_type: rawLabel,
+        frequency: isRecurring ? 'monthly' : 'one_time',
+        distribute_type: 'rooms',
+        distributed_unit_ids: JSON.stringify([bill.unit_id]),
+        month: usageMonth,
+        year: usageYear,
+    }).returning({ id: propertyExpenses.id });
+
+    const propExpId = propExpResult[0].id;
+
     const result = await db.insert(billExpenses).values({
         ...expense,
         bill_id: billId,
+        property_expense_id: propExpId,
+        label: `Property: ${rawLabel}`,
     }).returning({ id: billExpenses.id });
 
     await recalculateBill(billId);
     return result[0].id;
+};
+
+/**
+ * How many units a property expense is split across.
+ * Returns 0 when the row is missing or its unit list cannot be parsed, so callers
+ * can treat "unknown" as "shared" and avoid destructive cleanup.
+ */
+const getExpenseUnitCount = async (propertyExpenseId: number): Promise<number> => {
+    const db = getDb();
+    const rows = await db.select({ ids: propertyExpenses.distributed_unit_ids })
+        .from(propertyExpenses)
+        .where(eq(propertyExpenses.id, propertyExpenseId))
+        .limit(1);
+
+    if (rows.length === 0) return 0;
+
+    try {
+        const ids = JSON.parse(rows[0].ids || '[]');
+        return Array.isArray(ids) ? ids.length : 0;
+    } catch {
+        return 0;
+    }
 };
 
 export const removeExpense = async (expenseId: number): Promise<void> => {
@@ -1409,16 +1789,34 @@ export const removeExpense = async (expenseId: number): Promise<void> => {
     const billId = expense[0].bill_id;
     const propertyExpId = expense[0].property_expense_id;
     const label = expense[0].label;
+    const isRecurring = expense[0].is_recurring;
+
+    // Zeroing a row rather than deleting it is what tells the lazy syncs the line was
+    // deliberately removed. A deleted row just looks missing and gets re-added.
+    const waive = (newLabel: string) => db.update(billExpenses)
+        .set({ label: newLabel, amount: 0 })
+        .where(eq(billExpenses.id, expenseId));
+
+    const sharedUnitCount = propertyExpId ? await getExpenseUnitCount(propertyExpId) : 1;
 
     if (label === 'Late Payment Penalty') {
         // Waive penalty instead of deleting, to avoid lazy regeneration
-        await db.update(billExpenses)
-            .set({ label: 'Late Payment Penalty (Waived)', amount: 0 })
-            .where(eq(billExpenses.id, expenseId));
+        await waive('Late Payment Penalty (Waived)');
+    } else if (isRecurring) {
+        // Recurring expenses are waived for THIS month only. The source keeps emitting
+        // lines for later months, and generateBillsForProperty skips copying the marker
+        // forward so the expense reappears next month.
+        await waive(`${label} (Removed)`);
+    } else if (sharedUnitCount !== 1) {
+        // The source is split across several rooms (or its unit list is unreadable).
+        // Drop only this room's line and leave the source untouched, so the other rooms
+        // keep the share they were already billed. The remainder is deliberately not
+        // re-split across the survivors, which would raise their bills.
+        await waive(`${label} (Removed)`);
     } else {
         await db.delete(billExpenses).where(eq(billExpenses.id, expenseId));
 
-        // If this expense came from the property expense module, delete the root expense
+        // This bill was the expense's only consumer, so remove the root record too.
         if (propertyExpId) {
             await db.delete(propertyExpenses).where(eq(propertyExpenses.id, propertyExpId));
         }
@@ -1444,6 +1842,19 @@ export const addPaymentToBill = async (
     const bill = await getBillById(billId);
     if (!bill) throw new Error('Bill not found');
 
+    const amount = paymentData.amount;
+    const isFromDeposit = paymentData.payment_method === 'from_deposit';
+
+    if (isFromDeposit) {
+        if (!bill.tenant_id) throw new Error('Bill has no tenant');
+        const tenant = await getTenantById(bill.tenant_id);
+        if (!tenant) throw new Error('Tenant not found');
+        const available = tenant.security_deposit ?? 0;
+        if (amount > available) {
+            throw new Error(`Insufficient security deposit. Available: ₹${available.toLocaleString('en-IN')}`);
+        }
+    }
+
     const result = await db.insert(payments).values({
         ...paymentData,
         bill_id: billId,
@@ -1454,17 +1865,32 @@ export const addPaymentToBill = async (
         status: 'paid',
     }).returning({ id: payments.id });
 
+    if (isFromDeposit && bill.tenant_id) {
+        const tenant = await getTenantById(bill.tenant_id);
+        const currentDeposit = tenant?.security_deposit ?? 0;
+        await updateTenant(bill.tenant_id, {
+            security_deposit: Math.max(0, currentDeposit - amount),
+        });
+    }
+
     await recalculateBill(billId);
     return result[0].id;
 };
 
 export const removePaymentFromBill = async (paymentId: number): Promise<void> => {
     const db = getDb();
-    // Get the bill_id before deleting
     const payment = await db.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
     if (payment.length === 0) return;
 
-    const billId = payment[0].bill_id;
+    const row = payment[0];
+    const billId = row.bill_id;
+
+    if (row.payment_method === 'from_deposit' && row.tenant_id) {
+        const tenant = await getTenantById(row.tenant_id);
+        const restored = (tenant?.security_deposit ?? 0) + (row.amount ?? 0);
+        await updateTenant(row.tenant_id, { security_deposit: restored });
+    }
+
     await db.delete(payments).where(eq(payments.id, paymentId));
 
     if (billId) {
@@ -1499,6 +1925,17 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
         );
 
     for (const bill of pendingBills) {
+        // B19: Skip "Locked" bills. Only sync the latest bill for a unit.
+        // A bill is locked if there exists a future bill for the same unit.
+        const futureBill = await db.select({ id: rentBills.id }).from(rentBills).where(
+            and(
+                eq(rentBills.unit_id, unitId),
+                sql`${rentBills.year} * 12 + ${rentBills.month} > ${bill.year} * 12 + ${bill.month}`
+            )
+        ).limit(1);
+
+        if (futureBill.length > 0) continue;
+
         let updateData: any = { updated_at: new Date() };
 
         // Sync fixed amounts (only if user changed unit setting)
@@ -1525,9 +1962,20 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
             updateData.water_prev_reading = null;
         }
 
-        // Update rent amount too if it changed
+        // Update rent amount too if it changed (respecting pro-rata periods)
         if (bill.rent_amount !== unit.rent_amount) {
-            updateData.rent_amount = unit.rent_amount;
+            let newRent = unit.rent_amount;
+            // If bill covers a partial month, pro-rate the new rent
+            if (bill.period_start && bill.period_end) {
+                const ps = new Date(bill.period_start);
+                const pe = new Date(bill.period_end);
+                const daysInMonth = new Date(bill.year, bill.month, 0).getDate();
+                const daysOccupied = pe.getDate() - ps.getDate() + 1;
+                if (daysOccupied < daysInMonth) {
+                    newRent = Math.round((unit.rent_amount / daysInMonth) * daysOccupied);
+                }
+            }
+            updateData.rent_amount = newRent;
         }
 
         if (Object.keys(updateData).length > 1) { // more than just updated_at
@@ -1538,6 +1986,61 @@ export const syncPendingBillsWithUnitSettings = async (unitId: number): Promise<
 
         // Trigger full recalculation (this will also handle metered rate changes and clearing amounts)
         await recalculateBill(bill.id);
+    }
+};
+
+/**
+ * Lazy-sync recurring bill expenses from the previous month's bill.
+ * If a recurring expense exists in prevBill but not in currentBill, add it.
+ * This ensures recurring expenses cascade forward even if they were added
+ * after the current bill was already generated.
+ */
+const syncRecurringExpensesLazily = async (
+    currentBillId: number,
+    prevBillId: number
+): Promise<void> => {
+    const db = getDb();
+
+    // Get recurring expenses from previous month's bill (non-property ones only)
+    const prevRecurringRows = await db.select().from(billExpenses).where(
+        and(
+            eq(billExpenses.bill_id, prevBillId),
+            eq(billExpenses.is_recurring, true),
+            sql`${billExpenses.property_expense_id} IS NULL`
+        )
+    );
+    // A marker on the previous bill removed the expense for that month only, so it
+    // must not be treated as the template for this month.
+    const prevRecurring = prevRecurringRows.filter(e => !isWaivedLabel(e.label));
+
+    if (prevRecurring.length === 0) return;
+
+    // Get current bill's expenses
+    const currentExpenses = await db.select().from(billExpenses).where(
+        eq(billExpenses.bill_id, currentBillId)
+    );
+
+    let changed = false;
+
+    for (const recurExp of prevRecurring) {
+        // Check if current bill already has this recurring expense (match by label)
+        const alreadyExists = currentExpenses.some(
+            e => (e.label === recurExp.label || e.label === `${recurExp.label} (Removed)`) && e.is_recurring === true
+        );
+
+        if (!alreadyExists) {
+            await db.insert(billExpenses).values({
+                bill_id: currentBillId,
+                label: recurExp.label,
+                amount: recurExp.amount,
+                is_recurring: true,
+            });
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        await recalculateBill(currentBillId, true);
     }
 };
 
@@ -1559,18 +2062,14 @@ const syncPropertyExpensesLazily = async (
 ): Promise<void> => {
     const db = getDb();
 
-    // E3: End of bill month for created_at guard on monthly expenses
-    const billMonthEnd = new Date(year, month, 0, 23, 59, 59); // last day of bill month
-
     // Build expected expense map: propExpId -> { label, amount, isRecurring } for this specific unit
     const expectedExpenses = new Map<number, { label: string; amount: number; isRecurring: boolean }>();
     for (const propExp of prefetchedPropExpenses) {
         if (!propExp.distributed_unit_ids) continue;
 
-        // E3: Skip monthly expenses created after this bill month
-        if (propExp.frequency === 'monthly' && propExp.created_at) {
-            const createdAt = propExp.created_at instanceof Date ? propExp.created_at : new Date(propExp.created_at);
-            if (createdAt > billMonthEnd) continue;
+        // Skip monthly expenses whose designated start month is AFTER this bill's month
+        if (propExp.frequency === 'monthly') {
+            if (year < propExp.year || (year === propExp.year && month < propExp.month)) continue;
         }
 
         try {
@@ -1604,6 +2103,9 @@ const syncPropertyExpensesLazily = async (
 
     // 3. Remove stale ones (exist in bill but NOT in expected)
     for (const existing of propertyLabeledExpenses) {
+        // Skip manually removed expenses — they should stay zeroed
+        if (isWaivedLabel(existing.label)) continue;
+
         // Find if this existing bill expense corresponds to any expected property expense
         let isExpected = false;
         if (existing.property_expense_id) {
@@ -1630,7 +2132,11 @@ const syncPropertyExpensesLazily = async (
         );
 
         if (!existing) {
-            // Missing — add it
+            // Check if this expense was manually removed for this month
+            const wasRemoved = propertyLabeledExpenses.some(
+                e => e.property_expense_id === propExpId && isWaivedLabel(e.label)
+            );
+            if (wasRemoved) continue; // Don't re-add manually removed expenses
             await db.insert(billExpenses).values({
                 bill_id: billId,
                 property_expense_id: propExpId,
@@ -1639,7 +2145,10 @@ const syncPropertyExpensesLazily = async (
                 is_recurring: expected.isRecurring, // E2: correct flag
             });
             changed = true;
-        } else if (existing.amount !== expected.amount || existing.is_recurring !== expected.isRecurring || existing.property_expense_id !== propExpId) {
+        } else if (
+            (existing.amount !== expected.amount || existing.is_recurring !== expected.isRecurring || existing.property_expense_id !== propExpId) &&
+            !isWaivedLabel(existing.label)
+        ) {
             // Amount, recurring flag, or missing ID changed — update it
             await db.update(billExpenses)
                 .set({ amount: expected.amount, is_recurring: expected.isRecurring, property_expense_id: propExpId })
@@ -1693,5 +2202,135 @@ export const getBillSummaryByUnitId = async (unitId: number): Promise<{
         totalRevenue,
         outstandingDues,
         billCount: bills.length,
+    };
+};
+
+export interface ExpectedRevenueBreakdown {
+    totalExpected: number;
+    propertyCount: number;
+    composition: {
+        rent: number;
+        utilities: number;
+        pastDues: number;
+        otherExpenses: number;
+    };
+    properties: {
+        id: number;
+        name: string;
+        expectedAmount: number;
+        collectedAmount: number;
+        activeTenants: number;
+    }[];
+    highRiskTenants: {
+        tenantId: number;
+        tenantName: string;
+        unitName: string;
+        propertyName: string;
+        pastDues: number;
+    }[];
+}
+
+export const getExpectedRevenueBreakdown = async (month: number, year: number): Promise<ExpectedRevenueBreakdown> => {
+    const db = getDb();
+
+    // Fetch all properties
+    const allProps = await db.select().from(properties);
+    const propertyMap = new Map(allProps.map(p => [p.id, p]));
+
+    // Fetch all current month bills
+    const allBills = await db.select()
+        .from(rentBills)
+        .leftJoin(units, eq(rentBills.unit_id, units.id))
+        .leftJoin(tenants, eq(rentBills.tenant_id, tenants.id))
+        .where(
+            and(
+                eq(rentBills.month, month),
+                eq(rentBills.year, year)
+            )
+        );
+
+    const composition = {
+        rent: 0,
+        utilities: 0,
+        pastDues: 0,
+        otherExpenses: 0,
+    };
+
+    let totalExpected = 0;
+    const propertyStats = new Map<number, { expected: number; collected: number; activeTenants: Set<number> }>();
+    allProps.forEach(p => {
+        propertyStats.set(p.id, { expected: 0, collected: 0, activeTenants: new Set() });
+    });
+
+    const tenantDues = new Map<number, any>();
+
+    allBills.forEach(row => {
+        const bill = row.rent_bills;
+        const unit = row.units;
+        const tenant = row.tenants;
+
+        if (!bill) return;
+
+        // Calculate composition
+        const rent = bill.rent_amount ?? 0;
+        const elec = bill.electricity_amount ?? 0;
+        const water = bill.water_amount ?? 0;
+        const pastDues = bill.previous_balance ?? 0;
+        const expenses = bill.total_expenses ?? 0;
+        const expected = bill.total_amount ?? 0;
+
+        composition.rent += rent;
+        composition.utilities += (elec + water);
+        composition.pastDues += pastDues;
+        composition.otherExpenses += expenses;
+        totalExpected += expected;
+
+        // Collect high-risk tenants
+        if (tenant && unit && pastDues > 0) {
+            tenantDues.set(tenant.id, {
+                tenantId: tenant.id,
+                tenantName: tenant.name || 'Unknown',
+                unitName: unit.name || 'Unknown',
+                propertyName: propertyMap.get(unit.property_id)?.name || 'Unknown',
+                pastDues: pastDues,
+            });
+        }
+
+        // Property breakdown
+        if (unit) {
+            const stats = propertyStats.get(unit.property_id);
+            if (stats) {
+                stats.expected += expected;
+                stats.collected += (bill.paid_amount ?? 0);
+                if (tenant && tenant.status === 'active') {
+                    stats.activeTenants.add(tenant.id);
+                }
+            }
+        }
+    });
+
+    // Formatting property breakdown
+    const propertiesData = Array.from(propertyStats.entries()).map(([id, stats]) => {
+        const p = propertyMap.get(id);
+        return {
+            id,
+            name: p?.name || 'Unknown Property',
+            expectedAmount: stats.expected,
+            collectedAmount: stats.collected,
+            activeTenants: stats.activeTenants.size,
+        };
+    }).filter(p => p.expectedAmount > 0).sort((a, b) => b.expectedAmount - a.expectedAmount);
+
+    // Get Top 3 high-risk tenants
+    const highRiskTenants = Array.from(tenantDues.values())
+        .sort((a, b) => b.pastDues - a.pastDues)
+        .slice(0, 3);
+
+    return {
+        totalExpected,
+        propertyCount: allProps.length,
+        composition,
+        properties: propertiesData,
+        highRiskTenants,
     };
 };

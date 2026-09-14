@@ -13,8 +13,9 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { Calendar, Info, X } from 'lucide-react-native';
 import Button from '../common/Button';
 import Input from '../common/Input';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatDisplayDate } from '../../utils/Constants';
 
 interface RemoveTenantModalProps {
     visible: boolean;
@@ -25,6 +26,8 @@ interface RemoveTenantModalProps {
     refundAmount: string;
     onRefundAmountChange: (amount: string) => void;
     onSubmit: () => void;
+    liveBalance?: number;
+    isPostPaid?: boolean;
 }
 
 const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
@@ -35,7 +38,9 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
     onDateChange,
     refundAmount,
     onRefundAmountChange,
-    onSubmit
+    onSubmit,
+    liveBalance,
+    isPostPaid,
 }) => {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
@@ -55,7 +60,7 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                     behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
                     style={styles.keyboardView}
                 >
-                    <View style={styles.modalContent}>
+                    <View style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom + 20, 20) }]}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Remove Tenant</Text>
                             <Pressable onPress={onClose} style={styles.closeBtn}>
@@ -70,9 +75,9 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                                     <Text style={styles.statValue}>₹ {tenant?.security_deposit || 0}</Text>
                                 </View>
                                 <View style={styles.statBox}>
-                                    <Text style={styles.statLabel}>Balance Left</Text>
-                                    <Text style={[styles.statValue, { color: (tenant?.balance_amount || 0) > 0 ? '#EF4444' : '#10B981' }]}>
-                                        ₹ {tenant?.balance_amount || 0}
+                                    <Text style={styles.statLabel}>{(liveBalance ?? 0) < 0 ? 'Advance Balance' : 'Balance Due'}</Text>
+                                    <Text style={[styles.statValue, { color: (liveBalance ?? 0) > 0 ? '#EF4444' : '#10B981' }]}>
+                                        ₹ {Math.abs(liveBalance ?? 0)}
                                     </Text>
                                 </View>
                             </View>
@@ -88,26 +93,19 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                             <Text style={styles.inputLabel}>Move-out Date</Text>
                             <Pressable style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
                                 <Calendar size={20} color={theme.colors.accent} />
-                                <Text style={styles.datePickerText}>{moveOutDate.toLocaleDateString()}</Text>
+                                <Text style={styles.datePickerText}>{formatDisplayDate(moveOutDate)}</Text>
                             </Pressable>
-
-                            {showDatePicker && (
-                                <DateTimePicker
-                                    value={moveOutDate}
-                                    mode="date"
-                                    onChange={(event: any, date?: Date) => {
-                                        setShowDatePicker(false);
-                                        if (date) onDateChange(date);
-                                    }}
-                                />
-                            )}
 
                             <View style={styles.noteBox}>
                                 <Info size={16} color={theme.colors.textSecondary} />
-                                <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
+                                <Text style={styles.noteText}>
+                                    {isPostPaid
+                                        ? "Update this tenant's current rent card end date in Take Rent to the move-out date before removing. Even if removed, tenant details stay in past records."
+                                        : 'Even if removed, tenant details will be saved in past records.'}
+                                </Text>
                             </View>
 
-                            <View style={[styles.modalActions, { paddingBottom: insets.bottom }]}>
+                            <View style={[styles.modalActions]}>
                                 <Button
                                     title="Cancel"
                                     onPress={onClose}
@@ -124,6 +122,17 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            <DateTimePickerModal
+                isVisible={showDatePicker}
+                mode="date"
+                date={moveOutDate}
+                onConfirm={(date) => {
+                    setShowDatePicker(false);
+                    onDateChange(date);
+                }}
+                onCancel={() => setShowDatePicker(false)}
+            />
         </Modal>
     );
 };
@@ -138,7 +147,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: theme.colors.surface,
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
         paddingHorizontal: theme.spacing.m
     },
     dismissArea: {

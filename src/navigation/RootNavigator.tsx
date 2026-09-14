@@ -3,6 +3,7 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSelector } from 'react-redux';
 import { trackScreenView, trackEvent, AnalyticsEvents } from '../services/analyticsService';
+import { initCrashlytics } from '../services/crashlyticsService';
 
 export const navigationRef = createNavigationContainerRef<any>();
 import { RootState } from '../redux/store';
@@ -10,6 +11,7 @@ import { RootState } from '../redux/store';
 // Auth Screens
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
+import SetupWizardScreen from '../screens/auth/SetupWizardScreen';
 
 // Main Screens
 import TabNavigator from './TabNavigator';
@@ -20,9 +22,11 @@ import RentCalculatorScreen from '../screens/calculator/RentCalculatorScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import PaymentsScreen from '../screens/payments/PaymentsScreen';
 import PropertyOperationsScreen from '../screens/properties/property/PropertyOperationsScreen';
+import PropertyStatisticsScreen from '../screens/properties/property/PropertyStatisticsScreen';
 import RoomsListScreen from '../screens/properties/room/RoomsListScreen';
 import RoomDetailsScreen from '../screens/properties/room/RoomDetailsScreen';
 import RentReceiptConfigScreen from '../screens/properties/property/RentReceiptConfigScreen';
+import PaymentAccountEditorScreen from '../screens/properties/property/PaymentAccountEditorScreen';
 import PropertySettingsScreen from '../screens/properties/property/PropertySettingsScreen';
 import ExpensesScreen from '../screens/properties/property/ExpensesScreen';
 import TermsEditorScreen from '../screens/settings/TermsEditorScreen';
@@ -35,14 +39,16 @@ import NotificationsCenterScreen from '../screens/notifications/NotificationsCen
 import TakeRentScreen from '../screens/rent/TakeRentScreen';
 import ExcelImportScreen from '../screens/settings/ExcelImportScreen';
 import TenantDetailScreen from '../screens/tenants/TenantDetailScreen';
+import ExpectedRevenueScreen from '../screens/dashboard/ExpectedRevenueScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-    const { isAuthenticated, isOnboarded } = useSelector((state: RootState) => state.auth);
+    const { isAuthenticated, isOnboarded, isSetupComplete } = useSelector((state: RootState) => state.auth);
 
     React.useEffect(() => {
         trackEvent(AnalyticsEvents.APP_OPENED);
+        initCrashlytics();
     }, []);
 
     return (
@@ -60,6 +66,8 @@ export default function RootNavigator() {
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                 ) : !isAuthenticated ? (
                     <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                ) : !isSetupComplete ? (
+                    <Stack.Screen name="SetupWizard" component={SetupWizardScreen} />
                 ) : (
                     <>
                         <Stack.Screen name="Main" component={TabNavigator} />
@@ -69,10 +77,12 @@ export default function RootNavigator() {
                         <Stack.Screen name="RoomsList" component={RoomsListScreen} />
                         <Stack.Screen name="RoomDetails" component={RoomDetailsScreen} />
                         <Stack.Screen name="PropertyOperations" component={PropertyOperationsScreen} />
+                        <Stack.Screen name="PropertyStatistics" component={PropertyStatisticsScreen} />
                         <Stack.Screen name="RentCalculator" component={RentCalculatorScreen} />
                         <Stack.Screen name="Settings" component={SettingsScreen} />
                         <Stack.Screen name="Payments" component={PaymentsScreen} />
                         <Stack.Screen name="RentReceiptConfig" component={RentReceiptConfigScreen} />
+                        <Stack.Screen name="PaymentAccountEditor" component={PaymentAccountEditorScreen} />
                         <Stack.Screen name="TermsEditor" component={TermsEditorScreen} />
                         <Stack.Screen name="Profile" component={ProfileScreen} />
                         <Stack.Screen name="Privacy" component={PrivacyScreen} />
@@ -85,6 +95,7 @@ export default function RootNavigator() {
                         <Stack.Screen name="Expenses" component={ExpensesScreen} />
                         <Stack.Screen name="ExcelImport" component={ExcelImportScreen} />
                         <Stack.Screen name="TenantDetail" component={TenantDetailScreen} />
+                        <Stack.Screen name="ExpectedRevenue" component={ExpectedRevenueScreen} />
                     </>
                 )}
             </Stack.Navigator>

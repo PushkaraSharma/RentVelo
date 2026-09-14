@@ -21,12 +21,12 @@ export const incrementActionAndReview = async () => {
 
         if (hasReviewed) return;
 
-        // Minimum time between prompts (2 months)
-        const TWO_MONTHS_MS = 60 * 24 * 60 * 60 * 1000;
+        // Minimum time between prompts (1 month)
+        const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
         if (lastPrompt) {
             const lastDate = new Date(lastPrompt).getTime();
-            if (Date.now() - lastDate < TWO_MONTHS_MS) {
-                console.log('[StoreReview] Prompted too recently, skipping.');
+            if (Date.now() - lastDate < ONE_MONTH_MS) {
+                console.log('[StoreReview] Prompted too recently (less than 1 month), skipping.');
                 return;
             }
         }
@@ -38,24 +38,21 @@ export const incrementActionAndReview = async () => {
 
         console.log(`[StoreReview] Action count: ${newCount}`);
 
-        // 3. Request review at specific milestones (3, 7, 15, 30...)
-        const milestones = __DEV__ ? [1, 2, 3, 4, 5] : [3, 7, 15, 30, 50, 100];
-        if (milestones.includes(newCount) || (newCount > 100 && newCount % 50 === 0)) {
-
+        // 3. Request review if milestone reached (at least 3 positive actions)
+        if (newCount >= 3) {
             const isAvailable = await StoreReview.isAvailableAsync();
-            const hasAction = await StoreReview.hasAction();
 
-            if (isAvailable && hasAction) {
+            if (isAvailable) {
                 console.log('[StoreReview] Requesting review...');
                 await StoreReview.requestReview();
 
                 // Track last prompt date
                 storage.set(LAST_PROMPT_KEY, new Date().toISOString());
-
-                // reset or increment logic? 
-                // Native StoreReview often handles "already reviewed" internally (silent),
-                // but we track lastPrompt date to be polite and avoid trying every single day.
+            } else {
+                console.log('[StoreReview] Review not available on this device/environment.');
             }
+        } else {
+            console.log(`[StoreReview] Need ${3 - newCount} more actions to trigger review prompt.`);
         }
     } catch (error) {
         console.error('[StoreReview] Failed to handle review logic:', error);

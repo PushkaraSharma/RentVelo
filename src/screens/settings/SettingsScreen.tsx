@@ -29,7 +29,8 @@ import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getDb } from '../../db';
 import { generateRealUsageData } from '../../../tests/seedDatabase';
 import { getFullImageUri } from '../../services/imageService';
-import { trackEvent, AnalyticsEvents, setAnalyticsUser } from '../../services/analyticsService';
+import { trackEvent, AnalyticsEvents, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
+import { setCrashlyticsUser } from '../../services/crashlyticsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PickerBottomSheet from '../../components/common/PickerBottomSheet';
 import { useToast } from '../../hooks/useToast';
@@ -59,6 +60,7 @@ export default function SettingsScreen({ navigation }: any) {
     const handleSetFormat = (format: ReceiptDefaultFormat) => {
         setReceiptDefaultFormat(format);
         setLocalReceiptFormat(format);
+        setEnrichedUserProperties({ receiptFormat: format });
         setShowFormatModal(false);
     };
 
@@ -81,6 +83,7 @@ export default function SettingsScreen({ navigation }: any) {
         }
         trackEvent(AnalyticsEvents.SIGN_OUT);
         await setAnalyticsUser(null);
+        await setCrashlyticsUser(null);
         dispatch(logout());
         setIsDeleting(false);
     };
@@ -249,7 +252,10 @@ export default function SettingsScreen({ navigation }: any) {
                             icon={Moon}
                             label="Dark Mode"
                             color="#6366F1"
-                            right={<Toggle value={isDark} onValueChange={(v) => setMode(v ? 'dark' : 'light')} />}
+                            right={<Toggle value={isDark} onValueChange={(v) => {
+                            setMode(v ? 'dark' : 'light');
+                            setEnrichedUserProperties({ darkMode: v });
+                        }} />}
                         />
                         <SettingItem
                             icon={Database}
@@ -451,7 +457,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     profileCard: {
         backgroundColor: theme.colors.surface,
         marginHorizontal: theme.spacing.l,
-        padding: theme.spacing.l,
+        padding: theme.spacing.m,
         borderRadius: 24,
         flexDirection: 'row',
         alignItems: 'center',
@@ -461,13 +467,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginBottom: theme.spacing.xl,
     },
     profileImageContainer: {
-        width: 80,
-        height: 80,
+        width: 75,
+        height: 75,
         borderRadius: 40,
         backgroundColor: theme.colors.accentLight,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: theme.spacing.l,
+        marginRight: theme.spacing.m,
     },
     profileImage: {
         width: '100%',
@@ -478,7 +484,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
     },
     profileName: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
     },

@@ -1,5 +1,5 @@
 import { getDb } from '../db/database';
-import { properties, tenants, units, rentReceiptConfig } from '../db/schema';
+import { properties, tenants, units, rentReceiptConfig, paymentAccounts } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { saveImageToPermanentStorage } from './imageService';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -134,6 +134,42 @@ export const migrateOldImagesToPermanentStorage = async () => {
                     .set(updates)
                     .where(eq(rentReceiptConfig.id, config.id));
             }
+        }
+
+        // 5. Migrate Payment Accounts
+        try {
+            const allAccounts = await db.select().from(paymentAccounts);
+            for (const account of allAccounts) {
+                let updates: any = {};
+                let needsUpdate = false;
+
+                const fieldsToCheck = [
+                    { key: 'logo_uri', val: account.logo_uri },
+                    { key: 'payment_qr_uri', val: account.payment_qr_uri },
+                    { key: 'signature_uri', val: account.signature_uri }
+                ];
+
+                for (const field of fieldsToCheck) {
+                    if (field.val && field.val.startsWith('file://')) {
+                        const info = await FileSystem.getInfoAsync(field.val);
+                        if (info.exists) {
+                            const newFilename = await saveImageToPermanentStorage(field.val);
+                            if (newFilename) {
+                                updates[field.key] = newFilename;
+                                needsUpdate = true;
+                            }
+                        }
+                    }
+                }
+
+                if (needsUpdate) {
+                    await db.update(paymentAccounts)
+                        .set(updates)
+                        .where(eq(paymentAccounts.id, account.id));
+                }
+            }
+        } catch (e) {
+            console.warn('Payment account image migration skipped:', e);
         }
 
         console.log('Image migration check complete.');

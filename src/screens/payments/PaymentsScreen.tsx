@@ -89,7 +89,7 @@ export default function PaymentsScreen({ navigation }: any) {
     const currentMonthName = new Date().toLocaleString('default', { month: 'short' }).toUpperCase();
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Header
                 title="Payments"
                 rightAction={

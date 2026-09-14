@@ -4,13 +4,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, MoreVertical, Search, X } from 'lucide-react-native';
 import Header from '../../components/common/Header';
 import { useFocusEffect } from '@react-navigation/native';
-import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById } from '../../db';
+import { generateBillsForProperty, getBillsForPropertyMonth, getPropertyById, getUsagePeriod, BILL_ADVANCE_DAYS } from '../../db';
 import MonthPickerModal from '../../components/rent/MonthPickerModal';
 import RentBillCard from '../../components/rent/RentBillCard';
 import RentBillSkeleton from '../../components/rent/RentBillSkeleton';
+import PickerBottomSheet from '../../components/common/PickerBottomSheet';
+import BulkPdfReceiptsModal from '../../components/rent/BulkPdfReceiptsModal';
 import { hapticsHeavy } from '../../utils/haptics';
 
 const MONTHS = [
@@ -25,10 +27,19 @@ export default function TakeRentScreen({ navigation, route }: any) {
     const insets = useSafeAreaInsets();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
     const propertyId = route?.params?.propertyId;
+    
+    // Shared with bill generation so the furthest month reachable here is always a month
+    // that actually has bills
+    const effectiveNow = new Date();
+    effectiveNow.setDate(effectiveNow.getDate() + BILL_ADVANCE_DAYS);
+    
+    // Default open month remains the strict CURRENT month
     const now = new Date();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [showMonthPicker, setShowMonthPicker] = useState(false);
+    const [showMoreActions, setShowMoreActions] = useState(false);
+    const [showBulkPdfReceipts, setShowBulkPdfReceipts] = useState(false);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<FilterType>(route?.params?.initialFilter || 'all');
     const [bills, setBills] = useState<any[]>([]);
@@ -121,7 +132,10 @@ export default function TakeRentScreen({ navigation, route }: any) {
         vacant: bills.filter(b => b.isVacant).length,
     };
 
+    const isCurrentOrFutureMonth = (year > effectiveNow.getFullYear()) || (year === effectiveNow.getFullYear() && month >= effectiveNow.getMonth() + 1);
+
     const goMonth = (dir: number) => {
+        if (dir === 1 && isCurrentOrFutureMonth) return;
         hapticsHeavy();
         setLoading(true); // Immediate loader feedback
         setBills([]); // Clear stale data instantly
@@ -142,16 +156,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
     ];
 
     const rentPeriod = useMemo(() => {
-        let pMonth = month;
-        let pYear = year;
-
-        if (property?.rent_payment_type === 'previous_month') {
-            pMonth = month - 1;
-            if (pMonth < 1) {
-                pMonth = 12;
-                pYear = year - 1;
-            }
-        }
+        const { usageMonth: pMonth, usageYear: pYear } = getUsagePeriod(property, month, year);
 
         const startDate = new Date(pYear, pMonth - 1, 1);
         const endDate = new Date(pYear, pMonth, 0);
@@ -173,10 +178,19 @@ export default function TakeRentScreen({ navigation, route }: any) {
                             <Text style={styles.monthText}>{MONTHS[month - 1]}</Text>
                             <Text style={styles.yearLabel}>{year}</Text>
                         </Pressable>
-                        <Pressable onPress={() => goMonth(1)} style={styles.monthArrow}>
+                        <Pressable 
+                            onPress={() => goMonth(1)} 
+                            style={[styles.monthArrow, isCurrentOrFutureMonth && { opacity: 0.3 }]}
+                            disabled={isCurrentOrFutureMonth}
+                        >
                             <ChevronRight size={20} color={theme.colors.accent} />
                         </Pressable>
                     </View>
+                }
+                rightAction={
+                    <Pressable style={styles.moreBtn} onPress={() => setShowMoreActions(true)}>
+                        <MoreVertical size={24} color={theme.colors.textPrimary} />
+                    </Pressable>
                 }
             />
 
@@ -239,7 +253,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 )}
                 contentContainerStyle={styles.listContent}
                 showsVerticalScrollIndicator={false}
-                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `bill-${item.unit.id}`}
+                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `bill-${item.bill?.id ?? `u${item.unit.id}-t${item.tenant?.id ?? 'vacant'}`}`}
                 initialNumToRender={10}
                 maxToRenderPerBatch={10}
                 windowSize={5}
@@ -259,12 +273,33 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 visible={showMonthPicker}
                 month={month}
                 year={year}
+                maxMonth={effectiveNow.getMonth() + 1}
+                maxYear={effectiveNow.getFullYear()}
                 onSelect={(m, y) => {
                     setMonth(m);
                     setYear(y);
                     setShowMonthPicker(false);
                 }}
                 onClose={() => setShowMonthPicker(false)}
+            />
+
+            <PickerBottomSheet
+                visible={showMoreActions}
+                onClose={() => setShowMoreActions(false)}
+                title="More Options"
+                options={[{ label: 'PDF Receipts', value: 'pdf_receipts' }]}
+                onSelect={() => {
+                    setShowMoreActions(false);
+                    setTimeout(() => setShowBulkPdfReceipts(true), 200);
+                }}
+            />
+
+            <BulkPdfReceiptsModal
+                visible={showBulkPdfReceipts}
+                onClose={() => setShowBulkPdfReceipts(false)}
+                bills={bills}
+                property={property}
+                period={rentPeriod}
             />
         </View>
     );
@@ -287,6 +322,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         height: 44,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    moreBtn: {
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'flex-end',
     },
 
     // Month Selector (inside header)

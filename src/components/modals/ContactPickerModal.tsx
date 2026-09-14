@@ -110,7 +110,7 @@ export default function ContactPickerModal({ visible, onClose, onSelectContact }
             transparent={false}
             onRequestClose={onClose}
         >
-            <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+            <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
                 <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
                     <View>
                         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>Import Contact</Text>
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
         padding: 8,
     },
     searchContainer: {
-        padding: 20,
+        padding: 15,
         paddingBottom: 10,
     },
     searchInput: {

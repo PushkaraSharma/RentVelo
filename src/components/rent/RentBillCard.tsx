@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, Dimensions, ActivityIndicator, Keyboard, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock } from 'lucide-react-native';
+import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock, Wallet } from 'lucide-react-native';
 import {
-    updateBill, recalculateBill,
+    resetFutureBills,
     getBillExpenses, getBillPayments,
-    getReceiptConfigByPropertyId, getPropertyById, getTenantById, getUnitById
+    resolveReceiptConfig, getPropertyById
 } from '../../db';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
@@ -20,6 +20,7 @@ import { trackEvent, AnalyticsEvents } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
 import RNShare from 'react-native-share';
 import { getReceiptDefaultFormat, getReceiptDefaultAction } from '../../utils/storage';
+import { buildReminderUpiShareMessage } from '../../utils/upiLink';
 
 // Import modals
 import PickerBottomSheet from '../common/PickerBottomSheet';
@@ -40,8 +41,8 @@ interface RentBillCardProps {
         isVacant: boolean;
         isNotMovedIn?: boolean;
         isLeaseExpired?: boolean;
+        isMovedOut?: boolean;
         hasFuturePersistedBills?: boolean;
-        isStrictlyFuture?: boolean;
     };
     period: { start: string; end: string; days: number };
     onRefresh: (isSilent?: boolean) => void;
@@ -52,7 +53,7 @@ interface RentBillCardProps {
 }
 
 const RentBillCard = React.memo(({ item, period, onRefresh, navigation, propertyId, viewingMonth, viewingYear }: RentBillCardProps) => {
-    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, hasFuturePersistedBills } = item;
+    const { unit, tenant, bill, isVacant, isNotMovedIn, isLeaseExpired, isMovedOut, hasFuturePersistedBills } = item;
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
@@ -74,14 +75,11 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const [sendingReminder, setSendingReminder] = useState(false);
     const [shareFormatPickerVisible, setShareFormatPickerVisible] = useState(false);
     const [pendingAction, setPendingAction] = useState<'receipt' | 'reminder' | null>(null);
-    const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder' } | null>(null);
+    const [shareHtml, setShareHtml] = useState<{ html: string; action: 'receipt' | 'reminder'; shareCaption?: string } | null>(null);
     const [showResetModal, setShowResetModal] = useState(false);
     const [isReseting, setIsReseting] = useState(false);
     const [meterReadingError, setMeterReadingError] = useState('');
     const [waterReadingError, setWaterReadingError] = useState('');
-    const [showVirtualBillWarning, setShowVirtualBillWarning] = useState(false);
-    const [pendingVirtualAction, setPendingVirtualAction] = useState<(() => void) | null>(null);
-    const [isPersistingVirtual, setIsPersistingVirtual] = useState(false);
 
     const swipeAnim = useRef(new Animated.Value(0)).current;
     const viewShotRef = useRef<any>(null);
@@ -136,41 +134,45 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         return hasFuturePersistedBills === true;
     }, [hasFuturePersistedBills, bill]);
 
-    const liveElectricityAmount = useMemo(() => {
-        if (unit.electricity_rate === null || !bill) return bill?.electricity_amount ?? 0;
+    const electricityPrev =
+        bill != null && bill.prev_reading != null && bill.prev_reading !== 0
+            ? bill.prev_reading
+            : (unit?.initial_electricity_reading ?? 0);
+
+    const waterPrev =
+        bill != null && bill.water_prev_reading != null && bill.water_prev_reading !== 0
+            ? bill.water_prev_reading
+            : (unit?.initial_water_reading ?? 0);
+
+    const liveElectricity = useMemo(() => {
+        if (unit.electricity_rate === null || !bill) {
+            return { amount: bill?.electricity_amount ?? 0, units: null as number | null };
+        }
         const val = parseFloat(meterReading);
-        if (isNaN(val)) return bill.electricity_amount ?? 0;
-        const prev = (bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0);
-        if (val < prev) return 0;
-        let unitsUsed = Math.max(0, val - prev);
+        if (isNaN(val)) return { amount: bill.electricity_amount ?? 0, units: null };
+        if (val < electricityPrev) return { amount: 0, units: 0 };
+        let unitsUsed = Math.max(0, val - electricityPrev);
         const defaultUnits = unit.electricity_default_units;
         if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
             unitsUsed = defaultUnits;
         }
-        let amt = unitsUsed * (unit.electricity_rate ?? 0);
-        // PG split: divide metered cost across occupied beds in same room
-        if (unit.room_group && bill) {
-            // Note: For live UI calculation, we'd need occupiedCount. 
-            // For now, let's keep it simple or use a cached count if we had one.
-            // Since we don't have occupiedCount here, it might show full room cost in live UI.
-            // But recalculated bill will show correct split.
-        }
-        return amt;
-    }, [meterReading, bill, unit]);
+        return { amount: unitsUsed * (unit.electricity_rate ?? 0), units: unitsUsed };
+    }, [meterReading, bill, unit, electricityPrev]);
 
-    const liveWaterAmount = useMemo(() => {
-        if (unit.water_rate === null || !bill) return bill?.water_amount ?? 0;
+    const liveWater = useMemo(() => {
+        if (unit.water_rate === null || !bill) {
+            return { amount: bill?.water_amount ?? 0, units: null as number | null };
+        }
         const val = parseFloat(waterReading);
-        if (isNaN(val)) return bill.water_amount ?? 0;
-        const prev = (bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0);
-        if (val < prev) return 0;
-        let unitsUsed = Math.max(0, val - prev);
+        if (isNaN(val)) return { amount: bill.water_amount ?? 0, units: null };
+        if (val < waterPrev) return { amount: 0, units: 0 };
+        let unitsUsed = Math.max(0, val - waterPrev);
         const defaultUnits = unit.water_default_units;
         if (defaultUnits && defaultUnits > 0 && unitsUsed <= defaultUnits) {
             unitsUsed = defaultUnits;
         }
-        return unitsUsed * (unit.water_rate ?? 0);
-    }, [waterReading, bill, unit]);
+        return { amount: unitsUsed * (unit.water_rate ?? 0), units: unitsUsed };
+    }, [waterReading, bill, unit, waterPrev]);
 
     // B12: Fix image loading in WebView by converting local files to base64
     const getBase64Image = async (uri: string) => {
@@ -193,7 +195,24 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    const executeShareHelper = async (uri: string, mimeType: string, dialogTitle: string) => {
+    const buildReminderShareCaption = (
+        receiptConfig: Awaited<ReturnType<typeof resolveReceiptConfig>>,
+        property: Awaited<ReturnType<typeof getPropertyById>>,
+    ): string | undefined => {
+        const balance = bill?.balance ?? 0;
+        const periodLabel = period.end.split(' ').slice(1).join(' ') || `${bill.month}-${bill.year}`;
+        const caption = buildReminderUpiShareMessage({
+            tenantName: tenant?.name,
+            periodLabel,
+            balance,
+            upiId: receiptConfig?.upi_id,
+            payeeName: receiptConfig?.bank_acc_holder || property?.owner_name,
+            transactionNote: `Rent ${periodLabel} - ${unit?.name || ''}`.trim(),
+        });
+        return caption ?? undefined;
+    };
+
+    const executeShareHelper = async (uri: string, mimeType: string, dialogTitle: string, caption?: string) => {
         const defaultAction = getReceiptDefaultAction();
         let skippedFallback = false;
         let finalUri = uri;
@@ -210,15 +229,20 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             console.warn('Failed to rename file, using original uri', e);
         }
 
+        const shareUrl = finalUri.startsWith('file://') ? finalUri : `file://${finalUri}`;
+
         if (Platform.OS === 'android' && defaultAction === 'whatsapp' && tenant?.phone) {
             try {
                 let formattedNumber = tenant.phone.replace(/\D/g, '');
                 if (formattedNumber.length === 10) formattedNumber = '91' + formattedNumber;
                 const shareOptions: any = {
                     social: RNShare.Social.WHATSAPP,
-                    url: finalUri,
+                    url: shareUrl,
                     type: mimeType,
                     whatsAppNumber: formattedNumber,
+                };
+                if (caption) {
+                    shareOptions.message = caption;
                 }
                 await RNShare.shareSingle(shareOptions);
                 return;
@@ -232,6 +256,23 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         }
         if (skippedFallback) return;
+
+        if (caption) {
+            try {
+                await RNShare.open({
+                    url: shareUrl,
+                    message: caption,
+                    type: mimeType,
+                    title: dialogTitle,
+                });
+                return;
+            } catch (err: any) {
+                if (err?.message && String(err.message).includes('User did not share')) {
+                    return;
+                }
+                console.warn('RNShare.open with caption failed, falling back to file-only share:', err);
+            }
+        }
 
         if (await Sharing.isAvailableAsync()) {
             await Sharing.shareAsync(finalUri, {
@@ -250,7 +291,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             const [payments, freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillPayments(bill.id),
                 getBillExpenses(bill.id),
-                getReceiptConfigByPropertyId(propertyId),
+                resolveReceiptConfig(propertyId, unit?.id),
                 getPropertyById(propertyId),
             ]);
 
@@ -282,9 +323,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 trackEvent(AnalyticsEvents.RENT_RECEIPT_GENERATED, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 }); // A4
 
-                await executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
-
                 setGeneratingReceipt(false);
+                executeShareHelper(uri, 'application/pdf', `Rent Receipt - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`)
+                    .catch((shareError) => {
+                        console.error('Receipt share error:', shareError);
+                        showToast({ type: 'error', title: 'Share failed', message: 'Receipt generated, but sharing failed.' });
+                    });
             } else {
                 setShareHtml({ html, action: 'receipt' });
             }
@@ -300,7 +344,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         try {
             const [freshExpenses, receiptConfig, property] = await Promise.all([
                 getBillExpenses(bill.id),
-                getReceiptConfigByPropertyId(propertyId),
+                resolveReceiptConfig(propertyId, unit?.id),
                 getPropertyById(propertyId),
             ]);
 
@@ -327,15 +371,25 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 period,
             });
 
+            const reminderCaption = buildReminderShareCaption(receiptConfig, property);
+
             if (format === 'PDF') {
                 trackEvent(AnalyticsEvents.RENT_REMINDER_SENT, { format: 'PDF', unit: unit.name });
                 const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
 
-                await executeShareHelper(uri, 'application/pdf', `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`);
-
                 setSendingReminder(false);
+                executeShareHelper(
+                    uri,
+                    'application/pdf',
+                    `Payment Reminder - ${tenant?.name || unit?.name} - ${period.end.split(' ').slice(1, 3).join('-') || `${bill.month}-${bill.year}`}`,
+                    reminderCaption,
+                )
+                    .catch((shareError) => {
+                        console.error('Reminder share error:', shareError);
+                        showToast({ type: 'error', title: 'Share failed', message: 'Reminder generated, but sharing failed.' });
+                    });
             } else {
-                setShareHtml({ html, action: 'reminder' });
+                setShareHtml({ html, action: 'reminder', shareCaption: reminderCaption });
             }
         } catch (error) {
             console.error('Reminder generation error:', error);
@@ -362,10 +416,12 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         const uri = await viewShotRef.current.capture();
                         trackEvent(shareHtml?.action === 'receipt' ? AnalyticsEvents.RENT_RECEIPT_GENERATED : AnalyticsEvents.RENT_REMINDER_SENT, { format: 'Image', unit: unit.name });
 
+                        const shareCaption = shareHtml?.action === 'reminder' ? shareHtml.shareCaption : undefined;
                         await executeShareHelper(
                             uri,
                             'image/png',
-                            `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`
+                            `${shareHtml?.action === 'receipt' ? 'Rent Receipt' : 'Payment Reminder'} - ${tenant?.name || unit?.name}`,
+                            shareCaption,
                         );
                     } catch (e) {
                         console.error('Image capture error:', e);
@@ -483,7 +539,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     const confirmResetBill = async () => {
         try {
             setIsReseting(true);
-            const { resetFutureBills } = require('../../db');
             await resetFutureBills(unit.id, viewingMonth, viewingYear);
             onRefresh();
         } catch (e) {
@@ -495,49 +550,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         }
     };
 
-    const executeVirtualAction = (action: () => void) => {
-        if (bill?.id === null) {
-            if (item.isStrictlyFuture) {
-                Keyboard.dismiss();
-                setPendingVirtualAction(() => action);
-                setTimeout(() => {
-                    setShowVirtualBillWarning(true);
-                }, 100);
-            } else {
-                handleConfirmVirtualAction(action);
-            }
-        } else {
-            action();
-        }
-    };
 
-    const handleConfirmVirtualAction = async (silentAction?: () => void) => {
-        const actionToRun = silentAction || pendingVirtualAction;
-        if (!bill || bill.id !== null || !actionToRun) {
-            return;
-        }
-
-        setIsPersistingVirtual(true);
-        try {
-            const { persistVirtualBill } = require('../../db');
-            const newBillId = await persistVirtualBill(bill);
-
-            // Update local object bridge so that 'actionToRun' (like runSave) 
-            // has the ID it needs immediately before the refresh unmounts us.
-            bill.id = newBillId;
-
-            // Wait for the action (e.g., save reading) to complete BEFORE refreshing UI
-            await Promise.resolve(actionToRun());
-            onRefresh(true);
-        } catch (e) {
-            console.error('[RentBillCard] Error persisting virtual bill:', e);
-            showToast({ type: 'error', title: 'Error', message: 'Failed to persist bill' });
-        } finally {
-            setIsPersistingVirtual(false);
-            setShowVirtualBillWarning(false);
-            setPendingVirtualAction(null);
-        }
-    };
 
     const handleMeterReadingSave = async (type: 'electricity' | 'water') => {
         if (!bill || savingReading.current) return;
@@ -617,11 +630,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             }
         };
 
-        if (bill.id === null) {
-            executeVirtualAction(runSave);
-        } else {
-            runSave();
-        }
+        runSave();
     };
 
     const formattedDate = () => {
@@ -632,7 +641,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     };
 
     return (
-        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard]}>
+        <View style={[styles.card, isPaid && styles.paidCard, isLocked && styles.lockedCard, isMovedOut && { borderLeftWidth: 3, borderLeftColor: '#F59E0B' }]}>
             {isLocked && (
                 <View style={styles.lockedBanner}>
                     <Lock size={12} color={theme.colors.textSecondary} />
@@ -646,14 +655,19 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onLongPress={isLocked ? handleResetBill : undefined}
                 delayLongPress={500}
             >
-                <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.roomName}>{unit.name}</Text>
+                <View style={styles.topRowLeft}>
+                    <View style={styles.titleBadgeRow}>
+                        <Text style={styles.roomName} numberOfLines={2}>{unit.name}</Text>
                         {tenant?.lease_type && (
                             <View style={[styles.leaseBadge, tenant.lease_type === 'fixed' ? styles.leaseBadgeFixed : styles.leaseBadgeMonthly]}>
                                 <Text style={styles.leaseBadgeText}>
                                     {tenant.lease_type === 'fixed' ? 'Fixed' : 'Monthly'}
                                 </Text>
+                            </View>
+                        )}
+                        {isMovedOut && (
+                            <View style={[styles.leaseBadge, styles.movedOutBadge]}>
+                                <Text style={[styles.leaseBadgeText, { color: '#D97706' }]}>Moved Out</Text>
                             </View>
                         )}
                     </View>
@@ -665,7 +679,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                     )}
                 </View>
                 <Pressable
-                    style={[styles.paidAmtBadge, isPaid && styles.paidAmtBadgePaid, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial, isLocked && { opacity: 0.8 }]}
+                    style={[
+                        styles.paidAmtBadge,
+                        isPaid && styles.paidAmtBadgePaid,
+                        !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtBadgePartial,
+                        !isPaid && (bill.paid_amount ?? 0) <= 0 && styles.paidAmtBadgeCTA,
+                        isLocked && { opacity: 0.8 },
+                    ]}
                     onPress={() => {
                         if (isLocked) {
                             handleResetBill();
@@ -674,14 +694,28 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         if ((bill.paid_amount ?? 0) > 0) {
                             setShowPaidAmount(true);
                         } else if (!isLocked) {
-                            executeVirtualAction(() => setShowReceivePayment(true));
+                            setShowReceivePayment(true);
                         } else {
                             showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' });
                         }
                     }}
                 >
-                    <Text style={styles.paidAmtLabel}>PAID AMT</Text>
-                    <Text style={[styles.paidAmtValue, isPaid && styles.paidAmtValueGreen, !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtValueOrange]}>
+                    <Text
+                        style={[
+                            styles.paidAmtLabel,
+                            !isPaid && (bill.paid_amount ?? 0) <= 0 && styles.paidAmtOnCTA,
+                        ]}
+                    >
+                        PAID AMT
+                    </Text>
+                    <Text
+                        style={[
+                            styles.paidAmtValue,
+                            isPaid && styles.paidAmtValueGreen,
+                            !isPaid && (bill.paid_amount ?? 0) > 0 && styles.paidAmtValueOrange,
+                            !isPaid && (bill.paid_amount ?? 0) <= 0 && styles.paidAmtOnCTA,
+                        ]}
+                    >
                         {(bill.paid_amount ?? 0) > 0 ? formatAmount(bill.paid_amount) : 'Tap to Pay'}
                     </Text>
                 </Pressable>
@@ -694,9 +728,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         <Zap size={16} color={theme.colors.warning} />
                         {isMetered ? (
                             <View style={styles.meterRow}>
-                                <Text style={styles.meterLabel}>
-                                    Old: {(bill.prev_reading !== null && bill.prev_reading !== 0) ? bill.prev_reading : (unit?.initial_electricity_reading ?? 0)}
-                                </Text>
+                                <Text style={styles.meterLabel}>Old: {electricityPrev}</Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
                                     style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
@@ -711,15 +743,18 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     editable={!isLocked}
                                     returnKeyType="done"
                                 />
-                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveElectricityAmount)}</Text>
+                                <Text style={styles.meterUnits}>
+                                    {liveElectricity.units === null ? '—' : `${liveElectricity.units} units`}
+                                </Text>
+                                <Text style={styles.amountCol}>{formatAmount(liveElectricity.amount)}</Text>
                             </View>
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'electricity' }))}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'electricity' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Electricity Cost</Text>
-                                <Text style={styles.electricityAmt}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
+                                <Text style={styles.amountCol}>{formatAmount(bill.electricity_amount ?? 0)}</Text>
                                 {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
                             </Pressable>
                         )}
@@ -740,9 +775,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                         <Droplets size={16} color={theme.colors.primary} />
                         {isWaterMetered ? (
                             <View style={styles.meterRow}>
-                                <Text style={styles.meterLabel}>
-                                    Old: {(bill.water_prev_reading !== null && bill.water_prev_reading !== 0) ? bill.water_prev_reading : (unit?.initial_water_reading ?? 0)}
-                                </Text>
+                                <Text style={styles.meterLabel}>Old: {waterPrev}</Text>
                                 <Text style={styles.meterArrow}>→</Text>
                                 <TextInput
                                     style={[styles.meterInput, isLocked && { opacity: 0.6 }]}
@@ -757,15 +790,18 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     editable={!isLocked}
                                     returnKeyType="done"
                                 />
-                                <Text style={[styles.electricityAmt, { marginLeft: theme.spacing.s }]}>{formatAmount(liveWaterAmount)}</Text>
+                                <Text style={styles.meterUnits}>
+                                    {liveWater.units === null ? '—' : `${liveWater.units} u`}
+                                </Text>
+                                <Text style={styles.amountCol}>{formatAmount(liveWater.amount)}</Text>
                             </View>
                         ) : (
                             <Pressable
                                 style={styles.fixedElecRow}
-                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowEditUtility({ visible: true, type: 'water' }))}
+                                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowEditUtility({ visible: true, type: 'water' })}
                             >
                                 <Text style={styles.fixedElecLabel}>Fixed Water Cost</Text>
-                                <Text style={styles.electricityAmt}>{formatAmount(bill.water_amount ?? 0)}</Text>
+                                <Text style={styles.amountCol}>{formatAmount(bill.water_amount ?? 0)}</Text>
                                 {!isLocked && <ChevronRight size={16} color={theme.colors.textTertiary} />}
                             </Pressable>
                         )}
@@ -782,7 +818,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             {/* === RENT + PREVIOUS BALANCE (tappable) === */}
             <Pressable
                 style={styles.rentSection}
-                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowTransactionInfo(true))}
+                onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowTransactionInfo(true)}
             >
                 <View style={styles.rentRow}>
                     <View>
@@ -800,13 +836,13 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                             })()}
                         </Text>
                     </View>
-                    <Text style={styles.rentAmount}>{formatAmount(bill.rent_amount)}</Text>
+                    <Text style={styles.amountCol}>{formatAmount(bill.rent_amount)}</Text>
                 </View>
                 <View style={styles.rentRow}>
                     <Text style={[styles.rentLabel, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
                         {(bill.previous_balance ?? 0) < 0 ? 'Previous Advance' : 'Previous Due'}
                     </Text>
-                    <Text style={[styles.prevBalAmount, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
+                    <Text style={[styles.amountCol, { color: (bill.previous_balance ?? 0) < 0 ? theme.colors.success : theme.colors.warning }]}>
                         {(bill.previous_balance ?? 0) < 0 ? '−' : '+'}{formatAmount(Math.abs(bill.previous_balance ?? 0))}
                     </Text>
                 </View>
@@ -816,29 +852,39 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
             <View style={styles.actionsRow}>
                 <Pressable
                     style={[styles.addRemoveBtn, isLocked && { opacity: 0.5 }]}
-                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : executeVirtualAction(() => setShowExpenseActions(true))}
+                    onPress={() => isLocked ? showToast({ type: 'warning', title: 'Locked', message: 'Historical records cannot be edited.' }) : setShowExpenseActions(true)}
                 >
                     <Plus size={14} color={theme.colors.accent} />
                     <Text style={styles.addRemoveText}>Add/Remove</Text>
                 </Pressable>
-                {(bill.total_expenses ?? 0) > 0 && (
-                    <Pressable style={styles.expenseChip} onPress={() => setShowExpenseList(true)}>
-                        <Text style={styles.expenseChipText}>{formatAmount(bill.total_expenses)}</Text>
+                {/* Shown for credits too, otherwise a bill that only has discounts has no
+                    way to reach the expense list and undo them. */}
+                {(bill.total_expenses ?? 0) !== 0 && (
+                    <Pressable
+                        style={styles.expenseChip}
+                        onPress={() => setShowExpenseList(true)}
+                    >
+                        <Text style={[styles.expenseChipText, (bill.total_expenses ?? 0) < 0 && styles.expenseChipTextCredit]}>
+                            {(bill.total_expenses ?? 0) < 0 ? '−' : ''}{formatAmount(Math.abs(bill.total_expenses ?? 0))}
+                        </Text>
                     </Pressable>
                 )}
                 <View style={{ flex: 1 }} />
                 <View style={styles.totalCol}>
                     <Text style={styles.totalLabel}>Total</Text>
-                    <Text style={styles.totalAmount}>{formatAmount(bill.total_amount)}</Text>
+                    <Text style={styles.amountCol}>{formatAmount(bill.total_amount)}</Text>
                 </View>
             </View>
 
             {/* === BALANCE === */}
             <View style={[styles.balanceRow, isPaid && styles.balanceRowPaid]}>
-                <Text style={[styles.balanceLabel, { color: statusColor }]}>
-                    {isPaid ? 'Fully Paid' : 'Current Balance'}
-                </Text>
-                <Text style={[styles.balanceAmount, { color: statusColor }]}>
+                <View style={styles.balanceLabelRow}>
+                    <Wallet size={16} color={statusColor} />
+                    <Text style={[styles.balanceLabel, { color: statusColor }]}>
+                        {isPaid ? 'Fully Paid' : 'Current Balance'}
+                    </Text>
+                </View>
+                <Text style={[styles.amountCol, styles.balanceAmount, { color: statusColor }]}>
                     {formatAmount(Math.abs(bill.balance ?? 0))}
                 </Text>
             </View>
@@ -848,7 +894,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 (() => {
                     const hasPaid = (bill.paid_amount ?? 0) > 0;
                     const label = hasPaid ? 'Swipe → Receipt' : 'Swipe → Reminder';
-                    const bgColor = hasPaid ? theme.colors.primary : theme.colors.warning;
+                    const bgColor = hasPaid ? theme.colors.primary : theme.colors.accent;
 
                     const panResponder = PanResponder.create({
                         onStartShouldSetPanResponder: () => true,
@@ -926,7 +972,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                         {hasPaid ? (
                                             <FileText size={18} color="#FFF" />
                                         ) : (
-                                            <Send size={18} color="#FFF" />
+                                            <Send size={18} color={isDark ? bgColor : "#FFF"} />
                                         )}
                                     </Animated.View>
                                 </>
@@ -998,6 +1044,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowReceivePayment(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                tenant={tenant}
             />
             <PaidAmountModal
                 visible={showPaidAmount}
@@ -1014,6 +1061,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowTransactionInfo(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                tenant={tenant}
                 period={period}
             />
             <ExpenseActionsModal
@@ -1027,6 +1075,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 onClose={() => { setShowExpenseList(false); onRefresh(true); }}
                 bill={bill}
                 unit={unit}
+                locked={isLocked}
             />
             <EditUtilityModal
                 visible={showEditUtility.visible}
@@ -1045,19 +1094,6 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                 variant="danger"
                 loading={isReseting}
             />
-            <ConfirmationModal
-                visible={showVirtualBillWarning}
-                onClose={() => {
-                    setShowVirtualBillWarning(false);
-                    setPendingVirtualAction(null);
-                }}
-                onConfirm={handleConfirmVirtualAction}
-                title="Modify Future Month?"
-                message="You're editing a future month. This will save your changes and lock all previous months."
-                confirmText="Proceed"
-                variant="danger"
-                loading={isPersistingVirtual}
-            />
         </View >
     );
 }, (prevProps: RentBillCardProps, nextProps: RentBillCardProps) => {
@@ -1074,367 +1110,412 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
     );
 });
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
-    card: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: 20,
-        padding: theme.spacing.m,
-        marginBottom: theme.spacing.m,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        ...theme.shadows.small,
-    },
-    paidCard: {
-        borderColor: theme.colors.success,
-    },
-    vacantCard: {
-        borderStyle: 'dashed' as any,
-    },
-    vacantContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.m,
-    },
-    vacantIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.colors.background,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    vacantText: {
-        fontSize: 13,
-        color: theme.colors.textTertiary,
-        marginTop: 2,
-    },
-    addTenantBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
-        backgroundColor: theme.colors.accentLight,
-    },
-    addTenantText: {
-        fontSize: 13,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.accent,
-    },
+const getStyles = (theme: any, isDark: boolean) => {
+    const s = isDark
+        ? { card: '#1C1C1E', inset: '#2A2A2C', raised: '#323234', hairline: '#3A3A3C' }
+        : { card: theme.colors.surface, inset: theme.colors.background, raised: '#F3F4F6', hairline: theme.colors.border };
 
-    // Top Row
-    topRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        marginBottom: theme.spacing.m,
-    },
-    roomName: {
-        fontSize: 16,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.accent,
-    },
-    tenantName: {
-        fontSize: 13,
-        color: theme.colors.textSecondary,
-        marginTop: 2,
-    },
-    lockMessage: {
-        fontSize: 10,
-        color: theme.colors.danger,
-        marginTop: 4,
-        fontWeight: '600',
-    },
-    paidAmtBadge: {
-        alignItems: 'flex-end',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 14,
-        backgroundColor: theme.colors.accentLight,
-        borderWidth: 1.5,
-        borderColor: theme.colors.accent + '30',
-    },
-    paidAmtBadgePaid: {
-        backgroundColor: theme.colors.successLight,
-        borderColor: theme.colors.success + '40',
-    },
-    paidAmtBadgePartial: {
-        backgroundColor: theme.colors.warningLight,
-        borderColor: theme.colors.warning + '40',
-    },
-    paidAmtLabel: {
-        fontSize: 9,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.accent,
-        letterSpacing: 1,
-    },
-    paidAmtValue: {
-        fontSize: 15,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.accent,
-        marginTop: 2,
-    },
-    paidAmtValueGreen: {
-        color: theme.colors.success,
-    },
-    paidAmtValueOrange: {
-        color: theme.colors.warning,
-    },
+    return StyleSheet.create({
+        card: {
+            backgroundColor: s.card,
+            borderRadius: 20,
+            padding: theme.spacing.m,
+            marginBottom: theme.spacing.m,
+            borderWidth: isDark ? 0 : 1,
+            borderColor: theme.colors.border,
+            ...(isDark ? {} : theme.shadows.small),
+        },
+        paidCard: {
+            borderColor: theme.colors.success + '40',
+            borderWidth: 1,
+        },
+        vacantCard: {
+            borderStyle: 'dashed' as any,
+        },
+        vacantContent: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.m,
+        },
+        vacantIcon: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: s.inset,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        vacantText: {
+            fontSize: 13,
+            color: theme.colors.textTertiary,
+            marginTop: 2,
+        },
+        addTenantBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 12,
+            backgroundColor: s.raised,
+        },
+        addTenantText: {
+            fontSize: 13,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.accent,
+        },
 
-    // Electricity
-    electricityRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.s,
-    },
-    electricityRowMetered: {
-        marginBottom: theme.spacing.m,
-        backgroundColor: theme.colors.warningLight,
-        borderRadius: 12,
-        padding: theme.spacing.s,
-    },
-    meterRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    meterLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    meterArrow: {
-        fontSize: 14,
-        color: theme.colors.textTertiary,
-        marginHorizontal: theme.spacing.s,
-    },
-    meterInput: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        fontSize: 15,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        minWidth: 68,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    meterErrorText: {
-        fontSize: 11,
-        color: theme.colors.danger,
-        marginTop: 2,
-    },
-    meterHintText: {
-        fontSize: 11,
-        color: theme.colors.textTertiary,
-        marginTop: 4,
-        fontStyle: 'italic',
-    },
-    fixedElecRow: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    fixedElecLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        flex: 1,
-    },
-    electricityAmt: {
-        fontSize: 14,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
+        // Top Row
+        topRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            marginBottom: theme.spacing.m,
+            gap: 8,
+        },
+        topRowLeft: {
+            flex: 1,
+            minWidth: 0,
+        },
+        titleBadgeRow: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 6,
+        },
+        roomName: {
+            fontSize: 16,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.accent,
+            flexShrink: 1,
+        },
+        tenantName: {
+            fontSize: 13,
+            color: theme.colors.textSecondary,
+            marginTop: 2,
+        },
+        lockMessage: {
+            fontSize: 10,
+            color: theme.colors.danger,
+            marginTop: 4,
+            fontWeight: '600',
+        },
+        paidAmtBadge: {
+            alignItems: 'flex-end',
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 14,
+            backgroundColor: s.raised,
+            borderWidth: 0,
+            borderColor: 'transparent',
+            flexShrink: 0,
+        },
+        paidAmtBadgeCTA: {
+            backgroundColor: theme.colors.accent,
+        },
+        paidAmtBadgePaid: {
+            backgroundColor: s.raised,
+            borderColor: 'transparent',
+        },
+        paidAmtBadgePartial: {
+            backgroundColor: s.raised,
+            borderColor: 'transparent',
+        },
+        paidAmtOnCTA: {
+            color: '#FFFFFF',
+        },
+        paidAmtLabel: {
+            fontSize: 9,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.accent,
+            letterSpacing: 1,
+        },
+        paidAmtValue: {
+            fontSize: 15,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.accent,
+            marginTop: 2,
+        },
+        paidAmtValueGreen: {
+            color: theme.colors.success,
+        },
+        paidAmtValueOrange: {
+            color: theme.colors.warning,
+        },
 
-    // Rent Section
-    rentSection: {
-        backgroundColor: theme.colors.background,
-        borderRadius: 12,
-        padding: theme.spacing.s,
-        marginBottom: theme.spacing.s,
-    },
-    rentRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 4,
-    },
-    rentLabel: {
-        fontSize: 13,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.textPrimary,
-    },
-    rentPeriod: {
-        fontSize: 11,
-        color: theme.colors.accent,
-        marginTop: 1,
-    },
-    rentAmount: {
-        fontSize: 16,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
-    prevBalAmount: {
-        fontSize: 14,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
+        // Electricity
+        electricityRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.s,
+        },
+        electricityRowMetered: {
+            marginBottom: theme.spacing.m,
+            backgroundColor: theme.colors.accent + '12',
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: theme.spacing.s,
+        },
+        meterRow: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        meterLabel: {
+            fontSize: 12,
+            color: theme.colors.textSecondary,
+        },
+        meterArrow: {
+            fontSize: 14,
+            color: theme.colors.textTertiary,
+            marginHorizontal: theme.spacing.s,
+        },
+        meterInput: {
+            backgroundColor: s.raised,
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            fontSize: 15,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            minWidth: 68,
+            borderWidth: 1,
+            borderColor: s.hairline,
+        },
+        meterUnits: {
+            fontSize: 12,
+            fontWeight: theme.typography.medium,
+            color: theme.colors.textSecondary,
+            marginLeft: theme.spacing.xs,
+            fontVariant: ['tabular-nums'],
+        },
+        amountCol: {
+            marginLeft: 'auto',
+            minWidth: 88,
+            textAlign: 'right',
+            fontSize: 16,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            fontVariant: ['tabular-nums'],
+        },
+        meterErrorText: {
+            fontSize: 11,
+            color: theme.colors.danger,
+            marginTop: 2,
+        },
+        meterHintText: {
+            fontSize: 11,
+            color: theme.colors.textTertiary,
+            marginTop: 4,
+            fontStyle: 'italic',
+        },
+        fixedElecRow: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        fixedElecLabel: {
+            fontSize: 12,
+            color: theme.colors.textSecondary,
+            flex: 1,
+        },
+        // Rent Section
+        rentSection: {
+            backgroundColor: theme.colors.accent + '12',
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: theme.spacing.s,
+            marginBottom: theme.spacing.s,
+        },
+        rentRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingVertical: 4,
+        },
+        rentLabel: {
+            fontSize: 13,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.textPrimary,
+            flexShrink: 1,
+            paddingRight: 8,
+        },
+        rentPeriod: {
+            fontSize: 11,
+            color: theme.colors.accent,
+            marginTop: 1,
+        },
 
-    // Actions
-    actionsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: theme.spacing.s,
-    },
-    addRemoveBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: 10,
-        backgroundColor: theme.colors.accentLight,
-    },
-    addRemoveText: {
-        fontSize: 12,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.accent,
-    },
-    expenseChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 10,
-        backgroundColor: theme.colors.successLight,
-    },
-    expenseChipText: {
-        fontSize: 12,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.success,
-    },
-    totalCol: {
-        alignItems: 'flex-end',
-    },
-    totalLabel: {
-        fontSize: 11,
-        fontWeight: theme.typography.medium,
-        color: theme.colors.textSecondary,
-    },
-    totalAmount: {
-        fontSize: 18,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
+        // Actions
+        actionsRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingRight: 12,
+            marginBottom: theme.spacing.s,
+        },
+        addRemoveBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 10,
+            backgroundColor: theme.colors.accent + '12',
+        },
+        addRemoveText: {
+            fontSize: 12,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.accent,
+        },
+        expenseChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 10,
+            backgroundColor: theme.colors.accent + '12',
+        },
+        expenseChipCredit: {
+        },
+        expenseChipText: {
+            fontSize: 12,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.success,
+        },
+        expenseChipTextCredit: {
+            color: theme.colors.danger,
+        },
+        totalCol: {
+            alignItems: 'flex-end',
+            marginLeft: 'auto',
+        },
+        totalLabel: {
+            fontSize: 11,
+            fontWeight: theme.typography.medium,
+            color: theme.colors.textSecondary,
+        },
 
-    // Balance
-    balanceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: theme.colors.dangerLight,
-        borderRadius: 12,
-        paddingHorizontal: theme.spacing.m,
-        paddingVertical: 10,
-        marginBottom: theme.spacing.s,
-    },
-    balanceRowPaid: {
-        backgroundColor: theme.colors.successLight,
-    },
-    balanceLabel: {
-        fontSize: 14,
-        fontWeight: theme.typography.bold,
-    },
-    balanceAmount: {
-        fontSize: 20,
-        fontWeight: theme.typography.bold,
-    },
+        // Balance
+        balanceRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: isDark ? theme.colors.danger + '18' : theme.colors.dangerLight,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            marginBottom: theme.spacing.s,
+        },
+        balanceRowPaid: {
+            backgroundColor: isDark ? theme.colors.success + '18' : theme.colors.successLight,
+        },
+        balanceLabelRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            flexShrink: 1,
+            paddingRight: 8,
+        },
+        balanceLabel: {
+            fontSize: 14,
+            fontWeight: theme.typography.bold,
+        },
+        balanceAmount: {
+            fontSize: 18,
+        },
 
-    // Swipe Button
-    swipeTrack: {
-        height: 50,
-        borderRadius: 25,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        marginBottom: 6,
-    },
-    swipeFill: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-    },
-    swipeLabel: {
-        fontSize: 14,
-        fontWeight: theme.typography.semiBold,
-    },
-    swipeThumb: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        position: 'absolute',
-        left: 0,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...theme.shadows.medium,
-    },
-    billInfo: {
-        fontSize: 11,
-        color: theme.colors.textTertiary,
-        textAlign: 'center',
-        marginTop: 6,
-    },
-    hiddenViewShotContainer: {
-        position: 'absolute',
-        top: -10000,
-        left: -10000,
-        opacity: 0,
-    },
-    // Locked Card Styles
-    lockedCard: {
-        backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
-        borderColor: theme.colors.border,
-    },
-    lockedBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: isDark ? theme.colors.surface : '#F3F4F6',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 20,
-        alignSelf: 'flex-start',
-        marginBottom: theme.spacing.m,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    lockedText: {
-        fontSize: 11,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.textSecondary,
-    },
-    leaseBadge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    leaseBadgeMonthly: {
-        backgroundColor: isDark ? theme.colors.accentLight : '#E0F2FE', // Blue tint
-    },
-    leaseBadgeFixed: {
-        backgroundColor: isDark ? theme.colors.warningLight : '#F3E8FF', // Purple-ish / Amber tint
-    },
-    leaseBadgeText: {
-        fontSize: 10,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        textTransform: 'uppercase',
-    },
-});
+        // Swipe Button
+        swipeTrack: {
+            height: 50,
+            borderRadius: 25,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            marginBottom: 6,
+            backgroundColor: s.raised,
+        },
+        swipeFill: {
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+        },
+        swipeLabel: {
+            fontSize: 14,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.textPrimary,
+        },
+        swipeThumb: {
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            position: 'absolute',
+            left: 0,
+            justifyContent: 'center',
+            alignItems: 'center',
+            ...theme.shadows.medium,
+        },
+        billInfo: {
+            fontSize: 11,
+            color: theme.colors.textTertiary,
+            textAlign: 'center',
+            marginTop: 6,
+        },
+        hiddenViewShotContainer: {
+            position: 'absolute',
+            top: -10000,
+            left: -10000,
+            opacity: 0,
+        },
+        // Locked Card Styles
+        lockedCard: {
+            backgroundColor: s.card,
+            borderColor: theme.colors.border,
+        },
+        lockedBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: s.raised,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 20,
+            alignSelf: 'flex-start',
+            marginBottom: theme.spacing.m,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+        },
+        lockedText: {
+            fontSize: 11,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.textSecondary,
+        },
+        leaseBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+            flexShrink: 0,
+        },
+        leaseBadgeMonthly: {
+            backgroundColor: s.raised,
+        },
+        leaseBadgeFixed: {
+            backgroundColor: s.raised,
+        },
+        movedOutBadge: {
+            backgroundColor: s.raised,
+        },
+        leaseBadgeText: {
+            fontSize: 10,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            textTransform: 'uppercase',
+        },
+    });
+};
 
 export default RentBillCard;

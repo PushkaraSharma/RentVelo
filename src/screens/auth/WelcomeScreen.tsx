@@ -7,8 +7,11 @@ import { login } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
 import { signInWithApple } from '../../services/appleAuthService';
 import { FontAwesome } from '@expo/vector-icons';
-import { AnalyticsEvents, trackEvent, setAnalyticsUser } from '../../services/analyticsService';
+import { AnalyticsEvents, trackEvent, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
+import { setCrashlyticsUser } from '../../services/crashlyticsService';
+import { storage } from '../../utils/storage';
 import { useToast } from '../../hooks/useToast';
+import { notifyNewUserSignup } from '../../services/notificationService';
 
 export default function WelcomeScreen() {
     const dispatch = useDispatch();
@@ -23,6 +26,16 @@ export default function WelcomeScreen() {
     }, []);
 
     const handleGoogleLogin = async () => {
+        if (__DEV__) {
+            dispatch(login({
+                name: 'Dev User',
+                email: 'dev@rentvelo.app',
+                photoUrl: undefined,
+                isGoogleLinked: true
+            }));
+            return;
+        }
+
         try {
             setGoogleLoading(true);
             const user = await signInWithGoogle();
@@ -35,10 +48,16 @@ export default function WelcomeScreen() {
                 }));
 
                 trackEvent(AnalyticsEvents.SIGN_IN, { method: 'google' });
-                await setAnalyticsUser({
-                    email: user.email,
-                    name: user.name || 'User'
-                });
+                const userData = { email: user.email, name: user.name || 'User' };
+                await setAnalyticsUser(userData);
+                await setCrashlyticsUser(userData);
+                await setEnrichedUserProperties({ authMethod: 'google' });
+
+                // Record signup date for days_since_signup analytics
+                if (!storage.getString('@signup_date')) {
+                    storage.set('@signup_date', new Date().toISOString());
+                    notifyNewUserSignup(user.name || 'User', user.email, Platform.OS);
+                }
             }
         } catch (error: any) {
             console.error('Failed to sign in with Google:', error);
@@ -67,10 +86,16 @@ export default function WelcomeScreen() {
                 }));
 
                 trackEvent(AnalyticsEvents.SIGN_IN, { method: 'apple' });
-                await setAnalyticsUser({
-                    email: user.email || 'apple-user@rentvelo.app',
-                    name: user.name || 'User'
-                });
+                const userData = { email: user.email || 'apple-user@rentvelo.app', name: user.name || 'User' };
+                await setAnalyticsUser(userData);
+                await setCrashlyticsUser(userData);
+                await setEnrichedUserProperties({ authMethod: 'apple' });
+
+                // Record signup date for days_since_signup analytics
+                if (!storage.getString('@signup_date')) {
+                    storage.set('@signup_date', new Date().toISOString());
+                    notifyNewUserSignup(user.name || 'Apple User', user.email || 'Private Apple ID', Platform.OS);
+                }
             }
         } catch (error: any) {
             console.error('Failed to sign in with Apple:', error);
