@@ -43,7 +43,7 @@ import {
     getUnitsByPropertyId,
     deleteUnit,
     getBillSummaryByUnitId,
-    adjustBillForMoveOut,
+    doesBillPeriodMatchMoveOut,
     getBillsByTenantId,
 } from '../../../db';
 import { CURRENCY, formatDisplayDate } from '../../../utils/Constants';
@@ -135,19 +135,26 @@ export default function RoomDetailsScreen({ navigation, route }: any) {
     const handleRemoveTenant = async () => {
         if (!selectedTenant) return;
         try {
-            await updateTenant(selectedTenant.id, {
-                status: 'inactive',
-                move_out_date: moveOutDate,
-            });
-
-            // Pro-rate the current month's bill to end on moveOutDate
             if (moveOutDate && selectedTenant.unit_id) {
-                await adjustBillForMoveOut(
+                const { matches } = await doesBillPeriodMatchMoveOut(
                     selectedTenant.id,
                     selectedTenant.unit_id,
                     new Date(moveOutDate)
                 );
+                if (!matches) {
+                    showToast({
+                        type: 'error',
+                        title: 'Update rent card first',
+                        message: 'Set this tenant\'s current rent card end date in Take Rent to the move-out date, then try again.',
+                    });
+                    return;
+                }
             }
+
+            await updateTenant(selectedTenant.id, {
+                status: 'inactive',
+                move_out_date: moveOutDate,
+            });
 
             setShowRemoveModal(false);
             loadData();

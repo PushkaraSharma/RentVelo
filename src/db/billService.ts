@@ -58,6 +58,80 @@ const getBillPeriodEnd = (b: Pick<RentBill, 'period_end' | 'month' | 'year'>): D
     return new Date(b.year, b.month, 0, 23, 59, 59);
 };
 
+const resolveBillPeriodStart = (
+    bill: Pick<RentBill, 'period_start' | 'month' | 'year'>,
+    property?: { rent_payment_type?: string | null } | null
+): Date => {
+    if (bill.period_start) return startOfDay(new Date(bill.period_start));
+    const { usageMonth, usageYear } = getUsagePeriod(property, bill.month, bill.year);
+    return startOfDay(new Date(usageYear, usageMonth - 1, 1));
+};
+
+const resolveBillPeriodEnd = (
+    bill: Pick<RentBill, 'period_end' | 'month' | 'year'>,
+    property?: { rent_payment_type?: string | null } | null
+): Date => {
+    if (bill.period_end) return startOfDay(new Date(bill.period_end));
+    const { usageMonth, usageYear } = getUsagePeriod(property, bill.month, bill.year);
+    return startOfDay(new Date(usageYear, usageMonth, 0));
+};
+
+const loadPropertyForUnit = async (unitId: number) => {
+    const db = getDb();
+    const unitResult = await db.select().from(units).where(eq(units.id, unitId)).limit(1);
+    if (unitResult.length === 0) return null;
+    const propResult = await db.select().from(properties)
+        .where(eq(properties.id, unitResult[0].property_id)).limit(1);
+    return propResult[0] ?? null;
+};
+
+/**
+ * The rent card the landlord should edit before move-out: the most recent bill
+ * whose period started on or before the move-out date (not the calendar month
+ * of move-out, which misses post-paid collection rows).
+ */
+export const getOpenBillForMoveOut = async (
+    tenantId: number,
+    unitId: number,
+    moveOutDate: Date
+): Promise<RentBill | null> => {
+    const db = getDb();
+    const bills = await db.select().from(rentBills).where(
+        and(eq(rentBills.tenant_id, tenantId), eq(rentBills.unit_id, unitId))
+    );
+    if (bills.length === 0) return null;
+
+    const property = await loadPropertyForUnit(unitId);
+    const moveOutMs = startOfDay(moveOutDate).getTime();
+
+    const candidates = bills
+        .filter((b) => resolveBillPeriodStart(b, property).getTime() <= moveOutMs)
+        .sort((a, b) => {
+            const ym = (b.year * 12 + b.month) - (a.year * 12 + a.month);
+            if (ym !== 0) return ym;
+            return resolveBillPeriodStart(b, property).getTime() - resolveBillPeriodStart(a, property).getTime();
+        });
+
+    return candidates[0] ?? null;
+};
+
+/**
+ * Remove is allowed when there is no bill yet, or the open card already ends
+ * on the move-out date (the landlord's manual Take Rent edit).
+ */
+export const doesBillPeriodMatchMoveOut = async (
+    tenantId: number,
+    unitId: number,
+    moveOutDate: Date
+): Promise<{ matches: boolean; bill: RentBill | null }> => {
+    const bill = await getOpenBillForMoveOut(tenantId, unitId, moveOutDate);
+    if (!bill) return { matches: true, bill: null };
+
+    const property = await loadPropertyForUnit(unitId);
+    const matches = resolveBillPeriodEnd(bill, property).getTime() === startOfDay(moveOutDate).getTime();
+    return { matches, bill };
+};
+
 /**
  * Meter readings belong to the room. Find the latest bill on this unit whose period
  * ended before the target period starts (includes an earlier tenant in the same month).
@@ -316,6 +390,19 @@ export const generateBillsForProperty = async (
             if (!isMovedOutTenant && tenant.lease_type === 'fixed' && tenant.lease_end_date) {
                 const led = new Date(tenant.lease_end_date);
                 if (usageMonthStart > new Date(led.getFullYear(), led.getMonth(), 1)) continue;
+            }
+
+            // Stretched move-out card already covers occupancy — do not create
+            // a second bill for the leftover days in a later usage month.
+            if (isMovedOutTenant && tenant.move_out_date) {
+                const existingForTenant = await db.select().from(rentBills).where(
+                    and(eq(rentBills.unit_id, unit.id), eq(rentBills.tenant_id, tenant.id))
+                );
+                const moveOutMs = startOfDay(new Date(tenant.move_out_date)).getTime();
+                const alreadyCovered = existingForTenant.some(
+                    (b) => resolveBillPeriodEnd(b, property).getTime() >= moveOutMs
+                );
+                if (alreadyCovered) continue;
             }
 
             // Check if a bill already exists for this unit+tenant+month+year
@@ -985,6 +1072,40 @@ export const getBillsForPropertyMonth = async (
     const prevBillByUnitMap = new Map();
     allPrevBills.forEach(pb => prevBillByUnitMap.set(pb.unit_id, pb));
 
+    const usageStartMs = startOfDay(new Date(usageYear, usageMonth - 1, 1)).getTime();
+    const usageEndMs = startOfDay(new Date(usageYear, usageMonth, 0)).getTime();
+
+    const unitsWithNoBillsThisMonth = propertyUnits
+        .filter((u) => !(billsByUnit.get(u.id)?.length))
+        .map((u) => u.id);
+
+    const leftoverBillsByUnit = new Map<number, RentBill[]>();
+    if (unitsWithNoBillsThisMonth.length > 0) {
+        const leftoverBills = await db.select().from(rentBills).where(
+            inArray(rentBills.unit_id, unitsWithNoBillsThisMonth)
+        );
+        leftoverBills.forEach((b) => {
+            if (!leftoverBillsByUnit.has(b.unit_id)) leftoverBillsByUnit.set(b.unit_id, []);
+            leftoverBillsByUnit.get(b.unit_id)!.push(b);
+        });
+
+        const leftoverTenantIds = [...new Set(leftoverBills.map((b) => b.tenant_id))]
+            .filter((id) => !tenantByIdMap.has(id));
+        if (leftoverTenantIds.length > 0) {
+            const leftoverTenants = await db.select().from(tenants)
+                .where(inArray(tenants.id, leftoverTenantIds));
+            leftoverTenants.forEach((t) => tenantByIdMap.set(t.id, t));
+        }
+    }
+
+    const inactiveOnUnits = await db.select({ unit_id: tenants.unit_id })
+        .from(tenants)
+        .where(and(inArray(tenants.unit_id, unitIds), eq(tenants.status, 'inactive')));
+    const occupiedBeforeByUnit = new Set(
+        inactiveOnUnits.map((t) => t.unit_id).filter((id): id is number => id != null)
+    );
+    leftoverBillsByUnit.forEach((_, unitId) => occupiedBeforeByUnit.add(unitId));
+
     for (const unit of propertyUnits) {
         const activeTenant = activeTenantByUnit.get(unit.id) || null;
         const hasFutureBills = hasFuturePersistedBillsMap.get(unit.id) || false;
@@ -1017,6 +1138,44 @@ export const getBillsForPropertyMonth = async (
                         isLeaseExpired = true;
                     }
                 }
+            }
+
+            const leftover = leftoverBillsByUnit.get(unit.id) || [];
+            const overlapping = leftover
+                .filter((b) => {
+                    const startMs = resolveBillPeriodStart(b, property).getTime();
+                    const endMs = resolveBillPeriodEnd(b, property).getTime();
+                    return startMs <= usageEndMs && endMs >= usageStartMs;
+                })
+                .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month))[0];
+
+            if (overlapping && (isNotMovedIn || !activeTenant)) {
+                const billTenant = tenantByIdMap.get(overlapping.tenant_id) || null;
+                results.push({
+                    unit,
+                    tenant: billTenant,
+                    bill: overlapping,
+                    isVacant: false,
+                    isNotMovedIn: false,
+                    isLeaseExpired: false,
+                    isMovedOut: billTenant?.status === 'inactive',
+                    hasFuturePersistedBills: hasFutureBills,
+                });
+                continue;
+            }
+
+            if (isNotMovedIn && occupiedBeforeByUnit.has(unit.id)) {
+                results.push({
+                    unit,
+                    tenant: null,
+                    bill: null,
+                    isVacant: true,
+                    isNotMovedIn: false,
+                    isLeaseExpired: false,
+                    isMovedOut: false,
+                    hasFuturePersistedBills: hasFutureBills,
+                });
+                continue;
             }
 
             results.push({
@@ -1063,8 +1222,9 @@ export const getBillsForPropertyMonth = async (
                 });
             }
 
-            // If there's an active tenant with NO bill for this month yet, add their card
-            // (handles edge case where active tenant just moved in but generateBills hasn't run)
+            // Do not append a "Moves in on" placeholder when an old occupant
+            // already has a card for this month. A started tenant with no bill
+            // yet still gets a card so generateBills can catch up.
             if (activeTenant && !unitBills.some(b => b.tenant_id === activeTenant.id)) {
                 let isNotMovedIn = false;
                 if (activeTenant.rent_start_date) {
@@ -1073,13 +1233,21 @@ export const getBillsForPropertyMonth = async (
                     if (billMonthStart < new Date(rsd.getFullYear(), rsd.getMonth(), 1)) {
                         isNotMovedIn = true;
                     }
+                } else if (activeTenant.move_in_date) {
+                    const mid = new Date(activeTenant.move_in_date);
+                    const billMonthStart = new Date(year, month - 1, 1);
+                    if (billMonthStart < new Date(mid.getFullYear(), mid.getMonth(), 1)) {
+                        isNotMovedIn = true;
+                    }
                 }
+                if (isNotMovedIn) continue;
+
                 results.push({
                     unit,
                     tenant: activeTenant,
                     bill: null,
                     isVacant: false,
-                    isNotMovedIn,
+                    isNotMovedIn: false,
                     isLeaseExpired: false,
                     isMovedOut: false,
                     hasFuturePersistedBills: hasFutureBills,
