@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, Pressable, TextInput, Animated, PanResponder, D
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
 import { User, UserPlus, Zap, Droplets, Plus, ChevronRight, FileText, Send, Lock, Wallet } from 'lucide-react-native';
-import { resetFutureBills,
+import {
+    resetFutureBills,
     getBillExpenses, getBillPayments,
     resolveReceiptConfig, getPropertyById
 } from '../../db';
@@ -133,12 +134,15 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
         return hasFuturePersistedBills === true;
     }, [hasFuturePersistedBills, bill]);
 
-    const electricityPrev = (bill?.prev_reading !== null && bill?.prev_reading !== 0)
-        ? bill.prev_reading
-        : (unit?.initial_electricity_reading ?? 0);
-    const waterPrev = (bill?.water_prev_reading !== null && bill?.water_prev_reading !== 0)
-        ? bill.water_prev_reading
-        : (unit?.initial_water_reading ?? 0);
+    const electricityPrev =
+        bill != null && bill.prev_reading != null && bill.prev_reading !== 0
+            ? bill.prev_reading
+            : (unit?.initial_electricity_reading ?? 0);
+
+    const waterPrev =
+        bill != null && bill.water_prev_reading != null && bill.water_prev_reading !== 0
+            ? bill.water_prev_reading
+            : (unit?.initial_water_reading ?? 0);
 
     const liveElectricity = useMemo(() => {
         if (unit.electricity_rate === null || !bill) {
@@ -968,7 +972,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                         {hasPaid ? (
                                             <FileText size={18} color="#FFF" />
                                         ) : (
-                                            <Send size={18} color={isDark ? bgColor : "#FFF"}/>
+                                            <Send size={18} color={isDark ? bgColor : "#FFF"} />
                                         )}
                                     </Animated.View>
                                 </>
@@ -1111,392 +1115,392 @@ const getStyles = (theme: any, isDark: boolean) => {
         : { card: theme.colors.surface, inset: theme.colors.background, raised: '#F3F4F6', hairline: theme.colors.border };
 
     return StyleSheet.create({
-    card: {
-        backgroundColor: s.card,
-        borderRadius: 20,
-        padding: theme.spacing.m,
-        marginBottom: theme.spacing.m,
-        borderWidth: isDark ? 0 : 1,
-        borderColor: theme.colors.border,
-        ...(isDark ? {} : theme.shadows.small),
-    },
-    paidCard: {
-        borderColor: theme.colors.success + '40',
-        borderWidth: 1,
-    },
-    vacantCard: {
-        borderStyle: 'dashed' as any,
-    },
-    vacantContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.m,
-    },
-    vacantIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: s.inset,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    vacantText: {
-        fontSize: 13,
-        color: theme.colors.textTertiary,
-        marginTop: 2,
-    },
-    addTenantBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
-        backgroundColor: s.raised,
-    },
-    addTenantText: {
-        fontSize: 13,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.accent,
-    },
+        card: {
+            backgroundColor: s.card,
+            borderRadius: 20,
+            padding: theme.spacing.m,
+            marginBottom: theme.spacing.m,
+            borderWidth: isDark ? 0 : 1,
+            borderColor: theme.colors.border,
+            ...(isDark ? {} : theme.shadows.small),
+        },
+        paidCard: {
+            borderColor: theme.colors.success + '40',
+            borderWidth: 1,
+        },
+        vacantCard: {
+            borderStyle: 'dashed' as any,
+        },
+        vacantContent: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.m,
+        },
+        vacantIcon: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: s.inset,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        vacantText: {
+            fontSize: 13,
+            color: theme.colors.textTertiary,
+            marginTop: 2,
+        },
+        addTenantBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 12,
+            backgroundColor: s.raised,
+        },
+        addTenantText: {
+            fontSize: 13,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.accent,
+        },
 
-    // Top Row
-    topRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        marginBottom: theme.spacing.m,
-    },
-    roomName: {
-        fontSize: 16,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.accent,
-    },
-    tenantName: {
-        fontSize: 13,
-        color: theme.colors.textSecondary,
-        marginTop: 2,
-    },
-    lockMessage: {
-        fontSize: 10,
-        color: theme.colors.danger,
-        marginTop: 4,
-        fontWeight: '600',
-    },
-    paidAmtBadge: {
-        alignItems: 'flex-end',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 14,
-        backgroundColor: s.raised,
-        borderWidth: 0,
-        borderColor: 'transparent',
-    },
-    paidAmtBadgeCTA: {
-        backgroundColor: theme.colors.accent,
-    },
-    paidAmtBadgePaid: {
-        backgroundColor: s.raised,
-        borderColor: 'transparent',
-    },
-    paidAmtBadgePartial: {
-        backgroundColor: s.raised,
-        borderColor: 'transparent',
-    },
-    paidAmtOnCTA: {
-        color: '#FFFFFF',
-    },
-    paidAmtLabel: {
-        fontSize: 9,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.accent,
-        letterSpacing: 1,
-    },
-    paidAmtValue: {
-        fontSize: 15,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.accent,
-        marginTop: 2,
-    },
-    paidAmtValueGreen: {
-        color: theme.colors.success,
-    },
-    paidAmtValueOrange: {
-        color: theme.colors.warning,
-    },
+        // Top Row
+        topRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            marginBottom: theme.spacing.m,
+        },
+        roomName: {
+            fontSize: 16,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.accent,
+        },
+        tenantName: {
+            fontSize: 13,
+            color: theme.colors.textSecondary,
+            marginTop: 2,
+        },
+        lockMessage: {
+            fontSize: 10,
+            color: theme.colors.danger,
+            marginTop: 4,
+            fontWeight: '600',
+        },
+        paidAmtBadge: {
+            alignItems: 'flex-end',
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 14,
+            backgroundColor: s.raised,
+            borderWidth: 0,
+            borderColor: 'transparent',
+        },
+        paidAmtBadgeCTA: {
+            backgroundColor: theme.colors.accent,
+        },
+        paidAmtBadgePaid: {
+            backgroundColor: s.raised,
+            borderColor: 'transparent',
+        },
+        paidAmtBadgePartial: {
+            backgroundColor: s.raised,
+            borderColor: 'transparent',
+        },
+        paidAmtOnCTA: {
+            color: '#FFFFFF',
+        },
+        paidAmtLabel: {
+            fontSize: 9,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.accent,
+            letterSpacing: 1,
+        },
+        paidAmtValue: {
+            fontSize: 15,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.accent,
+            marginTop: 2,
+        },
+        paidAmtValueGreen: {
+            color: theme.colors.success,
+        },
+        paidAmtValueOrange: {
+            color: theme.colors.warning,
+        },
 
-    // Electricity
-    electricityRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing.s,
-    },
-    electricityRowMetered: {
-        marginBottom: theme.spacing.m,
-        backgroundColor: theme.colors.accent + '12',
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: theme.spacing.s,
-    },
-    meterRow: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    meterLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-    },
-    meterArrow: {
-        fontSize: 14,
-        color: theme.colors.textTertiary,
-        marginHorizontal: theme.spacing.s,
-    },
-    meterInput: {
-        backgroundColor: s.raised,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        fontSize: 15,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        minWidth: 68,
-        borderWidth: 1,
-        borderColor: s.hairline,
-    },
-    meterUnits: {
-        fontSize: 12,
-        fontWeight: theme.typography.medium,
-        color: theme.colors.textSecondary,
-        marginLeft: theme.spacing.xs,
-        fontVariant: ['tabular-nums'],
-    },
-    amountCol: {
-        marginLeft: 'auto',
-        minWidth: 88,
-        textAlign: 'right',
-        fontSize: 16,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        fontVariant: ['tabular-nums'],
-    },
-    meterErrorText: {
-        fontSize: 11,
-        color: theme.colors.danger,
-        marginTop: 2,
-    },
-    meterHintText: {
-        fontSize: 11,
-        color: theme.colors.textTertiary,
-        marginTop: 4,
-        fontStyle: 'italic',
-    },
-    fixedElecRow: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    fixedElecLabel: {
-        fontSize: 12,
-        color: theme.colors.textSecondary,
-        flex: 1,
-    },
-    // Rent Section
-    rentSection: {
-        backgroundColor: theme.colors.accent + '12',
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: theme.spacing.s,
-        marginBottom: theme.spacing.s,
-    },
-    rentRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 4,
-    },
-    rentLabel: {
-        fontSize: 13,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.textPrimary,
-        flexShrink: 1,
-        paddingRight: 8,
-    },
-    rentPeriod: {
-        fontSize: 11,
-        color: theme.colors.accent,
-        marginTop: 1,
-    },
+        // Electricity
+        electricityRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.s,
+        },
+        electricityRowMetered: {
+            marginBottom: theme.spacing.m,
+            backgroundColor: theme.colors.accent + '12',
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: theme.spacing.s,
+        },
+        meterRow: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        meterLabel: {
+            fontSize: 12,
+            color: theme.colors.textSecondary,
+        },
+        meterArrow: {
+            fontSize: 14,
+            color: theme.colors.textTertiary,
+            marginHorizontal: theme.spacing.s,
+        },
+        meterInput: {
+            backgroundColor: s.raised,
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            fontSize: 15,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            minWidth: 68,
+            borderWidth: 1,
+            borderColor: s.hairline,
+        },
+        meterUnits: {
+            fontSize: 12,
+            fontWeight: theme.typography.medium,
+            color: theme.colors.textSecondary,
+            marginLeft: theme.spacing.xs,
+            fontVariant: ['tabular-nums'],
+        },
+        amountCol: {
+            marginLeft: 'auto',
+            minWidth: 88,
+            textAlign: 'right',
+            fontSize: 16,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            fontVariant: ['tabular-nums'],
+        },
+        meterErrorText: {
+            fontSize: 11,
+            color: theme.colors.danger,
+            marginTop: 2,
+        },
+        meterHintText: {
+            fontSize: 11,
+            color: theme.colors.textTertiary,
+            marginTop: 4,
+            fontStyle: 'italic',
+        },
+        fixedElecRow: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        fixedElecLabel: {
+            fontSize: 12,
+            color: theme.colors.textSecondary,
+            flex: 1,
+        },
+        // Rent Section
+        rentSection: {
+            backgroundColor: theme.colors.accent + '12',
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: theme.spacing.s,
+            marginBottom: theme.spacing.s,
+        },
+        rentRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingVertical: 4,
+        },
+        rentLabel: {
+            fontSize: 13,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.textPrimary,
+            flexShrink: 1,
+            paddingRight: 8,
+        },
+        rentPeriod: {
+            fontSize: 11,
+            color: theme.colors.accent,
+            marginTop: 1,
+        },
 
-    // Actions
-    actionsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingRight: 12,
-        marginBottom: theme.spacing.s,
-    },
-    addRemoveBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: 10,
-        backgroundColor: theme.colors.accent + '12',
-    },
-    addRemoveText: {
-        fontSize: 12,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.accent,
-    },
-    expenseChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 10,
-        backgroundColor: theme.colors.accent + '12',
-    },
-    expenseChipCredit: {
-    },
-    expenseChipText: {
-        fontSize: 12,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.success,
-    },
-    expenseChipTextCredit: {
-        color: theme.colors.danger,
-    },
-    totalCol: {
-        alignItems: 'flex-end',
-        marginLeft: 'auto',
-    },
-    totalLabel: {
-        fontSize: 11,
-        fontWeight: theme.typography.medium,
-        color: theme.colors.textSecondary,
-    },
+        // Actions
+        actionsRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingRight: 12,
+            marginBottom: theme.spacing.s,
+        },
+        addRemoveBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 10,
+            backgroundColor: theme.colors.accent + '12',
+        },
+        addRemoveText: {
+            fontSize: 12,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.accent,
+        },
+        expenseChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 10,
+            backgroundColor: theme.colors.accent + '12',
+        },
+        expenseChipCredit: {
+        },
+        expenseChipText: {
+            fontSize: 12,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.success,
+        },
+        expenseChipTextCredit: {
+            color: theme.colors.danger,
+        },
+        totalCol: {
+            alignItems: 'flex-end',
+            marginLeft: 'auto',
+        },
+        totalLabel: {
+            fontSize: 11,
+            fontWeight: theme.typography.medium,
+            color: theme.colors.textSecondary,
+        },
 
-    // Balance
-    balanceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: isDark ? theme.colors.danger + '18' : theme.colors.dangerLight,
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        marginBottom: theme.spacing.s,
-    },
-    balanceRowPaid: {
-        backgroundColor: isDark ? theme.colors.success + '18' : theme.colors.successLight,
-    },
-    balanceLabelRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flexShrink: 1,
-        paddingRight: 8,
-    },
-    balanceLabel: {
-        fontSize: 14,
-        fontWeight: theme.typography.bold,
-    },
-    balanceAmount: {
-        fontSize: 18,
-    },
+        // Balance
+        balanceRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: isDark ? theme.colors.danger + '18' : theme.colors.dangerLight,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            marginBottom: theme.spacing.s,
+        },
+        balanceRowPaid: {
+            backgroundColor: isDark ? theme.colors.success + '18' : theme.colors.successLight,
+        },
+        balanceLabelRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            flexShrink: 1,
+            paddingRight: 8,
+        },
+        balanceLabel: {
+            fontSize: 14,
+            fontWeight: theme.typography.bold,
+        },
+        balanceAmount: {
+            fontSize: 18,
+        },
 
-    // Swipe Button
-    swipeTrack: {
-        height: 50,
-        borderRadius: 25,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        marginBottom: 6,
-        backgroundColor: s.raised,
-    },
-    swipeFill: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-    },
-    swipeLabel: {
-        fontSize: 14,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.textPrimary,
-    },
-    swipeThumb: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        position: 'absolute',
-        left: 0,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...theme.shadows.medium,
-    },
-    billInfo: {
-        fontSize: 11,
-        color: theme.colors.textTertiary,
-        textAlign: 'center',
-        marginTop: 6,
-    },
-    hiddenViewShotContainer: {
-        position: 'absolute',
-        top: -10000,
-        left: -10000,
-        opacity: 0,
-    },
-    // Locked Card Styles
-    lockedCard: {
-        backgroundColor: s.card,
-        borderColor: theme.colors.border,
-    },
-    lockedBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: s.raised,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 20,
-        alignSelf: 'flex-start',
-        marginBottom: theme.spacing.m,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    lockedText: {
-        fontSize: 11,
-        fontWeight: theme.typography.semiBold,
-        color: theme.colors.textSecondary,
-    },
-    leaseBadge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    leaseBadgeMonthly: {
-        backgroundColor: s.raised,
-    },
-    leaseBadgeFixed: {
-        backgroundColor: s.raised,
-    },
-    movedOutBadge: {
-        backgroundColor: s.raised,
-    },
-    leaseBadgeText: {
-        fontSize: 10,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        textTransform: 'uppercase',
-    },
-});
+        // Swipe Button
+        swipeTrack: {
+            height: 50,
+            borderRadius: 25,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            marginBottom: 6,
+            backgroundColor: s.raised,
+        },
+        swipeFill: {
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+        },
+        swipeLabel: {
+            fontSize: 14,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.textPrimary,
+        },
+        swipeThumb: {
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            position: 'absolute',
+            left: 0,
+            justifyContent: 'center',
+            alignItems: 'center',
+            ...theme.shadows.medium,
+        },
+        billInfo: {
+            fontSize: 11,
+            color: theme.colors.textTertiary,
+            textAlign: 'center',
+            marginTop: 6,
+        },
+        hiddenViewShotContainer: {
+            position: 'absolute',
+            top: -10000,
+            left: -10000,
+            opacity: 0,
+        },
+        // Locked Card Styles
+        lockedCard: {
+            backgroundColor: s.card,
+            borderColor: theme.colors.border,
+        },
+        lockedBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: s.raised,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 20,
+            alignSelf: 'flex-start',
+            marginBottom: theme.spacing.m,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+        },
+        lockedText: {
+            fontSize: 11,
+            fontWeight: theme.typography.semiBold,
+            color: theme.colors.textSecondary,
+        },
+        leaseBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+        },
+        leaseBadgeMonthly: {
+            backgroundColor: s.raised,
+        },
+        leaseBadgeFixed: {
+            backgroundColor: s.raised,
+        },
+        movedOutBadge: {
+            backgroundColor: s.raised,
+        },
+        leaseBadgeText: {
+            fontSize: 10,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            textTransform: 'uppercase',
+        },
+    });
 };
 
 export default RentBillCard;
