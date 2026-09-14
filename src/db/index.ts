@@ -102,6 +102,8 @@ export {
     savePGUtilityReading,
     getBillsByTenantId,
     getBillSummaryByUnitId,
+    getOpenBillForMoveOut,
+    doesBillPeriodMatchMoveOut,
     adjustBillForMoveOut,
     getExpectedRevenueBreakdown,
     type ExpectedRevenueBreakdown

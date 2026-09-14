@@ -96,7 +96,9 @@ const RemoveTenantModal: React.FC<RemoveTenantModalProps> = ({
 
                             <View style={styles.noteBox}>
                                 <Info size={16} color={theme.colors.textSecondary} />
-                                <Text style={styles.noteText}>Even if removed, tenant details will be saved in past records.</Text>
+                                <Text style={styles.noteText}>
+                                    Update this tenant's current rent card end date in Take Rent to the move-out date before removing. Even if removed, tenant details stay in past records.
+                                </Text>
                             </View>
 
                             <View style={[styles.modalActions]}>
