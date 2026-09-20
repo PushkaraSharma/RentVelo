@@ -791,7 +791,7 @@ const RentBillCard = React.memo(({ item, period, onRefresh, navigation, property
                                     returnKeyType="done"
                                 />
                                 <Text style={styles.meterUnits}>
-                                    {liveWater.units === null ? '—' : `${liveWater.units} u`}
+                                    {liveWater.units === null ? '—' : `${liveWater.units} units`}
                                 </Text>
                                 <Text style={styles.amountCol}>{formatAmount(liveWater.amount)}</Text>
                             </View>
