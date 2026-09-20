@@ -6,9 +6,13 @@ interface InputProps extends TextInputProps {
     label?: string;
     icon?: React.ReactNode;
     error?: string;
+    containerStyle?: any;
 }
 
-export default function Input({ label, icon, error, style, containerStyle, ...props }: InputProps & { containerStyle?: any }) {
+const Input = React.forwardRef<TextInput, InputProps>(function Input(
+    { label, icon, error, style, containerStyle, ...props },
+    ref
+) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
     return (
@@ -17,6 +21,7 @@ export default function Input({ label, icon, error, style, containerStyle, ...pr
             <View style={[styles.inputContainer, error && styles.errorBorder]}>
                 {icon && <View style={styles.icon}>{icon}</View>}
                 <TextInput
+                    ref={ref}
                     style={[styles.input, style]}
                     placeholderTextColor={theme.colors.textTertiary}
                     autoComplete={"off"}
@@ -27,7 +32,9 @@ export default function Input({ label, icon, error, style, containerStyle, ...pr
             {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
     );
-}
+});
+
+export default Input;
 
 const getStyles = (theme: any) => StyleSheet.create({
     container: {

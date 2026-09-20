@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../../redux/authSlice';
+import { clearBackupSessionFlags } from '../../services/backupService';
 import { RootState } from '../../redux/store';
 import {
     LogOut,
@@ -19,11 +20,13 @@ import {
     Share2,
     Trash2,
     AlertCircle,
+    PlayCircle,
     HelpCircle,
     Info
 } from 'lucide-react-native';
 import Toggle from '../../components/common/Toggle';
 import { CHANGELOG } from '../../utils/Constants';
+import { openHowToVideos } from '../../utils/howToVideos';
 import { signOutGoogle } from '../../services/googleAuthService';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getDb } from '../../db';
@@ -40,7 +43,7 @@ import { getReceiptDefaultFormat, getReceiptDefaultAction, setReceiptDefaultForm
 export default function SettingsScreen({ navigation }: any) {
     const dispatch = useDispatch();
     const insets = useSafeAreaInsets();
-    const { user } = useSelector((state: RootState) => state.auth);
+    const { user, isGoogleLinked, authMethod } = useSelector((state: RootState) => state.auth);
     const { theme, isDark, setMode } = useAppTheme();
     const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
@@ -84,6 +87,7 @@ export default function SettingsScreen({ navigation }: any) {
         trackEvent(AnalyticsEvents.SIGN_OUT);
         await setAnalyticsUser(null);
         await setCrashlyticsUser(null);
+        clearBackupSessionFlags();
         dispatch(logout());
         setIsDeleting(false);
     };
@@ -93,17 +97,11 @@ export default function SettingsScreen({ navigation }: any) {
 
         setIsDeleting(true);
         try {
-            // Here we determine the auth method. 
-            // In this app, if isGoogleLinked is true, it's Google. 
-            // Otherwise, we check if it's apple. 
-            // Since we don't explicitly store auth type in the slice yet, we can infer it.
-            // If they have a googleEmail, it's likely Google.
-            const authMethod = user.email ? 'google' : 'apple';
-            // Actually, we'll try to revoke Google if isGoogleLinked is true.
+            const resolvedAuthMethod = authMethod ?? (isGoogleLinked ? 'google' : 'apple');
 
             const result = await deleteAccountData(
-                user.email || '', // ID placeholder for apple
-                authMethod,
+                user.email || '',
+                resolvedAuthMethod,
                 deleteCloudBackup
             );
 
@@ -289,6 +287,12 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Support & About</Text>
                     <View style={styles.sectionContent}>
+                        <SettingItem
+                            icon={PlayCircle}
+                            label="Watch how-to videos"
+                            color="#FF0000"
+                            onPress={() => openHowToVideos('settings')}
+                        />
                         <SettingItem
                             icon={HelpCircle}
                             label="Help Center"

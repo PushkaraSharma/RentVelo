@@ -1,60 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Switch } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { Database, Cloud, HardDrive, RotateCcw, CloudUpload, CheckCircle2 } from 'lucide-react-native';
+import { Cloud, HardDrive, RotateCcw, CloudUpload, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Header from '../../components/common/Header';
-import Button from '../../components/common/Button';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSelector, useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../redux/store';
 import { linkGoogleAccount, unlinkGoogleAccount } from '../../redux/authSlice';
-import { initGoogleAuth, signInWithGoogle, signOutGoogle, isSignedIn, requestDriveScopes } from '../../services/googleAuthService';
-import { performLocalBackup, backupToGoogleDrive, restoreFromGoogleDrive, restoreFromLocalBackup, verifyDrivePermissions } from '../../services/backupService';
-import { syncDatabaseSchema } from '../../db';
+import { initGoogleAuth, signInWithGoogle, signOutGoogle } from '../../services/googleAuthService';
+import {
+    applyDriveAccessGranted,
+    BACKUP_KEYS,
+    backupToGoogleDrive,
+    completeRestoreFromDrive,
+    ensureDriveAccess,
+    formatBackupTime,
+    getCachedDriveBackupTime,
+    getDriveBackupInfo,
+    onDriveDisconnected,
+    performLocalBackup,
+    reloadAppAfterRestore,
+    restoreFromLocalBackup,
+    setAutoBackupEnabled,
+    verifyDrivePermissions,
+} from '../../services/backupService';
 import { storage } from '../../utils/storage';
-import { Platform } from 'react-native';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Toggle from '../../components/common/Toggle';
-import { trackEvent, AnalyticsEvents, setEnrichedUserProperties } from '../../services/analyticsService';
-import { logCrashlyticsError } from '../../services/crashlyticsService';
+import { AnalyticsEvents, setEnrichedUserProperties, trackEvent } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
+import { useFocusEffect } from '@react-navigation/native';
 
-export default function BackupScreen({ navigation }: any) {
-    const { theme, isDark } = useAppTheme();
+export default function BackupScreen() {
+    const { theme } = useAppTheme();
     const { showToast } = useToast();
-    const styles = getStyles(theme, isDark);
-    const insets = useSafeAreaInsets();
+    const styles = getStyles(theme);
     const dispatch = useDispatch();
     const { isGoogleLinked, googleEmail } = useSelector((state: RootState) => state.auth);
 
     const [backingUp, setBackingUp] = useState<'local' | 'google' | null>(null);
     const [restoring, setRestoring] = useState<'local' | 'google' | null>(null);
-    const [lastSync, setLastSync] = useState<string>('Never');
+    const [linking, setLinking] = useState(false);
+    const [lastDriveBackup, setLastDriveBackup] = useState<string>('Never');
+    const [hasDriveBackup, setHasDriveBackup] = useState(false);
     const [isAutoBackupEnabled, setIsAutoBackupEnabled] = useState(false);
 
     const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [showRestoreModal, setShowRestoreModal] = useState(false);
     const [showLocalRestoreModal, setShowLocalRestoreModal] = useState(false);
 
-    useEffect(() => {
-        initGoogleAuth();
-        loadLastSync();
-    }, []);
-
-    const loadLastSync = () => {
-        const time = storage.getString('@last_backup_time');
-        if (time) setLastSync(new Date(time).toLocaleString());
-
-        const autoBackupStr = storage.getString('@auto_backup_enabled');
+    const refreshStatus = useCallback(async () => {
+        const autoBackupStr = storage.getString(BACKUP_KEYS.AUTO_ENABLED);
         setIsAutoBackupEnabled(autoBackupStr === 'true');
-    };
+        setLastDriveBackup(formatBackupTime(getCachedDriveBackupTime()));
 
-    const updateLastSync = () => {
-        const now = new Date().toISOString();
-        storage.set('@last_backup_time', now);
-        setLastSync(new Date(now).toLocaleString());
-    };
+        if (!isGoogleLinked) {
+            setHasDriveBackup(false);
+            return;
+        }
+        try {
+            const info = await getDriveBackupInfo();
+            if (info) {
+                setHasDriveBackup(true);
+                setLastDriveBackup(formatBackupTime(info.modifiedTime || getCachedDriveBackupTime()));
+            } else {
+                setHasDriveBackup(false);
+            }
+        } catch {
+            setLastDriveBackup(formatBackupTime(getCachedDriveBackupTime()));
+        }
+    }, [isGoogleLinked]);
+
+    useFocusEffect(
+        useCallback(() => {
+            initGoogleAuth();
+            refreshStatus();
+        }, [refreshStatus])
+    );
 
     const handleLocalBackup = async () => {
         setBackingUp('local');
@@ -63,11 +85,10 @@ export default function BackupScreen({ navigation }: any) {
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'local' });
             setEnrichedUserProperties({ hasBackup: true });
-            updateLastSync();
-            showToast({ type: 'success', title: 'Success', message: 'Local backup saved successfully' });
+            showToast({ type: 'success', title: 'Success', message: 'Local backup saved on this phone.' });
         } else {
-            const errorMsg = result.error === 'zip_failed' 
-                ? 'Failed to compress data. Check storage space.' 
+            const errorMsg = result.error === 'zip_failed'
+                ? 'Failed to compress data. Check storage space.'
                 : 'Failed to create local backup.';
             showToast({ type: 'error', title: 'Error', message: errorMsg });
         }
@@ -78,7 +99,7 @@ export default function BackupScreen({ navigation }: any) {
             showToast({
                 type: 'info',
                 title: 'Link Required',
-                message: 'Please link your Google account to enable auto backup.'
+                message: 'Link Google Drive to enable auto backup.',
             });
             return;
         }
@@ -89,7 +110,7 @@ export default function BackupScreen({ navigation }: any) {
                 showToast({
                     type: 'error',
                     title: 'Permissions Missing',
-                    message: 'Drive access missing. Please disconnect and relink your account.'
+                    message: 'Drive access missing. Please disconnect and relink your account.',
                 });
                 return;
             }
@@ -97,48 +118,45 @@ export default function BackupScreen({ navigation }: any) {
 
         setIsAutoBackupEnabled(value);
         trackEvent(AnalyticsEvents.AUTO_BACKUP_TOGGLED, { enabled: value });
-        storage.set('@auto_backup_enabled', String(value));
+        setAutoBackupEnabled(value);
+    };
+
+    const linkDrive = async (): Promise<boolean> => {
+        try {
+            setLinking(true);
+            const user = await signInWithGoogle();
+            if (!user) return false;
+            const granted = await ensureDriveAccess();
+            if (!granted) {
+                showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
+                return false;
+            }
+            applyDriveAccessGranted();
+            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
+            setIsAutoBackupEnabled(true);
+            showToast({ type: 'success', title: 'Success', message: 'Google Drive linked. Auto backup is on.' });
+            return true;
+        } catch {
+            showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
+            return false;
+        } finally {
+            setLinking(false);
+        }
     };
 
     const handleGoogleToggle = async () => {
         if (isGoogleLinked) {
             setShowDisconnectModal(true);
         } else {
-            try {
-                const user = await signInWithGoogle();
-                if (user) {
-                    const granted = await requestDriveScopes();
-                    if (granted) {
-                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                        showToast({ type: 'success', title: 'Success', message: 'Google account linked with Drive successfully!' });
-                    } else {
-                        showToast({ type: 'warning', title: 'Permission Required', message: 'Drive access is required for backups.' });
-                    }
-                }
-            } catch (error) {
-                showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
-            }
+            const ok = await linkDrive();
+            if (ok) refreshStatus();
         }
     };
 
     const handleGoogleBackup = async () => {
         if (!isGoogleLinked) {
-            try {
-                const user = await signInWithGoogle();
-                if (user) {
-                    const granted = await requestDriveScopes();
-                    if (granted) {
-                        dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
-            } catch (error) {
-                showToast({ type: 'error', title: 'Sign-In Error', message: 'Could not link Google account.' });
-                return;
-            }
+            const linked = await linkDrive();
+            if (!linked) return;
         }
         setBackingUp('google');
         const result = await backupToGoogleDrive();
@@ -146,31 +164,12 @@ export default function BackupScreen({ navigation }: any) {
         if (result.success) {
             trackEvent(AnalyticsEvents.BACKUP_CREATED, { method: 'google_drive' });
             setEnrichedUserProperties({ hasBackup: true });
-            updateLastSync();
+            await refreshStatus();
             showToast({ type: 'success', title: 'Success', message: 'Backup uploaded to Google Drive.' });
         } else {
             let errorMsg = 'Failed to upload backup to Drive.';
             if (result.error === 'insufficient_permissions') {
-                showToast({ 
-                    type: 'info', 
-                    title: 'Action Required', 
-                    message: 'Granting permission...' 
-                });
-                // Attempt to re-authorize
-                try {
-                    const user = await signInWithGoogle();
-                    if (user) {
-                        const granted = Platform.OS === 'ios' ? await requestDriveScopes() : true;
-                        if (granted) {
-                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                            // Try again once after re-authorizing
-                            handleGoogleBackup();
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    errorMsg = 'Drive permissions missing. Please link account and tick for "App Data" access.';
-                }
+                errorMsg = 'Drive permissions missing. Please relink and grant app data access.';
             } else if (result.error === 'zip_failed') {
                 errorMsg = 'Failed to compress database items.';
             } else if (result.error === 'not_signed_in') {
@@ -185,7 +184,7 @@ export default function BackupScreen({ navigation }: any) {
             showToast({
                 type: 'info',
                 title: 'Not Linked',
-                message: 'Please connect your Google account to restore from Drive.'
+                message: 'Please connect your Google account to restore from Drive.',
             });
             return;
         }
@@ -195,49 +194,34 @@ export default function BackupScreen({ navigation }: any) {
     const confirmDisconnect = async () => {
         setShowDisconnectModal(false);
         await signOutGoogle();
+        onDriveDisconnected();
         dispatch(unlinkGoogleAccount());
+        setIsAutoBackupEnabled(false);
     };
 
     const confirmRestore = async () => {
         setShowRestoreModal(false);
         setRestoring('google');
-        const result = await restoreFromGoogleDrive();
+        const result = await completeRestoreFromDrive();
         setRestoring(null);
         if (result.success) {
-            syncDatabaseSchema(true);
-            trackEvent(AnalyticsEvents.BACKUP_RESTORED);
-            showToast({
-                type: 'success',
-                title: 'Success',
-                message: 'Data restored successfully. Please restart the app for changes.'
-            });
+            trackEvent(AnalyticsEvents.BACKUP_RESTORED, { source: 'settings' });
+            const reloaded = await reloadAppAfterRestore();
+            if (!reloaded) {
+                showToast({
+                    type: 'success',
+                    title: 'Restored',
+                    message: 'Close and reopen RentVelo to load your Drive backup.',
+                });
+            }
         } else {
             let errorMsg = 'Could not restore data from Google Drive.';
-            if (result.error === 'insufficient_permissions') {
-                showToast({ 
-                    type: 'info', 
-                    title: 'Action Required', 
-                    message: 'Granting permission...' 
-                });
-                // Attempt to re-authorize
-                try {
-                    const user = await signInWithGoogle();
-                    if (user) {
-                        const granted = await requestDriveScopes();
-                        if (granted) {
-                            dispatch(linkGoogleAccount({ email: user.email, name: user.name, photoUrl: user.photo }));
-                            // Try restore again
-                            confirmRestore();
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    errorMsg = 'Drive permissions missing. Please relink account and grant file access.';
-                }
-            } else if (result.error === 'no_backup_found') {
+            if (result.error === 'no_backup_found') {
                 errorMsg = 'No backup file discovered on your Google Drive.';
             } else if (result.error === 'download_failed') {
                 errorMsg = 'Failed to download backup file from Drive.';
+            } else if (result.error === 'insufficient_permissions') {
+                errorMsg = 'Drive permissions missing. Please relink account and grant file access.';
             }
             showToast({ type: 'error', title: 'Restore Failed', message: errorMsg });
         }
@@ -249,13 +233,15 @@ export default function BackupScreen({ navigation }: any) {
         const result = await restoreFromLocalBackup();
         setRestoring(null);
         if (result.success) {
-            syncDatabaseSchema(true);
-            trackEvent(AnalyticsEvents.BACKUP_RESTORED);
-            showToast({
-                type: 'success',
-                title: 'Success',
-                message: 'Data restored successfully. Please restart the app for changes.'
-            });
+            trackEvent(AnalyticsEvents.BACKUP_RESTORED, { source: 'local' });
+            const reloaded = await reloadAppAfterRestore();
+            if (!reloaded) {
+                showToast({
+                    type: 'success',
+                    title: 'Restored',
+                    message: 'Close and reopen RentVelo to load your local backup.',
+                });
+            }
         } else {
             let errorMsg = 'Could not restore data from local backup.';
             if (result.error === 'no_local_backup_found') {
@@ -265,111 +251,124 @@ export default function BackupScreen({ navigation }: any) {
         }
     };
 
+    const busy = !!backingUp || !!restoring || linking;
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <Header title="Data Backup & Sync" />
+            <Header title="Data Backup" />
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.infoSection}>
                     <View style={styles.cloudIconBox}>
                         <CloudUpload size={48} color={theme.colors.accent} />
                     </View>
-                    <Text style={styles.infoTitle}>Secure Your Data</Text>
+                    <Text style={styles.infoTitle}>Google Drive backup</Text>
                     <Text style={styles.infoText}>
-                        Keep your property and tenant data safe by creating regular backups.
-                        You can restore your data if you switch devices.
+                        Auto backup keeps rental data and photos in a private Drive app folder.
+                        Restore replaces everything on this phone — it does not merge.
                     </Text>
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Backup Options</Text>
+                    <Text style={styles.sectionTitle}>Google Drive</Text>
                     <View style={styles.card}>
-                        <Pressable style={styles.item} onPress={handleLocalBackup} disabled={!!backingUp || !!restoring}>
+                        <Pressable style={styles.item} onPress={handleGoogleToggle} disabled={busy}>
                             <View style={styles.itemLeft}>
-                                <HardDrive size={20} color={theme.colors.accent} />
-                                <View>
-                                    <Text style={styles.itemLabel}>Local Backup</Text>
-                                    <Text style={styles.itemSubLabel}>Save a copy to your phone</Text>
-                                </View>
-                            </View>
-                            {backingUp === 'local' && <ActivityIndicator size="small" color={theme.colors.accent} />}
-                        </Pressable>
-                        <View style={styles.divider} />
-                        <Pressable style={styles.item} onPress={handleGoogleToggle} disabled={!!backingUp || !!restoring}>
-                            <View style={styles.itemLeft}>
-                                <Cloud size={20} color={isGoogleLinked ? theme.colors.success : "#6366F1"} />
-                                <View>
-                                    <Text style={styles.itemLabel}>Google Drive Sync</Text>
+                                <Cloud size={20} color={isGoogleLinked ? theme.colors.success : '#6366F1'} />
+                                <View style={styles.itemTextWrap}>
+                                    <Text style={styles.itemLabel}>
+                                        {isGoogleLinked ? 'Drive linked' : 'Link Google Drive'}
+                                    </Text>
                                     <Text style={styles.itemSubLabel}>
-                                        {isGoogleLinked ? `Linked as ${googleEmail}` : 'Connect to Google for auto-backups'}
+                                        {isGoogleLinked ? `Linked as ${googleEmail}` : 'Required for cloud backup'}
                                     </Text>
                                 </View>
                             </View>
-                            {isGoogleLinked ? (
+                            {linking ? (
+                                <ActivityIndicator size="small" color={theme.colors.accent} />
+                            ) : isGoogleLinked ? (
                                 <CheckCircle2 size={20} color={theme.colors.success} />
                             ) : (
                                 <View style={styles.badge}><Text style={styles.badgeText}>LINK</Text></View>
                             )}
                         </Pressable>
+
                         {isGoogleLinked && (
                             <>
                                 <View style={styles.divider} />
                                 <View style={styles.item}>
                                     <View style={styles.itemLeft}>
                                         <CloudUpload size={20} color={theme.colors.accent} />
-                                        <View>
-                                            <Text style={styles.itemLabel}>Auto Backup (Daily)</Text>
-                                            <Text style={styles.itemSubLabel}>{`Automatically sync to Google Drive\nevery 24h`}</Text>
+                                        <View style={styles.itemTextWrap}>
+                                            <Text style={styles.itemLabel}>Enable auto backup</Text>
+                                            <Text style={styles.itemSubLabel}>Uploads when data changes or at least every 6 hours</Text>
                                         </View>
                                     </View>
                                     <Toggle value={isAutoBackupEnabled} onValueChange={toggleAutoBackup} />
                                 </View>
                                 <View style={styles.divider} />
-                                <Pressable style={styles.item} onPress={handleGoogleBackup} disabled={!!backingUp || !!restoring}>
+                                <Pressable style={styles.item} onPress={handleGoogleBackup} disabled={busy}>
                                     <View style={styles.itemLeft}>
                                         <CloudUpload size={20} color={theme.colors.accent} />
-                                        <View>
-                                            <Text style={styles.itemLabel}>Backup Now</Text>
-                                            <Text style={styles.itemSubLabel}>Manually upload database to Google Drive</Text>
+                                        <View style={styles.itemTextWrap}>
+                                            <Text style={styles.itemLabel}>Backup now</Text>
+                                            <Text style={styles.itemSubLabel}>Last backup: {lastDriveBackup}</Text>
                                         </View>
                                     </View>
                                     {backingUp === 'google' && <ActivityIndicator size="small" color={theme.colors.accent} />}
                                 </Pressable>
+                                <View style={styles.divider} />
+                                <Pressable style={styles.item} onPress={handleRestore} disabled={busy}>
+                                    <View style={styles.itemLeft}>
+                                        <RotateCcw size={20} color={theme.colors.textPrimary} />
+                                        <View style={styles.itemTextWrap}>
+                                            <Text style={styles.itemLabel}>Restore backup</Text>
+                                            <Text style={styles.itemSubLabel}>
+                                                {hasDriveBackup ? `Backup from ${lastDriveBackup}` : 'No backup found'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    {restoring === 'google' && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                                </Pressable>
                             </>
                         )}
                     </View>
+                    {isGoogleLinked && (
+                        <Pressable style={styles.disconnect} onPress={() => setShowDisconnectModal(true)}>
+                            <Text style={styles.disconnectText}>Disconnect Google Drive</Text>
+                        </Pressable>
+                    )}
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Restore</Text>
+                    <View style={styles.localHeader}>
+                        <Text style={styles.sectionTitle}>This device</Text>
+
+                    </View>
+
                     <View style={styles.card}>
-                        <Pressable style={styles.item} onPress={() => setShowLocalRestoreModal(true)} disabled={!!backingUp || !!restoring}>
+                        <Pressable style={styles.item} onPress={handleLocalBackup} disabled={busy}>
+                            <View style={styles.itemLeft}>
+                                <HardDrive size={20} color={theme.colors.accent} />
+                                <View style={styles.itemTextWrap}>
+                                    <Text style={styles.itemLabel}>Backup to phone</Text>
+                                    <Text style={styles.itemSubLabel}>Additional copy stored only on this device</Text>
+                                </View>
+                            </View>
+                            {backingUp === 'local' && <ActivityIndicator size="small" color={theme.colors.accent} />}
+                        </Pressable>
+                        <View style={styles.divider} />
+                        <Pressable style={styles.item} onPress={() => setShowLocalRestoreModal(true)} disabled={busy}>
                             <View style={styles.itemLeft}>
                                 <HardDrive size={20} color={theme.colors.textPrimary} />
-                                <View>
-                                    <Text style={styles.itemLabel}>Local Restore</Text>
-                                    <Text style={styles.itemSubLabel}>Restore from latest local backup</Text>
+                                <View style={styles.itemTextWrap}>
+                                    <Text style={styles.itemLabel}>Restore from phone</Text>
+                                    <Text style={styles.itemSubLabel}>Overwrites current data with the local copy</Text>
                                 </View>
                             </View>
                             {restoring === 'local' && <ActivityIndicator size="small" color={theme.colors.accent} />}
                         </Pressable>
-                        <View style={styles.divider} />
-                        <Pressable style={styles.item} onPress={handleRestore} disabled={!!backingUp || !!restoring}>
-                            <View style={styles.itemLeft}>
-                                <RotateCcw size={20} color={theme.colors.textPrimary} />
-                                <View>
-                                    <Text style={styles.itemLabel}>Drive Restore</Text>
-                                    <Text style={styles.itemSubLabel}>Import data from Google Drive</Text>
-                                </View>
-                            </View>
-                            {restoring === 'google' && <ActivityIndicator size="small" color={theme.colors.accent} />}
-                        </Pressable>
                     </View>
-                </View>
-
-                <View style={styles.lastBackup}>
-                    <Database size={14} color={theme.colors.textTertiary} />
-                    <Text style={styles.lastBackupText}>Last Backup: {lastSync}</Text>
                 </View>
             </ScrollView>
 
@@ -378,7 +377,7 @@ export default function BackupScreen({ navigation }: any) {
                 onClose={() => setShowDisconnectModal(false)}
                 onConfirm={confirmDisconnect}
                 title="Disconnect Google Drive"
-                message="Are you sure you want to disconnect? Auto-backups will stop."
+                message="Auto-backups will stop. Your existing Drive backup is not deleted."
                 confirmText="Disconnect"
                 cancelText="Cancel"
                 variant="danger"
@@ -388,8 +387,8 @@ export default function BackupScreen({ navigation }: any) {
                 visible={showRestoreModal}
                 onClose={() => setShowRestoreModal(false)}
                 onConfirm={confirmRestore}
-                title="Restore Data"
-                message="This will overwrite all current local data with the Drive backup. Are you sure you want to proceed?"
+                title="Restore backup"
+                message={`This replaces all rental data and photos on this phone with the Drive backup from ${lastDriveBackup}. It does not merge.`}
                 confirmText="Restore"
                 cancelText="Cancel"
                 variant="warning"
@@ -400,8 +399,8 @@ export default function BackupScreen({ navigation }: any) {
                 visible={showLocalRestoreModal}
                 onClose={() => setShowLocalRestoreModal(false)}
                 onConfirm={confirmLocalRestore}
-                title="Local Restore"
-                message="This will overwrite your data with the local backup. Are you sure?"
+                title="Restore from phone"
+                message="This will overwrite your data with the local backup. It does not merge."
                 confirmText="Restore"
                 cancelText="Cancel"
                 variant="warning"
@@ -411,28 +410,10 @@ export default function BackupScreen({ navigation }: any) {
     );
 }
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.m,
-        paddingBottom: theme.spacing.m,
-    },
-    backBtn: {
-        width: 44,
-        height: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
     },
     content: {
         padding: theme.spacing.l,
@@ -475,6 +456,12 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 1,
     },
+    localHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingRight: theme.spacing.s,
+    },
     card: {
         backgroundColor: theme.colors.surface,
         borderRadius: 20,
@@ -494,6 +481,10 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         gap: theme.spacing.m,
         flex: 1,
+    },
+    itemTextWrap: {
+        flex: 1,
+        paddingRight: theme.spacing.s,
     },
     itemLabel: {
         fontSize: 16,
@@ -520,23 +511,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontWeight: 'bold',
         color: theme.colors.accent,
     },
-    lastBackup: {
-        flexDirection: 'row',
+    disconnect: {
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        marginTop: theme.spacing.xl,
+        marginTop: theme.spacing.m,
     },
-    lastBackupText: {
-        fontSize: 12,
-        color: theme.colors.textTertiary,
+    disconnectText: {
+        fontSize: 13,
+        color: theme.colors.danger,
         fontWeight: theme.typography.medium,
-    },
-    footer: {
-        paddingHorizontal: theme.spacing.l,
-        paddingVertical: theme.spacing.m,
-        backgroundColor: theme.colors.surface,
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
     },
 });

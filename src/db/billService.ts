@@ -8,6 +8,7 @@ import { differenceInDays, isAfter, startOfDay } from 'date-fns';
 import { isDuplicateRecurringCategory, normalizeExpenseCategory } from '../utils/expenseCategory';
 import { getRecurringExpenses } from './expenseService';
 import { getTenantById, updateTenant } from './tenantService';
+import { markBackupDirty } from '../services/backupService';
 
 // Re-export types
 export { RentBill, BillExpense };
@@ -665,6 +666,7 @@ export const generateBillsForProperty = async (
     if (property?.type === 'pg') {
         await splitPGUtilities(propertyId, month, year);
     }
+    markBackupDirty();
 };
 
 /**
@@ -916,6 +918,7 @@ export const savePGUtilityReading = async (
         // Recalculate totals for each updated bill
         await recalculateBill(bill.id);
     }
+    markBackupDirty();
 };
 
 // ===== BILL QUERIES =====
@@ -1382,6 +1385,7 @@ export const updateBill = async (id: number, data: Partial<NewRentBill>): Promis
     await db.update(rentBills)
         .set({ ...data, updated_at: new Date() })
         .where(eq(rentBills.id, id));
+    markBackupDirty();
 };
 
 /**
@@ -1680,6 +1684,7 @@ export const resetBill = async (billId: number): Promise<void> => {
 
     // Delete the bill itself
     await db.delete(rentBills).where(eq(rentBills.id, billId));
+    markBackupDirty();
 };
 
 // ===== EXPENSE OPERATIONS =====
@@ -1718,6 +1723,7 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
         }).returning({ id: billExpenses.id });
 
         await recalculateBill(billId);
+        markBackupDirty();
         return discountResult[0].id;
     }
 
@@ -1755,6 +1761,7 @@ export const addExpenseToBill = async (billId: number, expense: Omit<NewBillExpe
     }).returning({ id: billExpenses.id });
 
     await recalculateBill(billId);
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -1823,6 +1830,7 @@ export const removeExpense = async (expenseId: number): Promise<void> => {
     }
 
     await recalculateBill(billId);
+    markBackupDirty();
 };
 
 export const getBillExpenses = async (billId: number): Promise<BillExpense[]> => {
@@ -1874,6 +1882,7 @@ export const addPaymentToBill = async (
     }
 
     await recalculateBill(billId);
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -1896,6 +1905,7 @@ export const removePaymentFromBill = async (paymentId: number): Promise<void> =>
     if (billId) {
         await recalculateBill(billId);
     }
+    markBackupDirty();
 };
 
 export const getBillPayments = async (billId: number): Promise<Payment[]> => {

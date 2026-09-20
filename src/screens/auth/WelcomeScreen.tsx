@@ -5,6 +5,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
 import { login } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
+import { applyDriveAccessGranted, ensureDriveAccess } from '../../services/backupService';
 import { signInWithApple } from '../../services/appleAuthService';
 import { FontAwesome } from '@expo/vector-icons';
 import { AnalyticsEvents, trackEvent, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
@@ -26,25 +27,31 @@ export default function WelcomeScreen() {
     }, []);
 
     const handleGoogleLogin = async () => {
-        if (__DEV__) {
-            dispatch(login({
-                name: 'Dev User',
-                email: 'dev@rentvelo.app',
-                photoUrl: undefined,
-                isGoogleLinked: true
-            }));
-            return;
-        }
+        // if (__DEV__) {
+        //     dispatch(login({
+        //         name: 'Dev User',
+        //         email: 'dev@rentvelo.app',
+        //         photoUrl: undefined,
+        //         isGoogleLinked: true,
+        //         authMethod: 'google',
+        //     }));
+        //     return;
+        // }
 
         try {
             setGoogleLoading(true);
             const user = await signInWithGoogle();
             if (user) {
+                const driveOk = await ensureDriveAccess();
+                if (driveOk) {
+                    applyDriveAccessGranted();
+                }
                 dispatch(login({
                     name: user.name || 'User',
                     email: user.email,
                     photoUrl: user.photo || undefined,
-                    isGoogleLinked: true // Integrated flow for both iOS and Android
+                    isGoogleLinked: driveOk,
+                    authMethod: 'google',
                 }));
 
                 trackEvent(AnalyticsEvents.SIGN_IN, { method: 'google' });
@@ -81,8 +88,9 @@ export default function WelcomeScreen() {
             if (user) {
                 dispatch(login({
                     name: user.name || 'Apple User',
-                    email: user.email || 'Private Apple ID', 
-                    isGoogleLinked: false 
+                    email: user.email || 'Private Apple ID',
+                    isGoogleLinked: false,
+                    authMethod: 'apple',
                 }));
 
                 trackEvent(AnalyticsEvents.SIGN_IN, { method: 'apple' });
@@ -173,9 +181,9 @@ export default function WelcomeScreen() {
 
                     <View style={styles.footer}>
                         <Text style={styles.securityNote}>
-                            {Platform.OS === 'ios' 
-                                ? 'Sign in to securely manage your properties and backup data manually to Google Drive.'
-                                : 'Sign in to securely backup your data to Google Drive.'}
+                            {Platform.OS === 'ios'
+                                ? 'Google sign-in backs up rental data to Drive. Apple sign-in can link Drive later from the dashboard.'
+                                : 'Sign in with Google to automatically backup your rental data to Drive.'}
                         </Text>
                     </View>
                 </View>

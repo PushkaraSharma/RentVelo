@@ -1,35 +1,32 @@
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { storage } from '../utils/storage';
-import { Platform } from 'react-native';
 
 // We are using the web client ID extracted from google-services.json (oauth_client with client_type 3)
 const GOOGLE_WEB_CLIENT_ID = '221955250116-tfa60qhpibsg77pmt6i43u80ovp40rij.apps.googleusercontent.com';
+
+export const DRIVE_APPDATA_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 
 export const initGoogleAuth = () => {
     GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         offlineAccess: true,
-        // Using full scopes for "one-step" Drive access, even on iOS per user request.
-        scopes: ['https://www.googleapis.com/auth/drive.appdata', 'https://www.googleapis.com/auth/drive.file'],
+        scopes: [DRIVE_APPDATA_SCOPE],
     });
 };
 
 /**
- * Manually request Google Drive scopes. 
- * Used on iOS to link Drive for backups AFTER the user has logged in.
+ * Manually request Google Drive appData scope (iOS post-login / re-auth).
+ * Callers must still probe Drive with verifyDrivePermissions.
  */
 export const requestDriveScopes = async (): Promise<boolean> => {
     try {
         const hasPlayServices = await GoogleSignin.hasPlayServices();
         if (!hasPlayServices) return false;
 
-        // On iOS, we use addScopes to request specific permissions post-login.
-        // In version 16.x, hasPermissions is not available, and addScopes 
-        // will trigger the system prompt if the scopes are not already granted.
         await GoogleSignin.addScopes({
-            scopes: ['https://www.googleapis.com/auth/drive.appdata', 'https://www.googleapis.com/auth/drive.file']
+            scopes: [DRIVE_APPDATA_SCOPE],
         });
-        
+
         return true;
     } catch (error) {
         console.error('Error requesting Drive scopes:', error);
@@ -51,8 +48,6 @@ export const signInWithGoogle = async (): Promise<GoogleUser | null> => {
         await GoogleSignin.hasPlayServices();
         const response = await GoogleSignin.signIn();
 
-        // Response format depends on the version, but generally exposes the user object
-        // Using `response.data` or `response.user` based on the library structure. Version 13.x returns response.data
         const user = (response as any).data?.user || (response as any).user;
 
         if (user) {

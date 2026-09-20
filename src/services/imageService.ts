@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { markBackupDirty } from './backupService';
 
 const IMAGES_DIR = `${FileSystem.documentDirectory}RentVeloImages/`;
 
@@ -40,6 +41,7 @@ export const saveImageToPermanentStorage = async (cacheUri: string): Promise<str
         });
 
         // 4. Return just the filename so DB doesn't store absolute device paths
+        markBackupDirty();
         return filename;
     } catch (error) {
         console.error('Failed to save image to permanent storage:', error);

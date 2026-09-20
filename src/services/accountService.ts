@@ -1,5 +1,5 @@
 import { storage } from '../utils/storage';
-import { revokeGoogleAccess } from './googleAuthService';
+import { revokeGoogleAccess, isSignedIn } from './googleAuthService';
 import { signOutApple } from './appleAuthService';
 import { deleteBackupFromDrive } from './backupService';
 import * as SQLite from 'expo-sqlite';
@@ -18,28 +18,29 @@ export const deleteAccountData = async (
     deleteCloudBackup: boolean
 ): Promise<{ success: boolean; error?: string }> => {
     try {
-        // 1. Revoke Authentication
-        if (authMethod === 'google') {
+        // 1. Cloud backup while Drive session still exists
+        if (deleteCloudBackup) {
             try {
-                await revokeGoogleAccess();
+                await deleteBackupFromDrive();
             } catch (e) {
-                console.warn('Revoke Google Access failed, continuing cleanup...', e);
+                console.warn('Delete backup from Drive failed, continuing cleanup...', e);
             }
-        } else {
+        }
+
+        // 2. Revoke Google if a Drive/Google session exists (including Apple users who linked Drive)
+        try {
+            if (authMethod === 'google' || await isSignedIn()) {
+                await revokeGoogleAccess();
+            }
+        } catch (e) {
+            console.warn('Revoke Google Access failed, continuing cleanup...', e);
+        }
+
+        if (authMethod === 'apple') {
             try {
                 await signOutApple(userId);
             } catch (e) {
                 console.warn('Sign out Apple failed, continuing cleanup...', e);
-            }
-        }
-
-        // 2. Delete Cloud Backups (if requested and using Google)
-        if (deleteCloudBackup) {
-            try {
-                // If the user is logged in with Google, or has linked Google, we try to delete
-                await deleteBackupFromDrive();
-            } catch (e) {
-                console.warn('Delete backup from Drive failed, continuing cleanup...', e);
             }
         }
 

@@ -13,6 +13,7 @@ import { ThemeProvider } from './src/theme/ThemeContext';
 import * as Updates from 'expo-updates';
 import AppLockWrapper from './src/components/AppLockWrapper';
 import AutoBackupHandler from './src/components/AutoBackupHandler';
+import RestorePromptHandler from './src/components/RestorePromptHandler';
 import { ToastProvider } from './src/components/common/ToastProvider';
 import UpdateToast from './src/components/common/UpdateToast';
 import { migrateOldImagesToPermanentStorage } from './src/services/imageMigrationService';
@@ -107,6 +108,7 @@ export default function App() {
         <SafeAreaProvider>
           <ToastProvider>
             <AutoBackupHandler />
+            <RestorePromptHandler />
             <AppLockWrapper>
               <RootNavigator />
             </AppLockWrapper>

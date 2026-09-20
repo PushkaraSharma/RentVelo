@@ -6,6 +6,9 @@ export const CURRENCY = '₹';
 /** Hosted pay page — WhatsApp linkifies https; page opens the UPI app via upi:// */
 export const UPI_PAY_PAGE_URL = 'https://rentvelo.indieroots.in/pay.html';
 
+/** How-to reels playlist (opens in the YouTube app or browser). */
+export const YOUTUBE_HOWTO_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=PLBjqQ3oFS6D0';
+
 /**
  * Bill lines that mirror a property expense are stored with a "Property: " prefix so
  * the reconciler can match legacy rows by label. That prefix is internal bookkeeping
@@ -107,6 +110,8 @@ export const OTA_VERSION = 0;
 export const CHANGELOG = {
     version: `${Constants.expoConfig?.version}_${OTA_VERSION}`,
     features: [
+        "Backup your data to Google Drive for secure cloud storage",
+        "Added youtube guide for how to use RentVelo",
         "Direct UPI payment link while sharing rent receipt for fast payments",
         "Option to assign payment account to room/property for managing multiple payment accounts",
         "Minor UI improvements in rent collection screen",

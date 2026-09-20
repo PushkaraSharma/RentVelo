@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, Animated as RNAnimated, Dimensions,
-    KeyboardAvoidingView, Platform, ScrollView
+    KeyboardAvoidingView, Platform, ScrollView, TextInput, InputAccessoryView
 } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -32,6 +32,7 @@ import { storage } from '../../utils/storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TOTAL_STEPS = 4;
+const SETUP_KEYBOARD_ACCESSORY = 'setupWizardGo';
 
 export default function SetupWizardScreen({ navigation }: any) {
     const dispatch = useDispatch();
@@ -44,6 +45,11 @@ export default function SetupWizardScreen({ navigation }: any) {
     const [loading, setLoading] = useState(false);
     const slideAnim = useRef(new RNAnimated.Value(0)).current;
     const progressAnim = useRef(new RNAnimated.Value(0)).current;
+    const propertyNameRef = useRef<TextInput>(null);
+    const addressRef = useRef<TextInput>(null);
+    const rentAmountRef = useRef<TextInput>(null);
+    const tenantNameRef = useRef<TextInput>(null);
+    const tenantPhoneRef = useRef<TextInput>(null);
 
     // Step 1: Property
     const [propertyName, setPropertyName] = useState('');
@@ -371,18 +377,28 @@ export default function SetupWizardScreen({ navigation }: any) {
 
             <View style={styles.formCard}>
                 <Input
+                    ref={propertyNameRef}
                     label="PROPERTY NAME"
                     placeholder="e.g. Sunshine Apartments"
                     value={propertyName}
                     onChangeText={setPropertyName}
                     icon={<Building size={20} color={theme.colors.textTertiary} />}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => addressRef.current?.focus()}
+                    autoCapitalize="words"
                 />
                 <Input
+                    ref={addressRef}
                     label="ADDRESS"
                     placeholder="e.g. MG Road, Delhi"
                     value={address}
                     onChangeText={setAddress}
                     icon={<MapPin size={20} color={theme.colors.textTertiary} />}
+                    returnKeyType="go"
+                    onSubmitEditing={handleStep1}
+                    autoCapitalize="words"
+                    inputAccessoryViewID={Platform.OS === 'ios' ? SETUP_KEYBOARD_ACCESSORY : undefined}
                 />
 
                 <Text style={styles.fieldLabel}>PROPERTY TYPE</Text>
@@ -437,11 +453,15 @@ export default function SetupWizardScreen({ navigation }: any) {
                 <View style={styles.rentInputContainer}>
                     <Text style={styles.currencySymbol}>{CURRENCY}</Text>
                     <Input
+                        ref={rentAmountRef}
                         placeholder="e.g. 12000"
                         value={rentAmount}
                         onChangeText={setRentAmount}
                         placeholderTextColor={'lightgray'}
                         keyboardType="numeric"
+                        returnKeyType="go"
+                        onSubmitEditing={handleStep2}
+                        inputAccessoryViewID={Platform.OS === 'ios' ? SETUP_KEYBOARD_ACCESSORY : undefined}
                         style={styles.rentInput}
                         containerStyle={{ flex: 1, marginBottom: 0 }}
                     />
@@ -480,18 +500,27 @@ export default function SetupWizardScreen({ navigation }: any) {
 
             <View style={styles.formCard}>
                 <Input
+                    ref={tenantNameRef}
                     label="TENANT NAME"
                     placeholder="e.g. Rahul Sharma"
                     value={tenantName}
                     onChangeText={setTenantName}
                     icon={<User size={20} color={theme.colors.textTertiary} />}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => tenantPhoneRef.current?.focus()}
+                    autoCapitalize="words"
                 />
                 <Input
+                    ref={tenantPhoneRef}
                     label="PHONE NUMBER"
                     placeholder="e.g. 9876543210"
                     value={tenantPhone}
                     onChangeText={setTenantPhone}
                     keyboardType="phone-pad"
+                    returnKeyType="go"
+                    onSubmitEditing={handleStep3}
+                    inputAccessoryViewID={Platform.OS === 'ios' ? SETUP_KEYBOARD_ACCESSORY : undefined}
                     maxLength={10}
                     icon={<Phone size={20} color={theme.colors.textTertiary} />}
                 />
@@ -576,15 +605,33 @@ export default function SetupWizardScreen({ navigation }: any) {
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
             >
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
                 >
                     {steps[step]()}
                 </ScrollView>
             </KeyboardAvoidingView>
+            {Platform.OS === 'ios' && (
+                <InputAccessoryView nativeID={SETUP_KEYBOARD_ACCESSORY}>
+                    <View style={styles.keyboardAccessory}>
+                        <Pressable
+                            onPress={() => {
+                                if (step === 0) handleStep1();
+                                else if (step === 1) handleStep2();
+                                else if (step === 2) handleStep3();
+                            }}
+                            style={styles.keyboardAccessoryBtn}
+                        >
+                            <Text style={styles.keyboardAccessoryText}>Continue</Text>
+                        </Pressable>
+                    </View>
+                </InputAccessoryView>
+            )}
         </SafeAreaView>
     );
 }
@@ -882,5 +929,24 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     confettiPiece: {
         position: 'absolute',
+    },
+    keyboardAccessory: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        paddingHorizontal: theme.spacing.m,
+        paddingVertical: theme.spacing.s,
+        backgroundColor: theme.colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+    },
+    keyboardAccessoryBtn: {
+        paddingHorizontal: theme.spacing.m,
+        paddingVertical: theme.spacing.s,
+    },
+    keyboardAccessoryText: {
+        fontSize: 16,
+        fontWeight: theme.typography.semiBold,
+        color: theme.colors.accent,
     },
 });

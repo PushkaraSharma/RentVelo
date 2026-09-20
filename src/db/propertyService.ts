@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import { properties, units, tenants, Property, NewProperty, Unit, NewUnit } from './schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
+import { markBackupDirty } from '../services/backupService';
 
 // Re-export types
 export { Property, Unit };
@@ -17,6 +18,7 @@ export const createProperty = async (property: NewProperty): Promise<number> => 
     }
 
     const result = await db.insert(properties).values(property).returning({ id: properties.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -85,12 +87,14 @@ export const updateProperty = async (id: number, property: Partial<NewProperty>)
     await db.update(properties)
         .set({ ...property, updated_at: new Date() })
         .where(eq(properties.id, id));
+    markBackupDirty();
 };
 
 // Delete Property
 export const deleteProperty = async (id: number): Promise<void> => {
     const db = getDb();
     await db.delete(properties).where(eq(properties.id, id));
+    markBackupDirty();
 };
 
 // ===== UNIT OPERATIONS =====
@@ -131,6 +135,7 @@ export const createUnit = async (unit: NewUnit): Promise<number> => {
     }
 
     const result = await db.insert(units).values(finalUnit).returning({ id: units.id });
+    markBackupDirty();
     return result[0].id;
 };
 
@@ -187,12 +192,14 @@ export const updateUnit = async (id: number, unit: Partial<NewUnit>): Promise<vo
     await db.update(units)
         .set({ ...unit, updated_at: new Date() })
         .where(eq(units.id, id));
+    markBackupDirty();
 };
 
 // Delete Unit
 export const deleteUnit = async (id: number): Promise<void> => {
     const db = getDb();
     await db.delete(units).where(eq(units.id, id));
+    markBackupDirty();
 };
 
 // ===== PG BED SYSTEM HELPERS =====
@@ -379,4 +386,5 @@ export const updatePGRoom = async (
     for (let i = newCount; i < currentCount; i++) {
         await deleteUnit(existingBeds[i].id);
     }
+    markBackupDirty();
 };

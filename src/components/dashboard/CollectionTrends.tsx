@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { CURRENCY } from '../../utils/Constants';
-import Svg, { Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Rect, Text as SvgText } from 'react-native-svg';
 import { BarChart3 } from 'lucide-react-native';
 
 interface TrendItem {
@@ -22,10 +22,20 @@ interface CollectionTrendsProps {
 const CHART_HEIGHT = 140;
 const BAR_WIDTH = 20;
 const BAR_GAP = 6;
+const TOOLTIP_WIDTH = 104;
+const TOOLTIP_HEIGHT = 44;
+
+type SelectedBar = { index: number; type: 'expected' | 'collected' };
+
+const formatAmount = (value: number, isPrivacyMode?: boolean) => {
+    if (isPrivacyMode) return `${CURRENCY} •••`;
+    return `${CURRENCY}${Math.round(value).toLocaleString('en-IN')}`;
+};
 
 export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyMode }: CollectionTrendsProps) {
     const { theme } = useAppTheme();
     const styles = getStyles(theme);
+    const [selectedBar, setSelectedBar] = useState<SelectedBar | null>(null);
     const visibleTrends = trends.filter(t => t.expected > 0 || t.collected > 0);
     const maxVal = Math.max(...visibleTrends.map(t => Math.max(t.expected, t.collected)), 1);
     const totalCollected = visibleTrends.reduce((s, t) => s + t.collected, 0);
@@ -39,6 +49,28 @@ export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyM
     const groupWidth = (BAR_WIDTH * 2) + BAR_GAP;
     const totalGrouping = visibleTrends.length * groupWidth;
     const spacing = (chartWidth - totalGrouping) / (visibleTrends.length + 1);
+
+    const tooltip = (() => {
+        if (!selectedBar) return null;
+        const item = visibleTrends[selectedBar.index];
+        if (!item) return null;
+
+        const groupX = spacing + selectedBar.index * (groupWidth + spacing);
+        const isExpected = selectedBar.type === 'expected';
+        const value = isExpected ? item.expected : item.collected;
+        const barCenter = isExpected
+            ? groupX + BAR_WIDTH / 2
+            : groupX + BAR_WIDTH + BAR_GAP + BAR_WIDTH / 2;
+        const barTop = CHART_HEIGHT - (value / maxVal) * CHART_HEIGHT;
+
+        return {
+            label: `${isExpected ? 'Expected' : 'Collected'} · ${item.label}`,
+            amount: formatAmount(value, isPrivacyMode),
+            left: Math.min(Math.max(barCenter - TOOLTIP_WIDTH / 2, 0), chartWidth - TOOLTIP_WIDTH),
+            caretLeft: barCenter - 5,
+            top: Math.max(barTop - TOOLTIP_HEIGHT - 10, 0),
+        };
+    })();
 
     if (visibleTrends.length === 0) {
         return (
@@ -64,40 +96,68 @@ export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyM
             <Text style={styles.title}>{title}</Text>
 
             {/* Chart */}
-            <View style={styles.chartContainer}>
+            <View style={[styles.chartContainer, { width: chartWidth }]}>
                 <Svg width={chartWidth} height={CHART_HEIGHT + 28}>
                     {visibleTrends.map((item, i) => {
                         const x = spacing + i * (groupWidth + spacing);
                         const expectedH = (item.expected / maxVal) * CHART_HEIGHT;
                         const collectedH = (item.collected / maxVal) * CHART_HEIGHT;
+                        const expectedActive = selectedBar?.index === i && selectedBar.type === 'expected';
+                        const collectedActive = selectedBar?.index === i && selectedBar.type === 'collected';
+                        const dim = (active: boolean) => (!selectedBar || active ? 1 : 0.35);
+                        const toggle = (type: SelectedBar['type']) =>
+                            setSelectedBar(prev =>
+                                prev?.index === i && prev.type === type ? null : { index: i, type }
+                            );
 
                         return (
                             <React.Fragment key={i}>
-                                {/* Expected bar */}
-                                <Rect
-                                    x={x}
-                                    y={CHART_HEIGHT - expectedH}
-                                    width={BAR_WIDTH}
-                                    height={expectedH || 2}
-                                    rx={4}
-                                    fill={theme.colors.border}
-                                />
-                                {/* Collected bar */}
-                                <Rect
-                                    x={x + BAR_WIDTH + BAR_GAP}
-                                    y={CHART_HEIGHT - collectedH}
-                                    width={BAR_WIDTH}
-                                    height={collectedH || 2}
-                                    rx={4}
-                                    fill={theme.colors.accent}
-                                />
+                                {/* Expected bar — hit area spans the full column height */}
+                                <G onPress={() => toggle('expected')}>
+                                    <Rect
+                                        x={x - BAR_GAP / 2}
+                                        y={0}
+                                        width={BAR_WIDTH + BAR_GAP}
+                                        height={CHART_HEIGHT}
+                                        fill="transparent"
+                                    />
+                                    <Rect
+                                        x={x}
+                                        y={CHART_HEIGHT - expectedH}
+                                        width={BAR_WIDTH}
+                                        height={expectedH || 2}
+                                        rx={4}
+                                        fill={theme.colors.border}
+                                        opacity={dim(expectedActive)}
+                                    />
+                                </G>
+
+                                <G onPress={() => toggle('collected')}>
+                                    <Rect
+                                        x={x + BAR_WIDTH + BAR_GAP / 2}
+                                        y={0}
+                                        width={BAR_WIDTH + BAR_GAP}
+                                        height={CHART_HEIGHT}
+                                        fill="transparent"
+                                    />
+                                    <Rect
+                                        x={x + BAR_WIDTH + BAR_GAP}
+                                        y={CHART_HEIGHT - collectedH}
+                                        width={BAR_WIDTH}
+                                        height={collectedH || 2}
+                                        rx={4}
+                                        fill={theme.colors.accent}
+                                        opacity={dim(collectedActive)}
+                                    />
+                                </G>
+
                                 {/* Month label */}
                                 <SvgText
                                     x={x + groupWidth / 2}
                                     y={CHART_HEIGHT + 18}
                                     fontSize={10}
                                     fontWeight="600"
-                                    fill={theme.colors.textSecondary}
+                                    fill={selectedBar?.index === i ? theme.colors.accent : theme.colors.textSecondary}
                                     textAnchor="middle"
                                 >
                                     {item.label}
@@ -106,7 +166,24 @@ export default function CollectionTrends({ trends, propertyCount = 0, isPrivacyM
                         );
                     })}
                 </Svg>
+
+                {tooltip && (
+                    <>
+                        <View style={[styles.tooltip, { left: tooltip.left, top: tooltip.top }]}>
+                            <Text style={styles.tooltipLabel} numberOfLines={1}>{tooltip.label}</Text>
+                            <Text style={styles.tooltipAmount} numberOfLines={1}>{tooltip.amount}</Text>
+                        </View>
+                        <View
+                            style={[
+                                styles.tooltipCaret,
+                                { left: tooltip.caretLeft, top: tooltip.top + TOOLTIP_HEIGHT - 5 },
+                            ]}
+                        />
+                    </>
+                )}
             </View>
+
+            {!selectedBar && <Text style={styles.chartHint}>Tap a bar to see the amount</Text>}
 
             {/* Legend */}
             <View style={styles.legendRow}>
@@ -156,8 +233,45 @@ const getStyles = (theme: any) => StyleSheet.create({
         marginBottom: theme.spacing.m,
     },
     chartContainer: {
-        alignItems: 'center',
+        alignSelf: 'center',
         marginBottom: theme.spacing.s,
+    },
+    chartHint: {
+        fontSize: 11,
+        color: theme.colors.textTertiary,
+        textAlign: 'center',
+        marginBottom: theme.spacing.s,
+        fontWeight: theme.typography.medium,
+    },
+    tooltip: {
+        position: 'absolute',
+        width: TOOLTIP_WIDTH,
+        height: TOOLTIP_HEIGHT,
+        borderRadius: 10,
+        paddingHorizontal: 8,
+        backgroundColor: theme.colors.textPrimary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    tooltipLabel: {
+        fontSize: 10,
+        color: theme.colors.surface,
+        opacity: 0.75,
+        fontWeight: theme.typography.medium,
+    },
+    tooltipAmount: {
+        fontSize: 14,
+        color: theme.colors.surface,
+        fontWeight: theme.typography.bold,
+        marginTop: 1,
+    },
+    tooltipCaret: {
+        position: 'absolute',
+        width: 10,
+        height: 10,
+        backgroundColor: theme.colors.textPrimary,
+        transform: [{ rotate: '45deg' }],
+        borderRadius: 2,
     },
     emptyState: {
         alignItems: 'center',

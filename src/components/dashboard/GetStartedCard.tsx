@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import {
     Building2, Users, IndianRupee, ChevronRight,
-    Check
+    Check, PlayCircle
 } from 'lucide-react-native';
 import { storage } from '../../utils/storage';
+import { openHowToVideos } from '../../utils/howToVideos';
 
 interface SetupStep {
     id: string;
@@ -169,6 +170,20 @@ export default function GetStartedCard({
                     );
                 })}
             </View>
+
+            <Pressable
+                style={styles.videoRow}
+                onPress={() => openHowToVideos('get_started')}
+            >
+                <View style={styles.videoIcon}>
+                    <PlayCircle size={18} color={theme.colors.accent} strokeWidth={2} />
+                </View>
+                <View style={styles.stepInfo}>
+                    <Text style={styles.stepLabel}>Watch how-to videos</Text>
+                    <Text style={styles.stepDescription}>1-minute reels on how RentVelo works</Text>
+                </View>
+                <ChevronRight size={18} color={theme.colors.accent} />
+            </Pressable>
         </View>
     );
 }
@@ -279,5 +294,23 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 12,
         color: theme.colors.textTertiary,
         marginTop: 1,
+    },
+    videoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.m,
+        paddingHorizontal: theme.spacing.l,
+        gap: theme.spacing.m,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        backgroundColor: theme.colors.background,
+    },
+    videoIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: theme.colors.accentLight,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

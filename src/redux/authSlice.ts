@@ -5,6 +5,8 @@ const ONBOARDING_KEY = 'isOnboarded';
 const SETUP_COMPLETE_KEY = 'isSetupComplete';
 const AUTH_KEY = 'authState';
 
+export type AuthMethod = 'google' | 'apple';
+
 interface AuthState {
     isAuthenticated: boolean;
     isOnboarded: boolean;
@@ -16,6 +18,7 @@ interface AuthState {
     } | null;
     isGoogleLinked: boolean;
     googleEmail: string | null;
+    authMethod: AuthMethod | null;
 }
 
 const loadAuthState = (): Partial<AuthState> => {
@@ -40,6 +43,7 @@ const initialState: AuthState = {
     user: savedAuthState.user ?? null,
     isGoogleLinked: savedAuthState.isGoogleLinked ?? false,
     googleEmail: savedAuthState.googleEmail ?? null,
+    authMethod: savedAuthState.authMethod ?? (savedAuthState.isGoogleLinked ? 'google' : (savedAuthState.isAuthenticated ? 'apple' : null)),
 };
 
 const saveAuthState = (state: AuthState) => {
@@ -48,7 +52,8 @@ const saveAuthState = (state: AuthState) => {
             isAuthenticated: state.isAuthenticated,
             user: state.user,
             isGoogleLinked: state.isGoogleLinked,
-            googleEmail: state.googleEmail
+            googleEmail: state.googleEmail,
+            authMethod: state.authMethod,
         }));
     } catch (e) {
         console.error('Failed to save auth state', e);
@@ -59,15 +64,15 @@ const authSlice = createSlice({
     name: 'auth',
     initialState,
     reducers: {
-        login: (state, action: PayloadAction<{ name: string; email: string; photoUrl?: string; isGoogleLinked?: boolean }>) => {
+        login: (state, action: PayloadAction<{ name: string; email: string; photoUrl?: string; isGoogleLinked?: boolean; authMethod?: AuthMethod }>) => {
             state.isAuthenticated = true;
             state.user = {
                 name: action.payload.name,
                 email: action.payload.email,
                 photoUrl: action.payload.photoUrl
             };
-            // On Android, if logged in via Google, it likely has scopes already.
-            // On iOS, we link separately.
+            state.authMethod = action.payload.authMethod ?? (action.payload.isGoogleLinked ? 'google' : 'apple');
+            // isGoogleLinked means Drive appData access is granted, not merely Google identity.
             state.isGoogleLinked = action.payload.isGoogleLinked ?? false;
             state.googleEmail = action.payload.isGoogleLinked ? action.payload.email : null;
             saveAuthState(state);
@@ -77,6 +82,7 @@ const authSlice = createSlice({
             state.user = null;
             state.isGoogleLinked = false;
             state.googleEmail = null;
+            state.authMethod = null;
             saveAuthState(state);
         },
         completeOnboarding: (state) => {

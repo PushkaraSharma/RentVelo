@@ -51,6 +51,7 @@ export const AnalyticsEvents = {
     BACKUP_CREATED: 'backup_created',
     BACKUP_RESTORED: 'backup_restored',
     AUTO_BACKUP_TOGGLED: 'auto_backup_toggled',
+    AUTO_BACKUP_FAILED: 'auto_backup_failed',
 
     // Utilities
     METER_READING_SAVED: 'meter_reading_saved',
@@ -65,6 +66,7 @@ export const AnalyticsEvents = {
     // App
     APP_OPENED: 'app_opened',
     SCREEN_VIEWED: 'screen_view',
+    HOW_TO_VIDEOS_OPENED: 'how_to_videos_opened',
 } as const;
 
 /**

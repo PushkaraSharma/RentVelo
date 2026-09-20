@@ -14,6 +14,7 @@ import { storage } from '../../utils/storage';
 import { OTA_VERSION, CHANGELOG } from '../../utils/Constants';
 import WhatsNewModal from '../../components/modals/WhatsNewModal';
 import GetStartedCard from '../../components/dashboard/GetStartedCard';
+import BackupNudgeCard from '../../components/dashboard/BackupNudgeCard';
 import { getFullImageUri } from '../../services/imageService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setPortfolioStats, setEnrichedUserProperties } from '../../services/analyticsService';
@@ -132,6 +133,8 @@ export default function DashboardScreen({ navigation }: any) {
                             onPressCollected={() => (navigation as any).navigate('Payments')}
                             isPrivacyMode={isPrivacyMode}
                         />
+
+                        <BackupNudgeCard navigation={navigation} />
 
                         {/* Get Started Guide - shows when setup is incomplete */}
                         {(data.propertyCount === 0 || data.occupiedCount === 0 || data.collected === 0) && (
