@@ -193,6 +193,13 @@ export const getDatabase = () => {
   return expoDb;
 };
 
+export const ensureRentBillUniqueness = () => {
+  expoDb.execSync(`
+    CREATE UNIQUE INDEX IF NOT EXISTS rent_bills_unit_tenant_period_unique
+    ON rent_bills (unit_id, tenant_id, month, year);
+  `);
+};
+
 export const closeDatabase = () => {
   try {
     expoDb.closeSync();

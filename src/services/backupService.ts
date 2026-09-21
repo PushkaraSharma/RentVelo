@@ -3,7 +3,7 @@ import { DevSettings } from 'react-native';
 import { zip, unzip } from 'react-native-zip-archive';
 import * as Updates from 'expo-updates';
 import { getGoogleTokens, isSignedIn, requestDriveScopes } from './googleAuthService';
-import { closeDatabase, syncDatabaseSchema } from '../db/database';
+import { closeDatabase, ensureRentBillUniqueness, getDatabase, syncDatabaseSchema } from '../db/database';
 import { storage } from '../utils/storage';
 
 /**
@@ -175,6 +175,10 @@ const createBackupZip = async (): Promise<string | null> => {
         const imagesPath = getImagesPath();
         const tempBackupDir = `${FileSystem.cacheDirectory}BackupStaging/`;
         const zipPath = `${FileSystem.cacheDirectory}${BACKUP_FILE_NAME}`;
+
+        // Ensure the main database file contains every committed WAL change
+        // before copying it into the archive.
+        getDatabase().execSync('PRAGMA wal_checkpoint(TRUNCATE);');
 
         const stagingInfo = await FileSystem.getInfoAsync(tempBackupDir);
         if (stagingInfo.exists) {
@@ -454,6 +458,10 @@ const extractAndApplyBackup = async (zipPath: string, extractTargetPath: string)
             await FileSystem.makeDirectoryAsync(sqliteDir, { intermediates: true });
         }
 
+        // Leftover journals would replay the pre-restore database over the restored file.
+        await FileSystem.deleteAsync(`${dbPath}-wal`, { idempotent: true });
+        await FileSystem.deleteAsync(`${dbPath}-shm`, { idempotent: true });
+
         await FileSystem.copyAsync({
             from: extractedDbPath,
             to: dbPath,
@@ -464,11 +472,9 @@ const extractAndApplyBackup = async (zipPath: string, extractTargetPath: string)
     const extractedImgPath = `${extractTargetPath}${IMAGES_DIR_NAME}`;
     const extractedImgInfo = await FileSystem.getInfoAsync(extractedImgPath);
 
-    const destImgInfo = await FileSystem.getInfoAsync(imagesPath);
-    if (destImgInfo.exists) {
-        await FileSystem.deleteAsync(imagesPath, { idempotent: true });
-    }
+    // A backup without an image folder must not wipe the images already here.
     if (extractedImgInfo.exists) {
+        await FileSystem.deleteAsync(imagesPath, { idempotent: true });
         await FileSystem.copyAsync({
             from: extractedImgPath,
             to: imagesPath,
@@ -555,10 +561,18 @@ export const reloadAppAfterRestore = async (): Promise<boolean> => {
     }
 };
 
+const finalizeRestoredData = async () => {
+    syncDatabaseSchema(true);
+    // Required lazily because billService imports this module.
+    const { repairDuplicateBills } = require('../db/billService');
+    await repairDuplicateBills();
+    ensureRentBillUniqueness();
+};
+
 export const completeRestoreFromDrive = async (): Promise<BackupResult> => {
     const result = await restoreFromGoogleDrive();
     if (result.success) {
-        syncDatabaseSchema(true);
+        await finalizeRestoredData();
         clearBackupDirty();
     }
     return result;
@@ -606,7 +620,7 @@ export const restoreFromLocalBackup = async (): Promise<BackupResult> => {
 
         const extractTargetPath = `${FileSystem.cacheDirectory}RestoreStaging/`;
         await extractAndApplyBackup(finalBackupPath, extractTargetPath);
-        syncDatabaseSchema(true);
+        await finalizeRestoredData();
         return { success: true };
     } catch (e) {
         console.error('Local restore failed:', e);

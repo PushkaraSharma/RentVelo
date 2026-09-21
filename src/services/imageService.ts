@@ -56,11 +56,19 @@ export const saveImageToPermanentStorage = async (cacheUri: string): Promise<str
 export const getFullImageUri = (filenameOrUri: string | null | undefined): string | null => {
     if (!filenameOrUri) return null;
 
+    // A restored backup carries absolute paths from the old install, whose
+    // container no longer exists, so keep only the filename part of those.
+    const marker = '/RentVeloImages/';
+    const markerIndex = filenameOrUri.lastIndexOf(marker);
+    if (markerIndex >= 0) {
+        return `${IMAGES_DIR}${filenameOrUri.slice(markerIndex + marker.length)}`;
+    }
+
     // If it's an old absolute path from the cache or a web URL, return as is
     if (filenameOrUri.startsWith('file://') || filenameOrUri.startsWith('http')) {
         return filenameOrUri;
     }
 
     // Otherwise, construct the full DocumentDirectory path
-    return `${IMAGES_DIR}${filenameOrUri}`;
+    return `${IMAGES_DIR}${filenameOrUri.replace(/^\/+/, '')}`;
 };

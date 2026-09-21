@@ -16,9 +16,6 @@ import Header from '../../../components/common/Header';
 import {
     ChevronLeft,
     ChevronRight,
-    TrendingUp,
-    TrendingDown,
-    CalendarDays,
     Wallet,
     Droplets,
     Zap,
@@ -27,13 +24,11 @@ import {
     Banknote,
     Smartphone
 } from 'lucide-react-native';
-import { format, subMonths, addMonths } from 'date-fns';
 import MonthPickerModal from '../../../components/rent/MonthPickerModal';
 import { getPropertyStatistics, PropertyStatistics } from '../../../db/paymentService';
 import { hapticsMedium } from '../../../utils/haptics';
 import AnimatedPieChart from '../../../components/statistics/AnimatedPieChart';
 
-const { width } = Dimensions.get('window');
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function PropertyStatisticsScreen({ navigation, route }: any) {
@@ -42,6 +37,8 @@ export default function PropertyStatisticsScreen({ navigation, route }: any) {
     const propertyId = route.params?.propertyId;
 
     const now = new Date();
+    const maxMonth = now.getMonth() + 1;
+    const maxYear = now.getFullYear();
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -97,7 +94,10 @@ export default function PropertyStatisticsScreen({ navigation, route }: any) {
     // User custom centerAction renders this now
 
 
+    const isAtLatestMonth = year > maxYear || (year === maxYear && month >= maxMonth);
+
     const goMonth = (dir: number) => {
+        if (dir === 1 && isAtLatestMonth) return;
         hapticsMedium();
         let newMonth = month + dir;
         let newYear = year;
@@ -132,7 +132,11 @@ export default function PropertyStatisticsScreen({ navigation, route }: any) {
                             <Text style={styles.monthText}>{MONTH_NAMES[month - 1]}</Text>
                             <Text style={styles.yearLabel}>{year}</Text>
                         </Pressable>
-                        <Pressable onPress={() => goMonth(1)} style={styles.monthArrow}>
+                        <Pressable
+                            onPress={() => goMonth(1)}
+                            style={[styles.monthArrow, isAtLatestMonth ? { opacity: 0.3 } : null]}
+                            disabled={isAtLatestMonth}
+                        >
                             <ChevronRight size={20} color={theme.colors.accent} />
                         </Pressable>
                     </View>
@@ -263,6 +267,8 @@ export default function PropertyStatisticsScreen({ navigation, route }: any) {
                     setShowMonthPicker(false);
                 }}
                 onClose={() => setShowMonthPicker(false)}
+                maxMonth={maxMonth}
+                maxYear={maxYear}
             />
         </SafeAreaView>
     );

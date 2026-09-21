@@ -572,9 +572,12 @@ export const generateBillsForProperty = async (
                 bill_number: billNumber,
                 period_start: finalPeriodStart,
                 period_end: finalPeriodEnd,
-            }).returning({ id: rentBills.id });
+            }).onConflictDoNothing().returning({ id: rentBills.id });
 
-        const newBillId = result[0].id;
+            // A concurrent screen load may have inserted the same bill after our
+            // existence check. The database uniqueness guard makes that harmless.
+            if (result.length === 0) continue;
+            const newBillId = result[0].id;
 
             // Copy recurring expenses from previous month's bill
             if (prevBill.length > 0) {
@@ -1635,7 +1638,7 @@ export const recalculateBill = async (billId: number, skipPenaltyCheck = false):
             await db.update(rentBills)
                 .set(updates)
                 .where(eq(rentBills.id, nextBill.id));
-            await recalculateBill(nextBill.id);
+            await recalculateBill(nextBill.id, skipPenaltyCheck);
         }
     }
 
@@ -2343,4 +2346,34 @@ export const getExpectedRevenueBreakdown = async (month: number, year: number): 
         properties: propertiesData,
         highRiskTenants,
     };
+};
+
+/**
+ * Drops duplicate bills that a restored database may carry. A unit can hold
+ * several bills in a month after a tenant handover, but the same unit+tenant+
+ * month+year row twice double-counts that month's expected amount.
+ */
+export const repairDuplicateBills = async (): Promise<void> => {
+    const db = getDb();
+    const allBills = await db.select().from(rentBills).orderBy(rentBills.id);
+    const canonicalByPeriod = new Map<string, number>();
+    const affectedBillIds = new Set<number>();
+
+    for (const bill of allBills) {
+        const key = `${bill.unit_id}:${bill.tenant_id}:${bill.year}:${bill.month}`;
+        const canonicalId = canonicalByPeriod.get(key);
+        if (canonicalId === undefined) {
+            canonicalByPeriod.set(key, bill.id);
+            continue;
+        }
+
+        // Keep every payment, but point it at the single surviving bill.
+        await db.update(payments).set({ bill_id: canonicalId }).where(eq(payments.bill_id, bill.id));
+        await db.delete(rentBills).where(eq(rentBills.id, bill.id));
+        affectedBillIds.add(canonicalId);
+    }
+
+    for (const billId of affectedBillIds) {
+        await recalculateBill(billId, true);
+    }
 };
