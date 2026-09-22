@@ -1307,20 +1307,33 @@ export const applyPenaltiesLazily = async (
     let totalPenalty = 0;
 
     if (isOverdue) {
-        // Waive if partial payment is made and setting is true
         let shouldWaive = false;
         if (property.waive_penalty_on_partial_payment) {
+            const nextMonth = bill.month === 12 ? 1 : bill.month + 1;
+            const nextYear = bill.month === 12 ? bill.year + 1 : bill.year;
+            const nextBill = (await db.select({ id: rentBills.id }).from(rentBills).where(
+                and(
+                    eq(rentBills.unit_id, bill.unit_id),
+                    eq(rentBills.tenant_id, bill.tenant_id),
+                    eq(rentBills.month, nextMonth),
+                    eq(rentBills.year, nextYear)
+                )
+            ).limit(1))[0];
+
+            const billIds = nextBill ? [billId, nextBill.id] : [billId];
             const payResult = await db.select({ total: sum(payments.amount) })
                 .from(payments)
-                .where(and(eq(payments.bill_id, billId), eq(payments.status, 'paid')));
+                .where(and(inArray(payments.bill_id, billIds), eq(payments.status, 'paid')));
             if ((Number(payResult[0]?.total || 0)) > 0) {
                 shouldWaive = true;
             }
         }
 
         if (!shouldWaive) {
-            const daysOverdue = differenceInDays(today, penaltyStartDate);
-            // Must be strictly greater than 0
+            let daysOverdue = differenceInDays(today, penaltyStartDate);
+            if (!property.waive_penalty_on_partial_payment) {
+                daysOverdue = Math.min(daysOverdue, 30);
+            }
             if (daysOverdue > 0) {
                 totalPenalty = daysOverdue * property.penalty_amount_per_day;
             }
