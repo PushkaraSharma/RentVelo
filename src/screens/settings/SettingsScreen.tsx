@@ -1,60 +1,30 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Image, Share, Alert, Modal, ActivityIndicator, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, Pressable, ScrollView, Modal, ActivityIndicator, Platform } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { useDispatch, useSelector } from 'react-redux';
-import { logout } from '../../redux/authSlice';
-import { clearBackupSessionFlags } from '../../services/backupService';
-import { RootState } from '../../redux/store';
 import {
-    LogOut,
-    Settings,
     Database,
-    User,
     Bell,
     ChevronRight,
-    Moon,
     FileText,
-    Shield,
-    CircleUser,
     Share2,
-    Trash2,
-    AlertCircle,
-    PlayCircle,
-    HelpCircle,
-    Info
 } from 'lucide-react-native';
-import Toggle from '../../components/common/Toggle';
-import { CHANGELOG } from '../../utils/Constants';
-import { openHowToVideos } from '../../utils/howToVideos';
-import { signOutGoogle } from '../../services/googleAuthService';
-import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getDb } from '../../db';
 import { generateRealUsageData } from '../../../tests/seedDatabase';
-import { getFullImageUri } from '../../services/imageService';
-import { trackEvent, AnalyticsEvents, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
-import { setCrashlyticsUser } from '../../services/crashlyticsService';
+import { setEnrichedUserProperties } from '../../services/analyticsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PickerBottomSheet from '../../components/common/PickerBottomSheet';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { useToast } from '../../hooks/useToast';
-import { deleteAccountData } from '../../services/accountService';
 import { getReceiptDefaultFormat, getReceiptDefaultAction, setReceiptDefaultFormat, setReceiptDefaultAction, ReceiptDefaultFormat, ReceiptDefaultAction } from '../../utils/storage';
 
 export default function SettingsScreen({ navigation }: any) {
-    const dispatch = useDispatch();
     const insets = useSafeAreaInsets();
-    const { user, isGoogleLinked, authMethod } = useSelector((state: RootState) => state.auth);
-    const { theme, isDark, setMode } = useAppTheme();
+    const { theme } = useAppTheme();
     const { showToast } = useToast();
-    const styles = getStyles(theme, isDark);
+    const styles = getStyles(theme);
 
-    const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [showSeedModal, setShowSeedModal] = useState(false);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [deleteCloudBackup, setDeleteCloudBackup] = useState(true);
-
-    // App Preferences State
+    const [isSeeding, setIsSeeding] = useState(false);
     const [receiptFormat, setLocalReceiptFormat] = useState<ReceiptDefaultFormat>(getReceiptDefaultFormat());
     const [receiptAction, setLocalReceiptAction] = useState<ReceiptDefaultAction>(getReceiptDefaultAction());
     const [showFormatModal, setShowFormatModal] = useState(false);
@@ -73,71 +43,9 @@ export default function SettingsScreen({ navigation }: any) {
         setShowActionModal(false);
     };
 
-    const handleLogout = () => {
-        setShowLogoutModal(true);
-    };
-
-    const confirmLogout = async () => {
-        setIsDeleting(true);
-        try {
-            await signOutGoogle();
-        } catch (e) {
-            // Ignored if not signed in or error occurs
-        }
-        trackEvent(AnalyticsEvents.SIGN_OUT);
-        await setAnalyticsUser(null);
-        await setCrashlyticsUser(null);
-        clearBackupSessionFlags();
-        dispatch(logout());
-        setIsDeleting(false);
-    };
-
-    const confirmDeleteAccount = async () => {
-        if (!user) return;
-
-        setIsDeleting(true);
-        try {
-            const resolvedAuthMethod = authMethod ?? (isGoogleLinked ? 'google' : 'apple');
-
-            const result = await deleteAccountData(
-                user.email || '',
-                resolvedAuthMethod,
-                deleteCloudBackup
-            );
-
-            if (result.success) {
-                showToast({
-                    type: 'success',
-                    title: 'Account Deleted',
-                    message: 'Your account and data have been permanently removed.'
-                });
-                dispatch(logout());
-            } else {
-                throw new Error(result.error);
-            }
-        } catch (error) {
-            console.error('Delete Account failed:', error);
-            showToast({
-                type: 'error',
-                title: 'Deletion Failed',
-                message: 'Could not complete account deletion. Please try again or contact support.'
-            });
-        } finally {
-            setIsDeleting(false);
-            setShowDeleteModal(false);
-        }
-    };
-
-    const [isSeeding, setIsSeeding] = useState(false);
-
-    const handleSeedDatabase = () => {
-        setShowSeedModal(true);
-    };
-
     const confirmSeed = () => {
         setShowSeedModal(false);
         setIsSeeding(true);
-        // Yield the JS thread for 100ms so the Modal overlay can render
         setTimeout(async () => {
             try {
                 const db = getDb();
@@ -150,18 +58,6 @@ export default function SettingsScreen({ navigation }: any) {
                 setIsSeeding(false);
             }
         }, 100);
-    };
-
-    const handleShare = async () => {
-        try {
-            await Share.share({
-                message: 'Manage your properties easily with RentVelo! Download now to automate your rent collections.',
-                url: 'https://rentvelo.indieroots.in/',
-                title: 'Share RentVelo'
-            });
-        } catch (error) {
-            console.error('Error sharing:', error);
-        }
     };
 
     const SettingItem = ({ icon: Icon, label, onPress, right, color = theme.colors.textPrimary }: any) => (
@@ -184,43 +80,6 @@ export default function SettingsScreen({ navigation }: any) {
                 <Text style={styles.headerTitle}>Settings</Text>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
-                {/* Profile Card */}
-                <View style={styles.profileCard}>
-                    <View style={styles.profileImageContainer}>
-                        {user?.photoUrl ? (
-                            <Image source={{ uri: getFullImageUri(user.photoUrl) || user.photoUrl }} style={styles.profileImage} />
-                        ) : (
-                            <CircleUser size={60} color={theme.colors.accent} strokeWidth={1.5} />
-                        )}
-                    </View>
-                    <View style={styles.profileInfo}>
-                        <Text style={styles.profileName}>{user?.name || 'Velo Owner'}</Text>
-                        <Text style={styles.profileEmail}>{user?.email || 'owner@rentvelo.com'}</Text>
-                        <Pressable style={styles.editProfileChip} onPress={() => navigation.navigate('Profile')}>
-                            <Text style={styles.editProfileText}>Manage Profile</Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Account & Security</Text>
-                    <View style={styles.sectionContent}>
-                        <SettingItem
-                            icon={Shield}
-                            label="Security & Privacy"
-                            color="#10B981"
-                            onPress={() => navigation.navigate('Privacy')}
-                        />
-                        <SettingItem
-                            icon={Bell}
-                            label="Notifications"
-                            color="#F59E0B"
-                            onPress={() => navigation.navigate('Notifications')}
-                        />
-                    </View>
-                </View>
-
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>App Preferences</Text>
                     <View style={styles.sectionContent}>
@@ -244,16 +103,13 @@ export default function SettingsScreen({ navigation }: any) {
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Device Settings</Text>
+                    <Text style={styles.sectionTitle}>Data</Text>
                     <View style={styles.sectionContent}>
                         <SettingItem
-                            icon={Moon}
-                            label="Dark Mode"
-                            color="#6366F1"
-                            right={<Toggle value={isDark} onValueChange={(v) => {
-                            setMode(v ? 'dark' : 'light');
-                            setEnrichedUserProperties({ darkMode: v });
-                        }} />}
+                            icon={Bell}
+                            label="Notifications"
+                            color="#F59E0B"
+                            onPress={() => navigation.navigate('Notifications')}
                         />
                         <SettingItem
                             icon={Database}
@@ -266,7 +122,7 @@ export default function SettingsScreen({ navigation }: any) {
                                 icon={Database}
                                 label={isSeeding ? "Seeding Database..." : "Seed Database (Dev)"}
                                 color="#8B5CF6"
-                                onPress={handleSeedDatabase}
+                                onPress={() => setShowSeedModal(true)}
                             />
                         )}
                     </View>
@@ -283,75 +139,8 @@ export default function SettingsScreen({ navigation }: any) {
                         />
                     </View>
                 </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Support & About</Text>
-                    <View style={styles.sectionContent}>
-                        <SettingItem
-                            icon={PlayCircle}
-                            label="Watch how-to videos"
-                            color="#FF0000"
-                            onPress={() => openHowToVideos('settings')}
-                        />
-                        <SettingItem
-                            icon={HelpCircle}
-                            label="Help Center"
-                            color="#06B6D4"
-                            onPress={() => showToast({
-                                type: 'info',
-                                title: 'Help Center',
-                                message: 'Contact rentvelo@indieroots.in for assistance.'
-                            })}
-                        />
-                        <SettingItem
-                            icon={Share2}
-                            label="Share RentVelo"
-                            color="#F43F5E"
-                            onPress={handleShare}
-                        />
-                        <SettingItem
-                            icon={Info}
-                            label="About Application"
-                            color={theme.colors.textSecondary}
-                            onPress={() => navigation.navigate('About')}
-                        />
-                    </View>
-                </View>
-
-                <View style={styles.logoutWrapper}>
-                    <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-                        <LogOut size={20} color={theme.colors.danger} />
-                        <Text style={styles.logoutText}>Log Out</Text>
-                    </Pressable>
-                </View>
-
-                <View style={[styles.section, { marginTop: theme.spacing.xl }]}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.danger }]}>Danger Zone</Text>
-                    <View style={[styles.sectionContent, { borderColor: theme.colors.danger + '30' }]}>
-                        <SettingItem
-                            icon={Trash2}
-                            label="Permanently Delete Account"
-                            color={theme.colors.danger}
-                            onPress={() => setShowDeleteModal(true)}
-                        />
-                    </View>
-                </View>
-
-                <View style={styles.versionWrapper}>
-                    <Text style={styles.version}>RentVelo v{CHANGELOG.version} • Made with ❤️</Text>
-                </View>
             </ScrollView>
 
-            <ConfirmationModal
-                visible={showLogoutModal}
-                onClose={() => setShowLogoutModal(false)}
-                onConfirm={confirmLogout}
-                title="Logout"
-                message="Are you sure you want to logout?"
-                confirmText="Logout"
-                cancelText="Cancel"
-                variant="danger"
-            />
             <ConfirmationModal
                 visible={showSeedModal}
                 onClose={() => setShowSeedModal(false)}
@@ -362,42 +151,13 @@ export default function SettingsScreen({ navigation }: any) {
                 cancelText="Cancel"
                 variant="danger"
             />
-            <Modal visible={isSeeding || isDeleting} transparent={true} animationType="fade">
+            <Modal visible={isSeeding} transparent={true} animationType="fade">
                 <View style={styles.loaderOverlay}>
                     <ActivityIndicator size="large" color={theme.colors.primary} />
-                    <Text style={styles.loaderText}>
-                        {isDeleting ? "Permanently Wiping Data..." : "Generating 1 Year of Realistic App Data..."}
-                    </Text>
-                    <Text style={styles.loaderSubText}>
-                        {isDeleting ? "This may take a moment." : "This takes about 10-15 seconds."}
-                    </Text>
+                    <Text style={styles.loaderText}>Generating 1 Year of Realistic App Data...</Text>
+                    <Text style={styles.loaderSubText}>This takes about 10-15 seconds.</Text>
                 </View>
             </Modal>
-
-            <ConfirmationModal
-                visible={showDeleteModal}
-                onClose={() => setShowDeleteModal(false)}
-                onConfirm={confirmDeleteAccount}
-                title="Permanently Delete Account?"
-                message="This action is IRREVERSIBLE. All your properties, rent records, and documents will be permanently deleted from this device."
-                confirmText="Delete"
-                cancelText="Cancel"
-                variant="danger"
-                loading={isDeleting}
-            >
-                <Pressable
-                    style={styles.deleteOption}
-                    onPress={() => setDeleteCloudBackup(!deleteCloudBackup)}
-                >
-                    <View style={styles.checkboxLabel}>
-                        <AlertCircle size={16} color={theme.colors.textSecondary} />
-                        <Text style={styles.deleteOptionText}>Also wipe Google Drive backups</Text>
-                    </View>
-                    <Toggle value={deleteCloudBackup} onValueChange={(v) => setDeleteCloudBackup(v)} />
-                </Pressable>
-            </ConfirmationModal>
-
-            {/* Receipt Format Selector Modal */}
             <PickerBottomSheet
                 visible={showFormatModal}
                 onClose={() => setShowFormatModal(false)}
@@ -410,8 +170,6 @@ export default function SettingsScreen({ navigation }: any) {
                 ]}
                 onSelect={(val) => handleSetFormat(val as ReceiptDefaultFormat)}
             />
-
-            {/* Receipt Action Selector Modal */}
             <PickerBottomSheet
                 visible={showActionModal}
                 onClose={() => setShowActionModal(false)}
@@ -423,12 +181,11 @@ export default function SettingsScreen({ navigation }: any) {
                 ]}
                 onSelect={(val) => handleSetAction(val as ReceiptDefaultAction)}
             />
-
         </View>
     );
 }
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
+const getStyles = (theme: any) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.background,
@@ -448,67 +205,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: 32,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-    },
-    profileEditBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.colors.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-        ...theme.shadows.small,
-    },
-    profileCard: {
-        backgroundColor: theme.colors.surface,
-        marginHorizontal: theme.spacing.l,
-        padding: theme.spacing.m,
-        borderRadius: 24,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        ...theme.shadows.small,
-        marginBottom: theme.spacing.xl,
-    },
-    profileImageContainer: {
-        width: 75,
-        height: 75,
-        borderRadius: 40,
-        backgroundColor: theme.colors.accentLight,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: theme.spacing.m,
-    },
-    profileImage: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 40,
-    },
-    profileInfo: {
-        flex: 1,
-    },
-    profileName: {
-        fontSize: 18,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-    },
-    profileEmail: {
-        fontSize: 14,
-        color: theme.colors.textSecondary,
-        marginTop: 2,
-    },
-    editProfileChip: {
-        backgroundColor: theme.colors.accentLight,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-        alignSelf: 'flex-start',
-        marginTop: 10,
-    },
-    editProfileText: {
-        fontSize: 12,
-        color: theme.colors.accent,
-        fontWeight: theme.typography.semiBold,
     },
     section: {
         marginBottom: theme.spacing.xl,
@@ -563,38 +259,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         color: theme.colors.textPrimary,
         fontWeight: theme.typography.medium,
     },
-    logoutWrapper: {
-        marginTop: theme.spacing.l,
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.l,
-        marginBottom: theme.spacing.m,
-    },
-    versionWrapper: {
-        alignItems: 'center',
-        paddingVertical: theme.spacing.xl,
-    },
-    logoutBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.danger + '10',
-        paddingVertical: 14,
-        paddingHorizontal: 24,
-        borderRadius: 16,
-        gap: 10,
-        width: '100%',
-    },
-    logoutText: {
-        fontSize: 16,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.danger,
-    },
-    version: {
-        marginTop: theme.spacing.xl,
-        color: theme.colors.textTertiary,
-        fontSize: 12,
-        fontWeight: theme.typography.medium,
-    },
     loaderOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.85)',
@@ -615,24 +279,4 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         marginTop: 8,
         textAlign: 'center',
     },
-    deleteOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: isDark ? theme.colors.background : theme.colors.surfaceVariant,
-        padding: 16,
-        borderRadius: 16,
-        marginTop: 8,
-    },
-    checkboxLabel: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    deleteOptionText: {
-        fontSize: 14,
-        color: theme.colors.textPrimary,
-        fontWeight: theme.typography.medium,
-    }
 });
-

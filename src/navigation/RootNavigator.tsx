@@ -31,6 +31,7 @@ import PropertySettingsScreen from '../screens/properties/property/PropertySetti
 import ExpensesScreen from '../screens/properties/property/ExpensesScreen';
 import TermsEditorScreen from '../screens/settings/TermsEditorScreen';
 import ProfileScreen from '../screens/settings/ProfileScreen';
+import AccountScreen from '../screens/settings/AccountScreen';
 import PrivacyScreen from '../screens/settings/PrivacyScreen';
 import BackupScreen from '../screens/settings/BackupScreen';
 import AboutScreen from '../screens/settings/AboutScreen';
@@ -84,6 +85,7 @@ export default function RootNavigator() {
                         <Stack.Screen name="RentReceiptConfig" component={RentReceiptConfigScreen} />
                         <Stack.Screen name="PaymentAccountEditor" component={PaymentAccountEditorScreen} />
                         <Stack.Screen name="TermsEditor" component={TermsEditorScreen} />
+                        <Stack.Screen name="Account" component={AccountScreen} />
                         <Stack.Screen name="Profile" component={ProfileScreen} />
                         <Stack.Screen name="Privacy" component={PrivacyScreen} />
                         <Stack.Screen name="Backup" component={BackupScreen} />

@@ -96,13 +96,16 @@ export default function DashboardScreen({ navigation }: any) {
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.profileRow}>
-                        <View style={styles.avatar}>
+                        <Pressable
+                            onPress={() => navigation.navigate('Account')}
+                            style={({ pressed }) => [styles.avatar, pressed ? { opacity: 0.7 } : null]}
+                        >
                             {user?.photoUrl ? (
                                 <Image source={{ uri: getFullImageUri(user.photoUrl) || user.photoUrl }} style={styles.avatarImage} />
                             ) : (
                                 <Text style={styles.avatarText}>{user?.name?.[0] || 'U'}</Text>
                             )}
-                        </View>
+                        </Pressable>
                         <View>
                             <Text style={styles.greeting}>WELCOME BACK</Text>
                             <Text style={styles.username}>{user?.name || 'Command Center'}</Text>
