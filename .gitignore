@@ -47,3 +47,5 @@ GoogleService-Info.plist
 /tasks
 
 .env*
+goldie/out/
+.argent/

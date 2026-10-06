@@ -1,0 +1,82 @@
+const config = {
+  appRoot: "/Users/pushkarasharma/Desktop/Personal/RentVelo/RentVelo",
+  appPath: "",
+  bundleId: "com.indieroots.rentVelo",
+  android: {
+    appPath: "/Users/pushkarasharma/Desktop/Personal/RentVelo/RentVelo/android/app/build/outputs/apk/release/app-release.apk",
+    applicationId: "com.indieroots.rentVelo",
+  },
+  devices: ["pixel-10-pro"],
+  locales: ["en-US"],
+  appearance: "light",
+  frame: { variant: "17-pro-blue" },
+  theme: {
+    background: "linear-gradient(165deg, #E8F1FF 0%, #F4F8FF 50%, #FFFFFF 100%)",
+    headlineColor: "#0E1B2A",
+    subheadColor: "#5A6A7D",
+    fontFamily: '"DM Sans", -apple-system, system-ui, sans-serif',
+    copyHeightRatio: 0.22,
+    deviceWidthRatio: 0.78,
+    template: "uniform",
+    layout: "classic",
+  },
+  store: {
+    name: "RentVelo",
+    subtitle: { "en-US": "Rent collection, simplified" },
+    developer: "IndieRoots",
+    category: "Business",
+    rating: 4.8,
+    ratingCount: "New",
+    ageRating: "3+",
+    price: "Free",
+    description: {
+      "en-US": "RentVelo helps landlords track every property, collect rent, and see what is still due.\n\nRecord payments, follow each tenant, and keep a private backup of your records.",
+    },
+  },
+  scenes: [
+    {
+      kind: "screenshot",
+      id: "dashboard",
+      flow: "provided",
+      headline: { "en-US": "See every rupee due" },
+      subhead: { "en-US": "Expected, collected, and pending across all your properties." },
+    },
+    {
+      kind: "screenshot",
+      id: "rent",
+      flow: "provided",
+      headline: { "en-US": "Collect rent in one tap" },
+      subhead: { "en-US": "Rent, utilities, and past dues per unit, with reminders a swipe away." },
+    },
+    {
+      kind: "screenshot",
+      id: "revenue",
+      flow: "provided",
+      headline: { "en-US": "See where the rent goes" },
+      subhead: { "en-US": "Rent, utilities, and past dues in one breakdown." },
+    },
+    {
+      kind: "screenshot",
+      id: "payments",
+      flow: "provided",
+      headline: { "en-US": "Every payment, recorded" },
+      subhead: { "en-US": "Recent collections in one ledger, ready to share." },
+    },
+    {
+      kind: "screenshot",
+      id: "tenant",
+      flow: "provided",
+      headline: { "en-US": "Each tenant, one card" },
+      subhead: { "en-US": "Dues, deposit, and payment history in one place." },
+    },
+    {
+      kind: "screenshot",
+      id: "backup",
+      flow: "provided",
+      headline: { "en-US": "Your records, backed up" },
+      subhead: { "en-US": "Keep rent data and photos safe in Google Drive." },
+    },
+  ],
+};
+
+export default config;
