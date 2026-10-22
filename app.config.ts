@@ -24,7 +24,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         NSCameraUsageDescription: "RentVelo uses your camera to photograph property documents, rent agreements, and receipts so you can store and share them with your tenants.",
         NSPhotoLibraryUsageDescription: "RentVelo accesses your photo library to attach images of property documents, rent receipts, and agreements to your rental records.",
         NSPhotoLibraryAddUsageDescription: "RentVelo saves generated rent receipts and documents to your photo library so you can easily share them with tenants.",
-        NSContactsUsageDescription: "RentVelo accesses your contacts to quickly import tenant details like name and phone number when adding a new tenant, so you don't have to type them manually."
+        NSContactsUsageDescription: "RentVelo accesses your contacts to quickly import tenant details like name and phone number when adding a new tenant, so you don't have to type them manually.",
+        UIBackgroundModes: ["remote-notification"],
       },
       entitlements: {
         "com.apple.developer.applesignin": ["Default"]

@@ -1,6 +1,7 @@
 import { storage } from '../utils/storage';
 import { revokeGoogleAccess, isSignedIn } from './googleAuthService';
 import { signOutApple } from './appleAuthService';
+import { deletePhoneAccount } from './phoneAuthService';
 import { deleteBackupFromDrive } from './backupService';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -14,7 +15,7 @@ const IMAGES_DIR_NAME = 'RentVeloImages';
  */
 export const deleteAccountData = async (
     userId: string, 
-    authMethod: 'google' | 'apple', 
+    authMethod: 'google' | 'apple' | 'phone', 
     deleteCloudBackup: boolean
 ): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -42,6 +43,10 @@ export const deleteAccountData = async (
             } catch (e) {
                 console.warn('Sign out Apple failed, continuing cleanup...', e);
             }
+        }
+
+        if (authMethod === 'phone') {
+            await deletePhoneAccount();
         }
 
         // 3. Wipe SQLite Database

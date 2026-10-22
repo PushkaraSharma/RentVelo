@@ -5,7 +5,7 @@ const ONBOARDING_KEY = 'isOnboarded';
 const SETUP_COMPLETE_KEY = 'isSetupComplete';
 const AUTH_KEY = 'authState';
 
-export type AuthMethod = 'google' | 'apple';
+export type AuthMethod = 'google' | 'apple' | 'phone';
 
 interface AuthState {
     isAuthenticated: boolean;
@@ -14,6 +14,7 @@ interface AuthState {
     user: {
         name: string;
         email: string;
+        phone?: string;
         photoUrl?: string;
     } | null;
     isGoogleLinked: boolean;
@@ -64,17 +65,31 @@ const authSlice = createSlice({
     name: 'auth',
     initialState,
     reducers: {
-        login: (state, action: PayloadAction<{ name: string; email: string; photoUrl?: string; isGoogleLinked?: boolean; authMethod?: AuthMethod }>) => {
+        login: (state, action: PayloadAction<{ name: string; email: string; phone?: string; photoUrl?: string; isGoogleLinked?: boolean; authMethod?: AuthMethod }>) => {
             state.isAuthenticated = true;
+            let phone = state.user?.phone;
+            if (action.payload.phone !== undefined) {
+                phone = action.payload.phone;
+            } else if (action.payload.authMethod && action.payload.authMethod !== 'phone') {
+                phone = undefined;
+            }
             state.user = {
                 name: action.payload.name,
                 email: action.payload.email,
-                photoUrl: action.payload.photoUrl
+                photoUrl: action.payload.photoUrl,
+                ...(phone ? { phone } : {}),
             };
-            state.authMethod = action.payload.authMethod ?? (action.payload.isGoogleLinked ? 'google' : 'apple');
+            if (action.payload.authMethod) {
+                state.authMethod = action.payload.authMethod;
+            } else if (!state.authMethod) {
+                state.authMethod = action.payload.isGoogleLinked ? 'google' : 'apple';
+            }
             // isGoogleLinked means Drive appData access is granted, not merely Google identity.
-            state.isGoogleLinked = action.payload.isGoogleLinked ?? false;
-            state.googleEmail = action.payload.isGoogleLinked ? action.payload.email : null;
+            // Leave it unchanged when the caller is only updating the profile.
+            if (action.payload.isGoogleLinked !== undefined) {
+                state.isGoogleLinked = action.payload.isGoogleLinked;
+                state.googleEmail = action.payload.isGoogleLinked ? action.payload.email : null;
+            }
             saveAuthState(state);
         },
         logout: (state) => {

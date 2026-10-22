@@ -24,7 +24,7 @@ export default function ProfileScreen({ navigation }: any) {
     const styles = getStyles(theme, isDark);
     const insets = useSafeAreaInsets();
     const dispatch = useDispatch();
-    const { user } = useSelector((state: RootState) => state.auth);
+    const { user, authMethod, isGoogleLinked } = useSelector((state: RootState) => state.auth);
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
     const [phone, setPhone] = useState('');
@@ -49,14 +49,21 @@ export default function ProfileScreen({ navigation }: any) {
         const data = storage.getString('@user_profile');
         if (data) {
             const parsed = JSON.parse(data);
-            setPhone(parsed.phone || '');
+            setPhone(parsed.phone || user?.phone || '');
             setBusinessName(parsed.businessName || '');
+        } else if (user?.phone) {
+            setPhone(user.phone);
         }
     };
 
     const handleSave = async () => {
-        if (!name || !email) {
-            showToast({ type: 'error', title: 'Error', message: 'Name and Email are required.' });
+        const phoneLogin = authMethod === 'phone';
+        if (!name || (!phoneLogin && !email)) {
+            showToast({
+                type: 'error',
+                title: 'Error',
+                message: phoneLogin ? 'Name is required.' : 'Name and Email are required.',
+            });
             return;
         }
 
@@ -70,13 +77,19 @@ export default function ProfileScreen({ navigation }: any) {
                 }
             }
 
-            const updatedUser = { name, email, photoUrl: finalPhotoUrl || undefined };
-            dispatch(login(updatedUser)); // Update Redux
-            storage.set('@user_profile', JSON.stringify({ phone, businessName })); // Save extra fields
+            const updatedUser = {
+                name,
+                email: email || '',
+                phone: user?.phone,
+                photoUrl: finalPhotoUrl || undefined,
+                authMethod: authMethod ?? undefined,
+                isGoogleLinked,
+            };
+            dispatch(login(updatedUser));
+            storage.set('@user_profile', JSON.stringify({ phone, businessName }));
 
-            // Sync updated identity to analytics & crash reporting
-            await setAnalyticsUser({ email, name });
-            await setCrashlyticsUser({ email, name });
+            await setAnalyticsUser({ email, name, phone: user?.phone });
+            await setCrashlyticsUser({ email, name, phone: user?.phone });
 
             showToast({ type: 'success', title: 'Success', message: 'Profile updated successfully' });
             navigation.goBack();

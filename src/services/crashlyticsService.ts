@@ -12,15 +12,15 @@ import crashlytics from '@react-native-firebase/crashlytics';
  * Set the user identifier for crash reports.
  * Call on login so crashes are linked to specific users.
  */
-export const setCrashlyticsUser = async (user: { email: string; name: string } | null) => {
+export const setCrashlyticsUser = async (user: { email?: string; phone?: string; name: string } | null) => {
     if (__DEV__) return;
     try {
         if (user) {
-            await crashlytics().setUserId(user.email);
-            await crashlytics().setAttributes({
-                email: user.email,
-                name: user.name,
-            });
+            await crashlytics().setUserId(user.email || user.phone || '');
+            const attributes: Record<string, string> = { name: user.name };
+            if (user.email) attributes.email = user.email;
+            if (user.phone) attributes.phone = user.phone;
+            await crashlytics().setAttributes(attributes);
         } else {
             await crashlytics().setUserId('');
         }

@@ -19,8 +19,8 @@ export const notifyNewUserSignup = (name: string, email: string, platform: strin
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            content: `🎉 **New RentVelo User!**\nName: ${name}\nEmail: ${email}\nOS: ${platform}`,
-            text: `🎉 *New RentVelo User!*\nName: ${name}\nEmail: ${email}\nOS: ${platform}`
+            content: `🎉 **New RentVelo User!**\nName: ${name}\nContact: ${email}\nOS: ${platform}`,
+            text: `🎉 *New RentVelo User!*\nName: ${name}\nContact: ${email}\nOS: ${platform}`
         })
     }).catch(error => {
         // 4. Fail silently. The user is not affected if this fails.

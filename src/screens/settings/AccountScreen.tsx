@@ -24,6 +24,7 @@ import Header from '../../components/common/Header';
 import { CHANGELOG } from '../../utils/Constants';
 import { openHowToVideos } from '../../utils/howToVideos';
 import { signOutGoogle } from '../../services/googleAuthService';
+import { signOutPhone } from '../../services/phoneAuthService';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getFullImageUri } from '../../services/imageService';
 import { trackEvent, AnalyticsEvents, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
@@ -46,6 +47,9 @@ export default function AccountScreen({ navigation }: any) {
     const confirmLogout = async () => {
         setIsDeleting(true);
         try {
+            if (authMethod === 'phone') {
+                await signOutPhone();
+            }
             await signOutGoogle();
         } catch (e) {
             // Ignored if not signed in or error occurs
@@ -134,7 +138,7 @@ export default function AccountScreen({ navigation }: any) {
                     </View>
                     <View style={styles.profileInfo}>
                         <Text style={styles.profileName}>{user?.name || 'Velo Owner'}</Text>
-                        <Text style={styles.profileEmail}>{user?.email || 'owner@rentvelo.com'}</Text>
+                        <Text style={styles.profileEmail}>{user?.phone || user?.email || 'owner@rentvelo.com'}</Text>
                         <Pressable style={styles.editProfileChip} onPress={() => navigation.navigate('Profile')}>
                             <Text style={styles.editProfileText}>Manage Profile</Text>
                         </Pressable>

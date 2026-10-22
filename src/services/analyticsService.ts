@@ -140,15 +140,16 @@ export const setPortfolioStats = async (stats: { propertyCount: number; tenantCo
  * This links all future events to this specific user ID (email).
  * Call with null on logout to stop tracking that specific ID.
  */
-export const setAnalyticsUser = async (user: { email: string; name: string } | null) => {
+export const setAnalyticsUser = async (user: { email?: string; phone?: string; name: string } | null) => {
     try {
         if (__DEV__) {
             console.log('[Analytics:DEV] Set user:', user);
             return;
         }
         if (user) {
-            await setUserId(analytics, user.email);
-            await setUserProperty(analytics, 'email', user.email);
+            await setUserId(analytics, user.email || user.phone || null);
+            if (user.email) await setUserProperty(analytics, 'email', user.email);
+            if (user.phone) await setUserProperty(analytics, 'phone', user.phone);
             await setUserProperty(analytics, 'name', user.name);
         } else {
             await setUserId(analytics, null);
@@ -181,7 +182,7 @@ export const setAnalyticsProperties = async (properties: Record<string, string |
  * Called on login and app open to keep properties fresh.
  *
  * Supported properties:
- *   - auth_method: "google" | "apple"
+ *   - auth_method: "google" | "apple" | "phone"
  *   - platform: "ios" | "android"
  *   - app_version: e.g. "0.0.4_5"
  *   - dark_mode: "true" | "false"
@@ -190,7 +191,7 @@ export const setAnalyticsProperties = async (properties: Record<string, string |
  *   - days_since_signup: e.g. "45"
  */
 export const setEnrichedUserProperties = async (props: {
-    authMethod?: 'google' | 'apple';
+    authMethod?: 'google' | 'apple' | 'phone';
     appVersion?: string;
     darkMode?: boolean;
     hasBackup?: boolean;
