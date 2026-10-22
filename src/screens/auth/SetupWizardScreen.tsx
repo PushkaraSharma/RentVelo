@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, Animated as RNAnimated, Dimensions,
-    KeyboardAvoidingView, Platform, ScrollView, TextInput, InputAccessoryView
+    KeyboardAvoidingView, Platform, ScrollView, InputAccessoryView,
+    type TextInputInstance
 } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -45,11 +46,11 @@ export default function SetupWizardScreen({ navigation }: any) {
     const [loading, setLoading] = useState(false);
     const slideAnim = useRef(new RNAnimated.Value(0)).current;
     const progressAnim = useRef(new RNAnimated.Value(0)).current;
-    const propertyNameRef = useRef<TextInput>(null);
-    const addressRef = useRef<TextInput>(null);
-    const rentAmountRef = useRef<TextInput>(null);
-    const tenantNameRef = useRef<TextInput>(null);
-    const tenantPhoneRef = useRef<TextInput>(null);
+    const propertyNameRef = useRef<TextInputInstance>(null);
+    const addressRef = useRef<TextInputInstance>(null);
+    const rentAmountRef = useRef<TextInputInstance>(null);
+    const tenantNameRef = useRef<TextInputInstance>(null);
+    const tenantPhoneRef = useRef<TextInputInstance>(null);
 
     // Step 1: Property
     const [propertyName, setPropertyName] = useState('');

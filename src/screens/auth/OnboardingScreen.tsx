@@ -1,163 +1,240 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, Pressable, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppTheme } from '../../theme/ThemeContext';
+import React, { useRef, useState } from 'react';
+import { FlatList, Image, ImageSourcePropType, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Animated, {
+    Extrapolation,
+    interpolate,
+    SharedValue,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import { completeOnboarding } from '../../redux/authSlice';
+import { lightColors } from '../../theme';
 
-const { width } = Dimensions.get('window');
-
-const slides = [
+const slides: { key: string; image: ImageSourcePropType; title: string; body: string }[] = [
     {
-        id: 1,
+        key: 'collections',
         title: 'Automated Collections',
-        description: 'Set up automated reminders for tenants and let our system handle rent calculations instantly. Never miss a payment again.',
-        imagePlaceholder: 'Automated Collections UI',
+        body: 'Set up automated reminders for tenants and let our system handle rent calculations instantly. Never miss a payment again.',
         image: require('../../../assets/onboard-1.png'),
     },
     {
-        id: 2,
+        key: 'manage',
         title: 'Manage with Ease',
-        description: 'Track rent, units, and tenants in one simple command center. Experience property management reimagined.',
-        imagePlaceholder: 'Building Image',
+        body: 'Track rent, units, and tenants in one simple command center. Experience property management reimagined.',
         image: require('../../../assets/onboard-2.png'),
-    }
+    },
 ];
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<(typeof slides)[number]>);
+
+const Slide = ({ item, index, scrollX, width, height, imageHeight }: { item: (typeof slides)[number]; index: number; scrollX: SharedValue<number>; width: number; height: number; imageHeight: number }) => {
+    const imageStyle = useAnimatedStyle(() => {
+        const input = [(index - 1) * width, index * width, (index + 1) * width];
+        return {
+            opacity: interpolate(scrollX.value, input, [0.35, 1, 0.35], Extrapolation.CLAMP),
+            transform: [{ translateX: interpolate(scrollX.value, input, [width * 0.18, 0, -width * 0.18], Extrapolation.CLAMP) }],
+        };
+    });
+
+    const textStyle = useAnimatedStyle(() => {
+        const input = [(index - 1) * width, index * width, (index + 1) * width];
+        return {
+            opacity: interpolate(scrollX.value, input, [0, 1, 0], Extrapolation.CLAMP),
+            transform: [{ translateY: interpolate(scrollX.value, input, [14, 0, 14], Extrapolation.CLAMP) }],
+        };
+    });
+
+    return (
+        <View style={[styles.slide, { width, height }]}>
+            <Animated.View style={[styles.illustration, { height: imageHeight }, imageStyle]}>
+                <Image source={item.image} style={styles.image} resizeMode="contain" />
+            </Animated.View>
+            <Animated.View style={[styles.copy, textStyle]}>
+                <Text style={styles.title}>{item.title}</Text>
+                <Text style={styles.body}>{item.body}</Text>
+            </Animated.View>
+        </View>
+    );
+};
+
+const Dot = ({ index, scrollX, width }: { index: number; scrollX: SharedValue<number>; width: number }) => {
+    const style = useAnimatedStyle(() => {
+        const input = [(index - 1) * width, index * width, (index + 1) * width];
+        return {
+            width: interpolate(scrollX.value, input, [8, 22, 8], Extrapolation.CLAMP),
+            opacity: interpolate(scrollX.value, input, [0.35, 1, 0.35], Extrapolation.CLAMP),
+        };
+    });
+    return <Animated.View style={[styles.dot, style]} />;
+};
 
 export default function OnboardingScreen() {
     const dispatch = useDispatch();
-    const { theme, isDark } = useAppTheme();
-    const styles = getStyles(theme, isDark);
-    const [currentSlideIndex, setCurrentSlideIndex] = React.useState(0);
+    const { width, height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
+    const listRef = useRef<FlatList<(typeof slides)[number]>>(null);
+    const indexRef = useRef(0);
+    const leavingRef = useRef(false);
+    const scrollX = useSharedValue(0);
+    const [index, setIndex] = useState(0);
+    const [listHeight, setListHeight] = useState(0);
 
-    const handleNext = () => {
-        if (currentSlideIndex < slides.length - 1) {
-            setCurrentSlideIndex(currentSlideIndex + 1);
-        } else {
-            dispatch(completeOnboarding());
-        }
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: (event) => {
+            scrollX.value = event.contentOffset.x;
+        },
+    });
+
+    const settleIndex = (offsetX: number) => {
+        const next = Math.min(slides.length - 1, Math.max(0, Math.round(offsetX / width)));
+        indexRef.current = next;
+        setIndex(next);
     };
 
-    const handleSkip = () => {
+    const finish = () => {
+        if (leavingRef.current) return;
+        leavingRef.current = true;
         dispatch(completeOnboarding());
     };
 
+    const goNext = () => {
+        if (indexRef.current >= slides.length - 1) {
+            finish();
+            return;
+        }
+        const next = indexRef.current + 1;
+        listRef.current?.scrollToIndex({ index: next, animated: true });
+        indexRef.current = next;
+        setIndex(next);
+    };
+
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <Pressable onPress={handleSkip}>
-                    <Text style={styles.skipText}>Skip</Text>
-                </Pressable>
-            </View>
-
-            {/* Content */}
-            <View style={styles.content}>
-                {/* Placeholder for Image */}
-                <View style={styles.imageContainer}>
-                    <Image source={slides[currentSlideIndex].image} style={styles.image} />
-                </View>
-
-                {/* Indicators */}
-                <View style={styles.indicatorContainer}>
-                    {slides.map((_, index) => (
-                        <View
-                            key={index}
-                            style={[
-                                styles.indicator,
-                                currentSlideIndex === index && styles.activeIndicator
-                            ]}
+        <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.list} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)}>
+                <AnimatedFlatList
+                    ref={listRef}
+                    data={slides}
+                    horizontal
+                    pagingEnabled
+                    bounces={false}
+                    showsHorizontalScrollIndicator={false}
+                    keyExtractor={(item) => item.key}
+                    renderItem={({ item, index: slideIndex }) => (
+                        <Slide
+                            item={item}
+                            index={slideIndex}
+                            scrollX={scrollX}
+                            width={width}
+                            height={listHeight}
+                            imageHeight={Math.min(Math.round(windowHeight * 0.34), Math.max(listHeight - 188, 180))}
                         />
+                    )}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
+                    getItemLayout={(_, itemIndex) => ({ length: width, offset: width * itemIndex, index: itemIndex })}
+                    onMomentumScrollEnd={(event) => settleIndex(event.nativeEvent.contentOffset.x)}
+                    onScrollEndDrag={(event) => {
+                        const offsetX = event.nativeEvent.contentOffset.x;
+                        const maxOffset = (slides.length - 1) * width;
+                        if (offsetX > maxOffset + 48) finish();
+                        else settleIndex(offsetX);
+                    }}
+                />
+            </View>
+            <View style={styles.footer}>
+                <View style={styles.dots}>
+                    {slides.map((slide, dotIndex) => (
+                        <Dot key={slide.key} index={dotIndex} scrollX={scrollX} width={width} />
                     ))}
                 </View>
-
-                <Text style={styles.title}>{slides[currentSlideIndex].title}</Text>
-                <Text style={styles.description}>{slides[currentSlideIndex].description}</Text>
+                <View style={styles.actions}>
+                    <Text style={styles.skip} onPress={finish}>Skip</Text>
+                    <Pressable style={styles.nextButton} onPress={goNext}>
+                        <Text style={styles.nextLabel}>{index === slides.length - 1 ? 'Get started' : 'Next'}</Text>
+                    </Pressable>
+                </View>
             </View>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-                <Pressable style={styles.button} onPress={handleNext}>
-                    <Text style={styles.buttonText}>{currentSlideIndex === slides.length - 1 ? 'Get Started' : 'Next'}</Text>
-                </Pressable>
-            </View>
-        </SafeAreaView>
+        </View>
     );
 }
 
-const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
-    container: {
+const styles = StyleSheet.create({
+    screen: {
         flex: 1,
-        backgroundColor: theme.colors.background,
+        backgroundColor: '#FFFFFF',
     },
-    header: {
-        padding: theme.spacing.m,
-        alignItems: 'flex-end',
-    },
-    skipText: {
-        color: theme.colors.textSecondary,
-        fontSize: theme.typography.m,
-        fontWeight: theme.typography.medium,
-    },
-    content: {
+    list: {
         flex: 1,
+    },
+    slide: {
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.l,
     },
-    imageContainer: {
-        width: width * 0.8,
-        height: width * 0.8,
-        marginBottom: theme.spacing.xl,
-        ...theme.shadows.medium,
-    },
-    indicatorContainer: {
-        flexDirection: 'row',
-        marginBottom: theme.spacing.l,
-    },
-    indicator: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: theme.colors.textTertiary,
-        marginHorizontal: 4
-    },
-    activeIndicator: {
-        backgroundColor: theme.colors.accent,
-        width: 20,
-    },
-    title: {
-        fontSize: theme.typography.xxl,
-        fontWeight: theme.typography.bold,
-        color: theme.colors.textPrimary,
-        marginBottom: theme.spacing.s,
-        textAlign: 'center',
-        marginTop: 20
-    },
-    description: {
-        fontSize: theme.typography.m,
-        color: theme.colors.textSecondary,
-        textAlign: 'center',
-        lineHeight: 24,
-    },
-    footer: {
-        padding: theme.spacing.l,
-    },
-    button: {
-        backgroundColor: isDark ? theme.colors.accent : theme.colors.primary,
-        paddingVertical: theme.spacing.m,
-        borderRadius: theme.borderRadius.l,
-        alignItems: 'center',
-    },
-    buttonText: {
-        color: theme.colors.primaryForeground,
-        fontSize: theme.typography.m,
-        fontWeight: theme.typography.semiBold,
+    illustration: {
+        width: '78%',
+        justifyContent: 'center',
     },
     image: {
         width: '100%',
         height: '100%',
-        resizeMode: 'cover',
-        borderRadius: theme.borderRadius.xl
-    }
+    },
+    copy: {
+        alignSelf: 'stretch',
+        paddingHorizontal: 20,
+        marginTop: 24,
+    },
+    title: {
+        fontSize: 32,
+        fontWeight: '700',
+        color: lightColors.textPrimary,
+        textAlign: 'center',
+    },
+    body: {
+        marginTop: 12,
+        fontSize: 14,
+        lineHeight: 22,
+        color: '#4B5563',
+        textAlign: 'center',
+    },
+    footer: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+    },
+    dots: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 20,
+    },
+    dot: {
+        height: 8,
+        borderRadius: 9999,
+        backgroundColor: lightColors.accent,
+    },
+    actions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    skip: {
+        fontSize: 14,
+        color: '#4B5563',
+    },
+    nextButton: {
+        backgroundColor: lightColors.accent,
+        borderRadius: 9999,
+        minWidth: 148,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    nextLabel: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '500',
+    },
 });

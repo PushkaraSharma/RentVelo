@@ -24,7 +24,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const insets = useSafeAreaInsets();
     const [toast, setToast] = useState<ToastOptions | null>(null);
     const slideAnim = useRef(new Animated.Value(-200)).current;
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const hideToast = useCallback(() => {
         Animated.timing(slideAnim, {

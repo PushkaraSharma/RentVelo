@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, StyleSheet, TextInputProps } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TextInputProps, type TextInputInstance } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 
 interface InputProps extends TextInputProps {
@@ -9,7 +9,7 @@ interface InputProps extends TextInputProps {
     containerStyle?: any;
 }
 
-const Input = React.forwardRef<TextInput, InputProps>(function Input(
+const Input = React.forwardRef<TextInputInstance, InputProps>(function Input(
     { label, icon, error, style, containerStyle, ...props },
     ref
 ) {

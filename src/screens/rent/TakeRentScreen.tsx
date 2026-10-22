@@ -258,7 +258,7 @@ export default function TakeRentScreen({ navigation, route }: any) {
                 maxToRenderPerBatch={10}
                 windowSize={5}
                 removeClippedSubviews={Platform.OS === 'android'}
-                ListEmptyComponent={loading ? null : (
+                ListEmptyComponent={loading ? undefined : (
                     <View style={styles.emptyContainer}>
                         <Text style={styles.emptyTitle}>No rooms found</Text>
                         <Text style={styles.emptySubtitle}>

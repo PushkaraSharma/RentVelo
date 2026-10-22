@@ -90,10 +90,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                                 onConfirm();
                             }}
                             variant="primary"
-                            style={StyleSheet.flatten([
-                                styles.actionBtn,
-                                variant === 'danger' ? { backgroundColor: theme.colors.danger } : {}
-                            ])}
+                            style={variant === 'danger' ? { ...styles.actionBtn, backgroundColor: theme.colors.danger } : styles.actionBtn}
                             loading={loading}
                         />
                     </View>

@@ -12,7 +12,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "experiments": {
+      "reactCompiler": true
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": appIdentifier,
@@ -33,7 +35,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": appIdentifier,
       "permissions": [
@@ -59,6 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       "expo-sqlite",
       "expo-web-browser",
       "@react-native-firebase/app",
+      "./plugins/withFirebaseConfigure",
       "@react-native-firebase/auth",
       "@react-native-firebase/crashlytics",
       "@react-native-google-signin/google-signin",
@@ -86,7 +88,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         {
           ios: {
             useFrameworks: "static",
-            deploymentTarget: "15.5",
+            deploymentTarget: "16.4",
             podfileProperties: {
               use_modular_headers: "true",
             },
