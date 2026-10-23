@@ -6,7 +6,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch } from 'react-redux';
 import { login } from '../../redux/authSlice';
 import { initGoogleAuth, signInWithGoogle } from '../../services/googleAuthService';
-import { applyDriveAccessGranted, ensureDriveAccess } from '../../services/backupService';
+import { applyDriveAccessGranted, clearFreshSetupProperty, ensureDriveAccess, hasFreshSetupProperty } from '../../services/backupService';
 import { signInWithApple } from '../../services/appleAuthService';
 import {
     confirmPhoneOtp,
@@ -40,6 +40,7 @@ export default function WelcomeScreen() {
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = getStyles(theme);
+    const savingProperty = hasFreshSetupProperty();
     const [googleLoading, setGoogleLoading] = React.useState(false);
     const [appleLoading, setAppleLoading] = React.useState(false);
     const [phoneLoading, setPhoneLoading] = React.useState(false);
@@ -132,6 +133,7 @@ export default function WelcomeScreen() {
             setAppleLoading(true);
             const user = await signInWithApple();
             if (user) {
+                clearFreshSetupProperty();
                 dispatch(login({
                     name: user.name || 'Apple User',
                     email: user.email || 'Private Apple ID',
@@ -174,6 +176,7 @@ export default function WelcomeScreen() {
     };
 
     const finishPhoneLogin = async (phone: string) => {
+        clearFreshSetupProperty();
         dispatch(login({
             name: 'Owner',
             email: '',

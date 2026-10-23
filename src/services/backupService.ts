@@ -113,6 +113,18 @@ export const markRestorePromptHandled = (email: string, info: DriveBackupInfo) =
     storage.set(BACKUP_KEYS.RESTORE_PROMPT, restorePromptKey(email, info));
 };
 
+const FRESH_SETUP_KEY = '@setup_fresh_property';
+
+export const markFreshSetupProperty = () => {
+    storage.set(FRESH_SETUP_KEY, '1');
+};
+
+export const hasFreshSetupProperty = () => storage.getString(FRESH_SETUP_KEY) === '1';
+
+export const clearFreshSetupProperty = () => {
+    storage.remove(FRESH_SETUP_KEY);
+};
+
 export const clearBackupSessionFlags = () => {
     storage.remove(BACKUP_KEYS.AUTO_ENABLED);
     storage.remove(BACKUP_KEYS.AUTO_LAST_SUCCESS);

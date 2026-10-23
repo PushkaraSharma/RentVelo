@@ -65,10 +65,10 @@ export default function RootNavigator() {
             <Stack.Navigator screenOptions={{ headerShown: false }}>
                 {!isOnboarded ? (
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                ) : !isAuthenticated ? (
-                    <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 ) : !isSetupComplete ? (
                     <Stack.Screen name="SetupWizard" component={SetupWizardScreen} />
+                ) : !isAuthenticated ? (
+                    <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 ) : (
                     <>
                         <Stack.Screen name="Main" component={TabNavigator} />

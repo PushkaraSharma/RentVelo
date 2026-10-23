@@ -3,9 +3,11 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../redux/store';
 import ConfirmationModal from './common/ConfirmationModal';
 import {
+    clearFreshSetupProperty,
     completeRestoreFromDrive,
     formatBackupTime,
     getDriveBackupInfo,
+    hasFreshSetupProperty,
     markRestorePromptHandled,
     reloadAppAfterRestore,
     setRestoreDecisionPending,
@@ -46,6 +48,13 @@ export default function RestorePromptHandler() {
                     return;
                 }
                 const email = googleEmail || 'google';
+                if (hasFreshSetupProperty()) {
+                    // Wizard data from this install stays. Restore would replace it.
+                    markRestorePromptHandled(email, info);
+                    clearFreshSetupProperty();
+                    setRestoreDecisionPending(false);
+                    return;
+                }
                 if (wasRestorePromptHandled(email, info)) {
                     setRestoreDecisionPending(false);
                     return;

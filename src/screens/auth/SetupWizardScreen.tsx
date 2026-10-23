@@ -1,16 +1,18 @@
 import React, { useState, useRef } from 'react';
 import {
-    View, Text, StyleSheet, Pressable, Animated as RNAnimated, Dimensions,
-    KeyboardAvoidingView, Platform, ScrollView, InputAccessoryView,
+    View, Text, StyleSheet, Pressable, Animated as RNAnimated,
+    KeyboardAvoidingView, Platform, ScrollView, Keyboard,
     type TextInputInstance
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
+    useAnimatedProps,
     withTiming,
     withDelay,
     Easing,
-    interpolate,
+    runOnJS,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../theme/ThemeContext';
@@ -21,40 +23,114 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { createProperty, createUnit, createTenant } from '../../db';
 import { PROPERTY_TYPES, CURRENCY, OTA_VERSION } from '../../utils/Constants';
-import {
-    Home, Building, Building2, Store, Layers, ArrowRight,
-    MapPin, IndianRupee, User, Phone, ChevronRight, PartyPopper,
-    Sparkles, Check, Star, Circle as CircleIcon
-} from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { trackEvent } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
-import { hapticsLight, hapticsHeavy } from '../../utils/haptics';
+import { hapticsLight, hapticsSuccess } from '../../utils/haptics';
 import { storage } from '../../utils/storage';
+import { markFreshSetupProperty } from '../../services/backupService';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TOTAL_STEPS = 4;
-const SETUP_KEYBOARD_ACCESSORY = 'setupWizardGo';
+const TOTAL_STEPS = 5;
+const RING_R = 34;
+const RING_LEN = 2 * Math.PI * RING_R;
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-export default function SetupWizardScreen({ navigation }: any) {
+function DrawnCheck({ color, track }: { color: string; track: string }) {
+    const ring = useSharedValue(RING_LEN);
+    const check = useSharedValue(0);
+
+    React.useEffect(() => {
+        ring.value = withTiming(0, { duration: 420, easing: Easing.out(Easing.cubic) });
+        check.value = withDelay(340, withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }));
+        const timer = setTimeout(() => hapticsSuccess(), 380);
+        return () => clearTimeout(timer);
+    }, [ring, check]);
+
+    const ringProps = useAnimatedProps(() => ({
+        strokeDashoffset: ring.value,
+    }));
+    const checkStyle = useAnimatedStyle(() => ({
+        opacity: check.value,
+        transform: [{ scale: 0.7 + check.value * 0.3 }],
+    }));
+
+    return (
+        <View style={drawnStyles.wrap}>
+            <Svg width={88} height={88}>
+                <Circle cx={44} cy={44} r={RING_R} fill={track} />
+                <AnimatedCircle
+                    cx={44}
+                    cy={44}
+                    r={RING_R}
+                    stroke={color}
+                    strokeWidth={3.5}
+                    fill="transparent"
+                    strokeDasharray={`${RING_LEN} ${RING_LEN}`}
+                    strokeLinecap="round"
+                    animatedProps={ringProps}
+                    originX={44}
+                    originY={44}
+                    rotation={-90}
+                />
+            </Svg>
+            <Animated.View style={[drawnStyles.check, checkStyle]}>
+                <Check size={34} color={color} strokeWidth={3} />
+            </Animated.View>
+        </View>
+    );
+}
+
+function FadeRow({ index, children }: { index: number; children: React.ReactNode }) {
+    const shown = useSharedValue(0);
+
+    React.useEffect(() => {
+        shown.value = withDelay(
+            460 + index * 90,
+            withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) })
+        );
+    }, [index, shown]);
+
+    const style = useAnimatedStyle(() => ({
+        opacity: shown.value,
+        transform: [{ translateY: (1 - shown.value) * 8 }],
+    }));
+
+    return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+const drawnStyles = StyleSheet.create({
+    wrap: {
+        width: 88,
+        height: 88,
+        marginBottom: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    check: {
+        position: 'absolute',
+    },
+});
+
+export default function SetupWizardScreen() {
     const dispatch = useDispatch();
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
-    const user = useSelector((state: RootState) => state.auth.user);
+    const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
     const styles = getStyles(theme, isDark);
 
     const [step, setStep] = useState(0);
     const [loading, setLoading] = useState(false);
-    const slideAnim = useRef(new RNAnimated.Value(0)).current;
-    const progressAnim = useRef(new RNAnimated.Value(0)).current;
+    const [tenantSaved, setTenantSaved] = useState(false);
+    const progressAnim = useRef(new RNAnimated.Value(1 / TOTAL_STEPS)).current;
+    const animating = useRef(false);
     const propertyNameRef = useRef<TextInputInstance>(null);
-    const addressRef = useRef<TextInputInstance>(null);
     const rentAmountRef = useRef<TextInputInstance>(null);
     const tenantNameRef = useRef<TextInputInstance>(null);
     const tenantPhoneRef = useRef<TextInputInstance>(null);
+    const contentX = useSharedValue(0);
+    const contentOpacity = useSharedValue(1);
 
-    // Step 1: Property
     const [propertyName, setPropertyName] = useState('');
-    const [address, setAddress] = useState('');
     const [propertyType, setPropertyType] = useState('house');
 
     // Step 2: Room/Rent
@@ -68,28 +144,71 @@ export default function SetupWizardScreen({ navigation }: any) {
     const [createdPropertyId, setCreatedPropertyId] = useState<number | null>(null);
     const [createdUnitId, setCreatedUnitId] = useState<number | null>(null);
 
+    const contentStyle = useAnimatedStyle(() => ({
+        opacity: contentOpacity.value,
+        transform: [{ translateX: contentX.value }],
+    }));
+
     const animateToStep = (nextStep: number) => {
+        if (animating.current || nextStep === step) return;
+        animating.current = true;
         hapticsLight();
-        RNAnimated.parallel([
-            RNAnimated.spring(slideAnim, {
-                toValue: nextStep,
-                useNativeDriver: true,
-                tension: 60,
-                friction: 12,
-            }),
-            RNAnimated.timing(progressAnim, {
-                toValue: nextStep / (TOTAL_STEPS - 1),
-                duration: 400,
-                useNativeDriver: false,
-            }),
-        ]).start();
-        setStep(nextStep);
+        RNAnimated.timing(progressAnim, {
+            toValue: (nextStep + 1) / TOTAL_STEPS,
+            duration: 280,
+            useNativeDriver: false,
+        }).start();
+        contentOpacity.value = withTiming(0, { duration: 140 });
+        contentX.value = withTiming(-24, { duration: 140 }, (finished) => {
+            if (finished) runOnJS(setStep)(nextStep);
+            else runOnJS(setAnimating)(false);
+        });
+    };
+
+    const setAnimating = (value: boolean) => {
+        animating.current = value;
+    };
+
+    React.useEffect(() => {
+        const focus = () => {
+            if (step === 0) propertyNameRef.current?.focus();
+            else if (step === 1) rentAmountRef.current?.focus();
+            else if (step === 2) tenantNameRef.current?.focus();
+            else if (step === 3) tenantPhoneRef.current?.focus();
+            else Keyboard.dismiss();
+        };
+        if (step === 0) {
+            const timer = setTimeout(focus, 300);
+            return () => clearTimeout(timer);
+        }
+        contentX.value = 24;
+        contentOpacity.value = 0;
+        contentX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
+        contentOpacity.value = withTiming(1, { duration: 180 });
+        const timer = setTimeout(() => {
+            animating.current = false;
+            focus();
+        }, 180);
+        return () => clearTimeout(timer);
+    }, [step, contentOpacity, contentX]);
+
+    const finishSetup = (event: string, params?: Record<string, string>) => {
+        storage.set('@ota_version', OTA_VERSION.toString());
+        dispatch(completeSetup());
+        trackEvent(event, params);
     };
 
     const handleSkip = () => {
-        storage.set('@ota_version', OTA_VERSION.toString());
-        dispatch(completeSetup());
-        trackEvent('SETUP_SKIPPED', { skipped_at_step: step.toString() });
+        finishSetup('SETUP_SKIPPED', { skipped_at_step: step.toString() });
+    };
+
+    const handleExistingAccount = () => {
+        finishSetup('SETUP_EXISTING_ACCOUNT');
+    };
+
+    const handleSkipTenant = () => {
+        trackEvent('SETUP_STEP_COMPLETED', { step: '3_tenant_skipped' });
+        animateToStep(4);
     };
 
     const handleStep1 = async () => {
@@ -97,47 +216,35 @@ export default function SetupWizardScreen({ navigation }: any) {
             showToast({ type: 'error', title: 'Required', message: 'Please enter property name' });
             return;
         }
-        if (!address.trim()) {
-            showToast({ type: 'error', title: 'Required', message: 'Please enter address' });
+        if (createdPropertyId && createdUnitId) {
+            animateToStep(1);
             return;
         }
         setLoading(true);
         try {
             const isMultiUnit = ['building', 'pg'].includes(propertyType);
             const id = await createProperty({
-                name: propertyName,
-                address,
+                name: propertyName.trim(),
+                // shortcut: address is added later on the property screen
+                address: '',
                 type: propertyType as any,
                 is_multi_unit: isMultiUnit,
                 rent_payment_type: 'current_month',
             });
             setCreatedPropertyId(id);
+            markFreshSetupProperty();
 
-            // Determine default unit name
-            let defaultUnitName = 'Main Property';
-            if (propertyType === 'flat') defaultUnitName = 'Flat 1';
-            else if (['building', 'pg'].includes(propertyType)) defaultUnitName = 'Room 1';
-            else if (propertyType === 'shop') defaultUnitName = 'Shop 1';
-
-            // For single-unit: create default unit immediately (rent set in step 2)
-            if (!isMultiUnit) {
-                const unitId = await createUnit({
-                    property_id: id,
-                    name: defaultUnitName,
-                    rent_amount: 0,
-                    rent_cycle: 'first_of_month',
-                });
-                setCreatedUnitId(unitId);
-            } else {
-                // For multi-unit: create 1 default room
-                const unitId = await createUnit({
-                    property_id: id,
-                    name: defaultUnitName,
-                    rent_amount: 0,
-                    rent_cycle: 'first_of_month',
-                });
-                setCreatedUnitId(unitId);
-            }
+            const defaultUnitName = propertyType === 'flat' ? 'Flat 1'
+                : propertyType === 'shop' ? 'Shop 1'
+                    : isMultiUnit ? 'Room 1'
+                        : 'Main Property';
+            const unitId = await createUnit({
+                property_id: id,
+                name: defaultUnitName,
+                rent_amount: 0,
+                rent_cycle: 'first_of_month',
+            });
+            setCreatedUnitId(unitId);
 
             trackEvent('SETUP_STEP_COMPLETED', { step: '1_property', type: propertyType });
             animateToStep(1);
@@ -167,32 +274,42 @@ export default function SetupWizardScreen({ navigation }: any) {
         }
     };
 
-    const handleStep3 = async () => {
+    const handleTenantName = () => {
         if (!tenantName.trim()) {
             showToast({ type: 'error', title: 'Required', message: 'Please enter tenant name' });
             return;
         }
-        if (!tenantPhone.trim() || tenantPhone.length < 10) {
+        trackEvent('SETUP_STEP_COMPLETED', { step: '3_tenant_name' });
+        animateToStep(3);
+    };
+
+    const handleTenantPhone = async () => {
+        const phone = tenantPhone.replace(/\D/g, '');
+        if (phone.length < 10) {
             showToast({ type: 'error', title: 'Required', message: 'Please enter a valid 10-digit phone number' });
             return;
         }
         if (!createdPropertyId || !createdUnitId) return;
+        if (tenantSaved) {
+            animateToStep(4);
+            return;
+        }
         setLoading(true);
         try {
             await createTenant({
                 property_id: createdPropertyId,
                 unit_id: createdUnitId,
-                name: `Mr. ${tenantName}`,
-                phone: tenantPhone,
+                name: `Mr. ${tenantName.trim()}`,
+                phone,
                 status: 'active',
                 move_in_date: new Date(),
                 rent_start_date: new Date(),
                 lease_type: 'monthly',
                 security_deposit: 0,
             });
+            setTenantSaved(true);
             trackEvent('SETUP_STEP_COMPLETED', { step: '3_tenant' });
-            hapticsHeavy();
-            animateToStep(3);
+            animateToStep(4);
         } catch (error: any) {
             showToast({ type: 'error', title: 'Error', message: error?.message || 'Failed to add tenant' });
         } finally {
@@ -200,401 +317,170 @@ export default function SetupWizardScreen({ navigation }: any) {
         }
     };
 
+    const onContinue = () => {
+        if (animating.current || loading) return;
+        if (step === 0) handleStep1();
+        else if (step === 1) handleStep2();
+        else if (step === 2) handleTenantName();
+        else if (step === 3) handleTenantPhone();
+    };
+
     const handleComplete = () => {
-        storage.set('@ota_version', OTA_VERSION.toString());
-        dispatch(completeSetup());
-        trackEvent('SETUP_COMPLETED');
+        finishSetup('SETUP_COMPLETED');
     };
 
-    const handleGoToCollectRent = () => {
-        storage.set('@ota_version', OTA_VERSION.toString());
-        dispatch(completeSetup());
-        trackEvent('SETUP_COMPLETED', { action: 'go_to_collect_rent' });
-        // Small delay so Redux state propagates before navigation
-        setTimeout(() => {
-            navigation.reset({
-                index: 1,
-                routes: [
-                    { name: 'Main' },
-                    { name: 'TakeRent', params: { propertyId: createdPropertyId } },
-                ],
-            });
-        }, 100);
-    };
+    const rentTitle = ['building', 'pg'].includes(propertyType) ? 'Room rent' : 'Monthly rent';
 
-    const getTypeIcon = (type: string, isActive: boolean) => {
-        const color = isActive ? '#FFFFFF' : theme.colors.textSecondary;
-        const size = 20;
-        switch (type) {
-            case 'house': return <Home size={size} color={color} />;
-            case 'building': return <Building size={size} color={color} />;
-            case 'pg': return <Building2 size={size} color={color} />;
-            case 'shop': return <Store size={size} color={color} />;
-            case 'flat': return <Layers size={size} color={color} />;
-            default: return <Home size={size} color={color} />;
-        }
-    };
-
-    // Progress Bar
     const progressWidth = progressAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: ['0%', '75%'],
+        outputRange: ['0%', '100%'],
     });
 
     const renderStepIndicator = () => (
         <View style={styles.progressContainer}>
-            <View style={styles.stepperWrapper}>
-                {/* Background Track */}
-                <View style={styles.stepperLineTrack} />
-
-                {/* Progress Line */}
-                <RNAnimated.View
-                    style={[
-                        styles.stepperLineFill,
-                        { width: progressWidth }
-                    ]}
-                />
-
-                <View style={styles.stepDotsRow}>
-                    {['Property', 'Rent', 'Tenant', 'Done'].map((label, i) => {
-                        const isActive = i === step;
-                        const isCompleted = i < step;
-
-                        return (
-                            <View key={i} style={styles.stepItem}>
-                                <View style={[
-                                    styles.stepDot,
-                                    isActive && styles.stepDotActive,
-                                    isCompleted && styles.stepDotCompleted
-                                ]}>
-                                    {isCompleted ? (
-                                        <Check size={14} color="#FFF" strokeWidth={3} />
-                                    ) : (
-                                        <Text style={[
-                                            styles.stepDotText,
-                                            isActive && styles.stepDotTextActive
-                                        ]}>
-                                            {i + 1}
-                                        </Text>
-                                    )}
-                                </View>
-                                <Text style={[
-                                    styles.stepLabel,
-                                    (isActive || isCompleted) && styles.stepLabelActive
-                                ]}>
-                                    {label}
-                                </Text>
-                            </View>
-                        );
-                    })}
-                </View>
+            <View style={styles.barTrack}>
+                <RNAnimated.View style={[styles.barFill, { width: progressWidth }]} />
             </View>
         </View>
     );
 
-    const [showConfetti, setShowConfetti] = useState(false);
-
-    React.useEffect(() => {
-        if (step === 3) {
-            setShowConfetti(true);
-            const timer = setTimeout(() => setShowConfetti(false), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [step]);
-
-    const renderStepIcon = (Icon: any) => (
-        <View style={styles.stepIconContainer}>
-            <Icon size={32} color={theme.colors.accent} strokeWidth={2.5} />
-        </View>
-    );
-
-    const ConfettiPiece = ({ index }: { index: number }) => {
-        const progress = useSharedValue(0);
-
-        const angle = (Math.PI * 2 * index) / 50 + (Math.random() - 0.5) * 0.4;
-        const distance = 140 + Math.random() * 220;
-        const targetX = Math.cos(angle) * distance;
-        const targetY = Math.sin(angle) * distance - 80;
-
-        const size = 10 + Math.random() * 12;
-        const icons = [Sparkles, Star, CircleIcon];
-        const Icon = icons[index % icons.length];
-        const colors = [theme.colors.accent, '#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#A29BFE'];
-        const color = colors[index % colors.length];
-
-        React.useEffect(() => {
-            progress.value = withDelay(
-                Math.random() * 200,
-                withTiming(1, {
-                    duration: 2000 + Math.random() * 400,
-                    easing: Easing.out(Easing.exp),
-                })
-            );
-        }, []);
-
-        const animatedStyle = useAnimatedStyle(() => {
-            return {
-                opacity: interpolate(progress.value, [0, 0.1, 0.7, 1], [0, 1, 1, 0]),
-                transform: [
-                    { translateX: interpolate(progress.value, [0, 1], [0, targetX]) },
-                    { translateY: interpolate(progress.value, [0, 1], [0, targetY]) },
-                    { scale: interpolate(progress.value, [0, 0.2, 1], [0, 1.5, 0.5]) },
-                    { rotate: interpolate(progress.value, [0, 1], [0, 360]) + 'deg' },
-                ],
-            };
-        });
-
-        return (
-            <Animated.View style={[styles.confettiPiece, animatedStyle]}>
-                <Icon
-                    size={size}
-                    color={color}
-                    fill={index % 3 === 0 ? color : 'transparent'}
-                    strokeWidth={2}
-                />
-            </Animated.View>
-        );
-    };
-
-    const ConfettiBurst = () => {
-        return (
-            <View style={styles.confettiContainer}>
-                {Array.from({ length: 50 }).map((_, i) => (
-                    <ConfettiPiece key={i} index={i} />
-                ))}
-            </View>
-        );
-    };
-
-    const renderStep1 = () => (
+    const renderQuestion = (title: string, context: string | null, field: React.ReactNode) => (
         <View style={styles.stepContent}>
-            <View style={styles.stepHeader}>
-                {renderStepIcon(Building)}
-                <Text style={styles.stepTitle}>Add Your First Property</Text>
-                <Text style={styles.stepSubtitle}>
-                    Tell us about the property you want to manage
-                </Text>
-            </View>
+            <Text style={styles.stepTitle}>{title}</Text>
+            {!!context && <Text style={styles.context}>{context}</Text>}
+            {field}
+        </View>
+    );
 
-            <View style={styles.formCard}>
-                <Input
-                    ref={propertyNameRef}
-                    label="PROPERTY NAME"
-                    placeholder="e.g. Sunshine Apartments"
-                    value={propertyName}
-                    onChangeText={setPropertyName}
-                    icon={<Building size={20} color={theme.colors.textTertiary} />}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => addressRef.current?.focus()}
-                    autoCapitalize="words"
-                />
-                <Input
-                    ref={addressRef}
-                    label="ADDRESS"
-                    placeholder="e.g. MG Road, Delhi"
-                    value={address}
-                    onChangeText={setAddress}
-                    icon={<MapPin size={20} color={theme.colors.textTertiary} />}
-                    returnKeyType="go"
-                    onSubmitEditing={handleStep1}
-                    autoCapitalize="words"
-                    inputAccessoryViewID={Platform.OS === 'ios' ? SETUP_KEYBOARD_ACCESSORY : undefined}
-                />
-
-                <Text style={styles.fieldLabel}>PROPERTY TYPE</Text>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.typeRow}
-                >
-                    {PROPERTY_TYPES.map((type) => (
+    const renderStep1 = () => renderQuestion(
+        'Name this property',
+        null,
+        <>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.typeRow}
+            >
+                {PROPERTY_TYPES.map((type) => {
+                    const active = propertyType === type.id;
+                    return (
                         <Pressable
                             key={type.id}
-                            style={[styles.typeChip, propertyType === type.id && styles.typeChipActive]}
+                            style={[styles.typeChip, active && styles.typeChipActive]}
                             onPress={() => { hapticsLight(); setPropertyType(type.id); }}
                         >
-                            {getTypeIcon(type.id, propertyType === type.id)}
-                            <Text style={[
-                                styles.typeChipText,
-                                propertyType === type.id && styles.typeChipTextActive
-                            ]}>
+                            <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
                                 {type.label}
                             </Text>
                         </Pressable>
-                    ))}
-                </ScrollView>
-            </View>
-
-            <Button
-                title="Continue"
-                onPress={handleStep1}
-                loading={loading}
-                icon={<ArrowRight size={20} color="#FFF" />}
-                style={styles.ctaButton}
+                    );
+                })}
+            </ScrollView>
+            <Input
+                ref={propertyNameRef}
+                placeholder="Sunshine Apartments"
+                value={propertyName}
+                onChangeText={setPropertyName}
+                returnKeyType="go"
+                onSubmitEditing={onContinue}
+                autoCapitalize="words"
             />
-        </View>
+        </>
     );
 
-    const renderStep2 = () => (
-        <View style={styles.stepContent}>
-            <View style={styles.stepHeader}>
-                {renderStepIcon(IndianRupee)}
-                <Text style={styles.stepTitle}>
-                    {['building', 'pg'].includes(propertyType) ? 'Set Room Rent' : 'Set Monthly Rent'}
-                </Text>
-                <Text style={styles.stepSubtitle}>
-                    {['building', 'pg'].includes(propertyType)
-                        ? 'How much rent do you typically collect per room?'
-                        : 'How much rent do you collect for this property?'}
-                </Text>
-            </View>
-
-            <View style={styles.formCard}>
-                <View style={styles.rentInputContainer}>
-                    <Text style={styles.currencySymbol}>{CURRENCY}</Text>
-                    <Input
-                        ref={rentAmountRef}
-                        placeholder="e.g. 12000"
-                        value={rentAmount}
-                        onChangeText={setRentAmount}
-                        placeholderTextColor={'lightgray'}
-                        keyboardType="numeric"
-                        returnKeyType="go"
-                        onSubmitEditing={handleStep2}
-                        inputAccessoryViewID={Platform.OS === 'ios' ? SETUP_KEYBOARD_ACCESSORY : undefined}
-                        style={styles.rentInput}
-                        containerStyle={{ flex: 1, marginBottom: 0 }}
-                    />
-                </View>
-                <Text style={styles.rentHint}>
-                    This will be the base rent for your property
-                </Text>
-
-                <View style={[styles.infoNote, { marginTop: theme.spacing.m }]}>
-                    <Sparkles size={16} color={theme.colors.accent} />
-                    <Text style={styles.infoNoteText}>
-                        {"Rent bills will be automatically generated on the 1st of every month.\nYou can customize this and rent of each room/unit later."}
-                    </Text>
-                </View>
-            </View>
-
-            <Button
-                title="Continue"
-                onPress={handleStep2}
-                loading={loading}
-                icon={<ArrowRight size={20} color="#FFF" />}
-                style={styles.ctaButton}
-            />
-        </View>
+    const renderStep2 = () => renderQuestion(
+        rentTitle,
+        propertyName.trim(),
+        <Input
+            ref={rentAmountRef}
+            placeholder="12000"
+            value={rentAmount}
+            onChangeText={setRentAmount}
+            keyboardType="number-pad"
+            icon={<Text style={styles.currencySymbol}>{CURRENCY}</Text>}
+        />
     );
 
-    const renderStep3 = () => (
-        <View style={styles.stepContent}>
-            <View style={styles.stepHeader}>
-                {renderStepIcon(User)}
-                <Text style={styles.stepTitle}>Add Your First Tenant</Text>
-                <Text style={styles.stepSubtitle}>
-                    Add tenant details so we can generate rent bills
-                </Text>
-            </View>
+    const renderStep3 = () => renderQuestion(
+        'Who is the tenant?',
+        propertyName.trim(),
+        <Input
+            ref={tenantNameRef}
+            placeholder="Rahul Sharma"
+            value={tenantName}
+            onChangeText={setTenantName}
+            returnKeyType="go"
+            onSubmitEditing={onContinue}
+            autoCapitalize="words"
+        />
+    );
 
-            <View style={styles.formCard}>
-                <Input
-                    ref={tenantNameRef}
-                    label="TENANT NAME"
-                    placeholder="e.g. Rahul Sharma"
-                    value={tenantName}
-                    onChangeText={setTenantName}
-                    icon={<User size={20} color={theme.colors.textTertiary} />}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => tenantPhoneRef.current?.focus()}
-                    autoCapitalize="words"
-                />
-                <Input
-                    ref={tenantPhoneRef}
-                    label="PHONE NUMBER"
-                    placeholder="e.g. 9876543210"
-                    value={tenantPhone}
-                    onChangeText={setTenantPhone}
-                    keyboardType="phone-pad"
-                    returnKeyType="go"
-                    onSubmitEditing={handleStep3}
-                    inputAccessoryViewID={Platform.OS === 'ios' ? SETUP_KEYBOARD_ACCESSORY : undefined}
-                    maxLength={10}
-                    icon={<Phone size={20} color={theme.colors.textTertiary} />}
-                />
-                <View style={styles.infoNote}>
-                    <Sparkles size={16} color={theme.colors.accent} />
-                    <Text style={styles.infoNoteText}>
-                        Move-in & rent start date will be set to today. You can edit these later from the tenant details page.
-                    </Text>
-                </View>
-            </View>
-
-            <Button
-                title="Continue"
-                onPress={handleStep3}
-                loading={loading}
-                icon={<ArrowRight size={20} color="#FFF" />}
-                style={styles.ctaButton}
-            />
-        </View>
+    const renderStepPhone = () => renderQuestion(
+        "Tenant's phone",
+        tenantName.trim(),
+        <Input
+            ref={tenantPhoneRef}
+            placeholder="9876543210"
+            value={tenantPhone}
+            onChangeText={(value) => setTenantPhone(value.replace(/\D/g, '').slice(0, 10))}
+            keyboardType="number-pad"
+            maxLength={10}
+        />
     );
 
     const renderStep4 = () => (
         <View style={styles.stepContent}>
             <View style={styles.completionContainer}>
-                <View style={styles.completionIconBg}>
-                    <PartyPopper size={48} color={theme.colors.accent} strokeWidth={1.5} />
-                </View>
+                <DrawnCheck color={theme.colors.accent} track={theme.colors.accentLight} />
                 <Text style={styles.completionTitle}>You're All Set!</Text>
                 <Text style={styles.completionSubtitle}>
-                    Your property, room, and tenant are ready. You can now start collecting rent!
+                    {isAuthenticated
+                        ? 'Your property is saved on this phone.'
+                        : 'Sign in to save this property and turn on backup.'}
                 </Text>
 
                 <View style={styles.summaryCard}>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Property</Text>
-                        <Text style={styles.summaryValue}>{propertyName}</Text>
-                    </View>
-                    <View style={styles.divider} />
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>
-                            {['building', 'pg'].includes(propertyType) ? 'Room Rent' : 'Monthly Rent'}
-                        </Text>
-                        <Text style={styles.summaryValue}>{CURRENCY}{rentAmount}</Text>
-                    </View>
-                    <View style={styles.divider} />
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Tenant</Text>
-                        <Text style={styles.summaryValue}>{tenantName}</Text>
-                    </View>
+                    <FadeRow index={0}>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Property</Text>
+                            <Text style={styles.summaryValue}>{propertyName}</Text>
+                        </View>
+                    </FadeRow>
+                    <FadeRow index={1}>
+                        <View style={styles.divider} />
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>{rentTitle}</Text>
+                            <Text style={styles.summaryValue}>{CURRENCY}{rentAmount}</Text>
+                        </View>
+                    </FadeRow>
+                    {tenantSaved && (
+                        <FadeRow index={2}>
+                            <View style={styles.divider} />
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Tenant</Text>
+                                <Text style={styles.summaryValue}>{tenantName}</Text>
+                            </View>
+                        </FadeRow>
+                    )}
                 </View>
 
                 <Button
-                    title="Collect Rent Now"
-                    onPress={handleGoToCollectRent}
-                    icon={<ChevronRight size={20} color="#FFF" />}
+                    title={isAuthenticated ? 'Go to dashboard' : 'Sign in to save'}
+                    onPress={handleComplete}
                     style={styles.ctaButton}
                 />
-                <Pressable onPress={handleComplete} style={styles.secondaryBtn}>
-                    <Text style={styles.secondaryBtnText}>Go to Dashboard</Text>
-                </Pressable>
             </View>
         </View>
     );
 
-    const steps = [renderStep1, renderStep2, renderStep3, renderStep4];
+    const steps = [renderStep1, renderStep2, renderStep3, renderStepPhone, renderStep4];
 
     return (
         <SafeAreaView style={styles.container}>
-            {showConfetti && <ConfettiBurst />}
-            {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Quick Setup</Text>
-                {step < 3 && (
+                {step < 4 && (
                     <Pressable onPress={handleSkip}>
                         <Text style={styles.skipText}>Skip</Text>
                     </Pressable>
@@ -608,31 +494,32 @@ export default function SetupWizardScreen({ navigation }: any) {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
             >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="interactive"
-                >
-                    {steps[step]()}
-                </ScrollView>
-            </KeyboardAvoidingView>
-            {Platform.OS === 'ios' && (
-                <InputAccessoryView nativeID={SETUP_KEYBOARD_ACCESSORY}>
-                    <View style={styles.keyboardAccessory}>
-                        <Pressable
-                            onPress={() => {
-                                if (step === 0) handleStep1();
-                                else if (step === 1) handleStep2();
-                                else if (step === 2) handleStep3();
-                            }}
-                            style={styles.keyboardAccessoryBtn}
-                        >
-                            <Text style={styles.keyboardAccessoryText}>Continue</Text>
-                        </Pressable>
+                <Animated.View style={[{ flex: 1 }, contentStyle]}>
+                    <ScrollView
+                        style={{ flex: 1 }}
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {steps[step]()}
+                    </ScrollView>
+                </Animated.View>
+                {step < 4 && (
+                    <View style={styles.footer}>
+                        {(step === 2 || step === 3) && (
+                            <Pressable onPress={handleSkipTenant} style={styles.secondaryBtn}>
+                                <Text style={styles.secondaryBtnText}>Skip for now</Text>
+                            </Pressable>
+                        )}
+                        {step === 0 && !isAuthenticated && (
+                            <Pressable onPress={handleExistingAccount} style={styles.secondaryBtn}>
+                                <Text style={styles.secondaryBtnText}>Already have an account? Sign in</Text>
+                            </Pressable>
+                        )}
+                        <Button title="Continue" onPress={onContinue} loading={loading} />
                     </View>
-                </InputAccessoryView>
-            )}
+                )}
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -662,8 +549,19 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     // Progress
     progressContainer: {
         paddingHorizontal: theme.spacing.l,
-        marginBottom: theme.spacing.xl,
-        marginTop: theme.spacing.m,
+        marginBottom: theme.spacing.l,
+        marginTop: theme.spacing.s,
+    },
+    barTrack: {
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: theme.colors.border,
+        overflow: 'hidden',
+    },
+    barFill: {
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: theme.colors.accent,
     },
     stepperWrapper: {
         height: 60,
@@ -756,11 +654,19 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         borderColor: theme.colors.accent + '20',
     },
     stepTitle: {
-        fontSize: 22,
+        fontSize: 28,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
         marginBottom: theme.spacing.s,
-        textAlign: 'center',
+    },
+    context: {
+        fontSize: theme.typography.m,
+        color: theme.colors.textSecondary,
+        marginBottom: theme.spacing.l,
+    },
+    footer: {
+        paddingHorizontal: theme.spacing.l,
+        paddingBottom: theme.spacing.m,
     },
     stepSubtitle: {
         fontSize: theme.typography.m,
@@ -787,16 +693,13 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     typeRow: {
         flexDirection: 'row',
         gap: theme.spacing.s,
-        paddingBottom: 4,
+        marginBottom: theme.spacing.l,
     },
     typeChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
         paddingHorizontal: 14,
         paddingVertical: 10,
-        borderRadius: theme.borderRadius.l,
-        backgroundColor: theme.colors.background,
+        borderRadius: theme.borderRadius.round,
+        backgroundColor: theme.colors.surface,
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
@@ -818,10 +721,9 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
     },
     currencySymbol: {
-        fontSize: 28,
+        fontSize: theme.typography.m,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,
-        marginRight: theme.spacing.s,
     },
     rentInput: {
         fontSize: 28,
@@ -857,15 +759,6 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     completionContainer: {
         alignItems: 'center',
         paddingTop: theme.spacing.xl,
-    },
-    completionIconBg: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: theme.colors.accentLight,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: theme.spacing.l,
     },
     completionTitle: {
         fontSize: 26,
@@ -919,17 +812,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         fontSize: theme.typography.m,
         color: theme.colors.textSecondary,
         fontWeight: theme.typography.medium,
-    },
-    confettiContainer: {
-        position: 'absolute',
-        top: 300, // Near the center of the completion screen
-        left: SCREEN_WIDTH / 2,
-        width: 1,
-        height: 1,
-        zIndex: 9999, // Ensure it's above everything including progress bar
-    },
-    confettiPiece: {
-        position: 'absolute',
+        textAlign: 'center',
     },
     keyboardAccessory: {
         flexDirection: 'row',
