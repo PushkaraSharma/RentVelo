@@ -140,12 +140,12 @@ export default function DashboardScreen({ navigation }: any) {
                         <BackupNudgeCard navigation={navigation} />
 
                         {/* Get Started Guide - shows when setup is incomplete */}
-                        {(data.propertyCount === 0 || data.occupiedCount === 0 || data.collected === 0) && (
+                        {(data.propertyCount === 0 || data.occupiedCount === 0 || !data.hasEverCollected) && (
                             <GetStartedCard
                                 navigation={navigation}
                                 propertyCount={data.propertyCount}
                                 tenantCount={data.occupiedCount}
-                                hasPayments={data.collected > 0}
+                                hasPayments={data.hasEverCollected}
                             />
                         )}
 

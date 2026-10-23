@@ -179,7 +179,7 @@ export default function GetStartedCard({
                     <PlayCircle size={18} color={theme.colors.accent} strokeWidth={2} />
                 </View>
                 <View style={styles.stepInfo}>
-                    <Text style={styles.stepLabel}>Watch how-to videos</Text>
+                    <Text style={styles.stepLabel}>Watch tutorial videos</Text>
                     <Text style={styles.stepDescription}>1-minute reels on how RentVelo works</Text>
                 </View>
                 <ChevronRight size={18} color={theme.colors.accent} />

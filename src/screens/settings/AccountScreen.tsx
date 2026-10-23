@@ -9,7 +9,6 @@ import { RootState } from '../../redux/store';
 import {
     LogOut,
     ChevronRight,
-    Moon,
     Shield,
     CircleUser,
     Share2,
@@ -27,7 +26,7 @@ import { signOutGoogle } from '../../services/googleAuthService';
 import { signOutPhone } from '../../services/phoneAuthService';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { getFullImageUri } from '../../services/imageService';
-import { trackEvent, AnalyticsEvents, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
+import { trackEvent, AnalyticsEvents, setAnalyticsUser } from '../../services/analyticsService';
 import { setCrashlyticsUser } from '../../services/crashlyticsService';
 import { useToast } from '../../hooks/useToast';
 import { deleteAccountData } from '../../services/accountService';
@@ -35,7 +34,7 @@ import { deleteAccountData } from '../../services/accountService';
 export default function AccountScreen({ navigation }: any) {
     const dispatch = useDispatch();
     const { user, isGoogleLinked, authMethod } = useSelector((state: RootState) => state.auth);
-    const { theme, isDark, setMode } = useAppTheme();
+    const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const styles = getStyles(theme, isDark);
 
@@ -149,15 +148,6 @@ export default function AccountScreen({ navigation }: any) {
                     <Text style={styles.sectionTitle}>Preferences</Text>
                     <View style={styles.sectionContent}>
                         <SettingItem
-                            icon={Moon}
-                            label="Dark Mode"
-                            color="#6366F1"
-                            right={<Toggle value={isDark} onValueChange={(v) => {
-                                setMode(v ? 'dark' : 'light');
-                                setEnrichedUserProperties({ darkMode: v });
-                            }} />}
-                        />
-                        <SettingItem
                             icon={Shield}
                             label="Security & Privacy"
                             color="#10B981"
@@ -171,7 +161,7 @@ export default function AccountScreen({ navigation }: any) {
                     <View style={styles.sectionContent}>
                         <SettingItem
                             icon={PlayCircle}
-                            label="Watch how-to videos"
+                            label="Watch tutorial videos"
                             color="#FF0000"
                             onPress={() => openHowToVideos('settings')}
                         />

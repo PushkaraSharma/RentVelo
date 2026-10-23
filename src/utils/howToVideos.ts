@@ -9,6 +9,6 @@ export const openHowToVideos = async (source: HowToVideosSource) => {
     try {
         await Linking.openURL(YOUTUBE_HOWTO_PLAYLIST_URL);
     } catch (e) {
-        console.error('Failed to open how-to videos', e);
+        console.error('Failed to open tutorial videos', e);
     }
 };

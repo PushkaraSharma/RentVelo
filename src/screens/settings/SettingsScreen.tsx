@@ -6,8 +6,10 @@ import {
     Bell,
     ChevronRight,
     FileText,
+    Moon,
     Share2,
 } from 'lucide-react-native';
+import Toggle from '../../components/common/Toggle';
 import { getDb } from '../../db';
 import { generateRealUsageData } from '../../../tests/seedDatabase';
 import { setEnrichedUserProperties } from '../../services/analyticsService';
@@ -19,7 +21,7 @@ import { getReceiptDefaultFormat, getReceiptDefaultAction, setReceiptDefaultForm
 
 export default function SettingsScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
-    const { theme } = useAppTheme();
+    const { theme, isDark, setMode } = useAppTheme();
     const { showToast } = useToast();
     const styles = getStyles(theme);
 
@@ -83,6 +85,15 @@ export default function SettingsScreen({ navigation }: any) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>App Preferences</Text>
                     <View style={styles.sectionContent}>
+                        <SettingItem
+                            icon={Moon}
+                            label="Dark Mode"
+                            color="#6366F1"
+                            right={<Toggle value={isDark} onValueChange={(v) => {
+                                setMode(v ? 'dark' : 'light');
+                                setEnrichedUserProperties({ darkMode: v });
+                            }} />}
+                        />
                         <SettingItem
                             icon={FileText}
                             label="Receipt Format"

@@ -1,6 +1,6 @@
 import { getDb } from './database';
 import { payments, tenants, units, meterReadings, properties, rentBills, type Payment, type NewPayment, type MeterReading, type NewMeterReading } from './schema';
-import { eq, desc, and, gte, sum } from 'drizzle-orm';
+import { eq, desc, and, gte, gt, sum } from 'drizzle-orm';
 import { generateBillsForProperty } from './billService';
 import { markBackupDirty } from '../services/backupService';
 
@@ -106,6 +106,7 @@ export interface DashboardData {
     vacantCount: number;
     totalRooms: number;
     propertyCount: number;
+    hasEverCollected: boolean;
     pendingProperties: { id: number; name: string; pendingCount: number }[];
     trends: { month: number; year: number; label: string; expected: number; collected: number }[];
 }
@@ -172,11 +173,19 @@ export const getDashboardData = async (): Promise<DashboardData> => {
         trends.push({ month: m, year: y, label: monthNames[m - 1], expected: exp, collected: col });
     }
 
+    const [anyPayment] = await db.select({ id: payments.id }).from(payments).limit(1);
+    let hasEverCollected = !!anyPayment;
+    if (!hasEverCollected) {
+        const [paidBill] = await db.select({ id: rentBills.id }).from(rentBills).where(gt(rentBills.paid_amount, 0)).limit(1);
+        hasEverCollected = !!paidBill;
+    }
+
     return {
         expected, collected, pending,
         pendingTenantCount,
         occupiedCount, vacantCount, totalRooms,
         propertyCount: allProps.length,
+        hasEverCollected,
         pendingProperties,
         trends,
     };

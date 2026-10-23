@@ -6,7 +6,7 @@ export const CURRENCY = '₹';
 /** Hosted pay page — WhatsApp linkifies https; page opens the UPI app via upi:// */
 export const UPI_PAY_PAGE_URL = 'https://rentvelo.indieroots.in/pay.html';
 
-/** How-to reels playlist (opens in the YouTube app or browser). */
+/** Tutorial reels playlist (opens in the YouTube app or browser). */
 export const YOUTUBE_HOWTO_PLAYLIST_URL = 'https://www.youtube.com/playlist?list=PLBjqQ3oFS6D0';
 
 /**
