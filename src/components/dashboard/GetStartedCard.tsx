@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import {
     Building2, Users, IndianRupee, ChevronRight,
-    Check, PlayCircle
+    Check
 } from 'lucide-react-native';
 import { storage } from '../../utils/storage';
 import { openHowToVideos } from '../../utils/howToVideos';
+import YoutubeIcon from '../YoutubeIcon';
 
 interface SetupStep {
     id: string;
@@ -176,7 +177,7 @@ export default function GetStartedCard({
                 onPress={() => openHowToVideos('get_started')}
             >
                 <View style={styles.videoIcon}>
-                    <PlayCircle size={18} color={theme.colors.accent} strokeWidth={2} />
+                    <YoutubeIcon size={22} />
                 </View>
                 <View style={styles.stepInfo}>
                     <Text style={styles.stepLabel}>Watch tutorial videos</Text>
@@ -309,7 +310,7 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: theme.colors.accentLight,
+        backgroundColor: '#FF000014',
         justifyContent: 'center',
         alignItems: 'center',
     },

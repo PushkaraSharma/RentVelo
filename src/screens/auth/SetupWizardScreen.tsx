@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, Animated as RNAnimated,
-    KeyboardAvoidingView, Platform, ScrollView, Keyboard,
+    KeyboardAvoidingView, Platform, ScrollView, Keyboard, BackHandler,
     type TextInputInstance
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -15,15 +15,16 @@ import Animated, {
     runOnJS,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { useDispatch, useSelector } from 'react-redux';
 import { completeSetup } from '../../redux/authSlice';
 import { RootState } from '../../redux/store';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
-import { createProperty, createUnit, createTenant } from '../../db';
+import { createProperty, createUnit, createTenant, deleteProperty } from '../../db';
 import { PROPERTY_TYPES, CURRENCY, OTA_VERSION } from '../../utils/Constants';
-import { Check } from 'lucide-react-native';
+import { ArrowLeft, Check } from 'lucide-react-native';
 import { trackEvent } from '../../services/analyticsService';
 import { useToast } from '../../hooks/useToast';
 import { hapticsLight, hapticsSuccess } from '../../utils/haptics';
@@ -113,6 +114,7 @@ const drawnStyles = StyleSheet.create({
 
 export default function SetupWizardScreen() {
     const dispatch = useDispatch();
+    const navigation = useNavigation();
     const { theme, isDark } = useAppTheme();
     const { showToast } = useToast();
     const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
@@ -120,9 +122,15 @@ export default function SetupWizardScreen() {
 
     const [step, setStep] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [tenantSaved, setTenantSaved] = useState(false);
+    const [includeTenant, setIncludeTenant] = useState(false);
     const progressAnim = useRef(new RNAnimated.Value(1 / TOTAL_STEPS)).current;
     const animating = useRef(false);
+    const direction = useRef(1);
+    const stepRef = useRef(0);
+    const loadingRef = useRef(false);
+    const leaving = useRef(false);
+    stepRef.current = step;
+    loadingRef.current = loading;
     const propertyNameRef = useRef<TextInputInstance>(null);
     const rentAmountRef = useRef<TextInputInstance>(null);
     const tenantNameRef = useRef<TextInputInstance>(null);
@@ -140,17 +148,15 @@ export default function SetupWizardScreen() {
     const [tenantName, setTenantName] = useState('');
     const [tenantPhone, setTenantPhone] = useState('');
 
-    // Created IDs
-    const [createdPropertyId, setCreatedPropertyId] = useState<number | null>(null);
-    const [createdUnitId, setCreatedUnitId] = useState<number | null>(null);
-
     const contentStyle = useAnimatedStyle(() => ({
         opacity: contentOpacity.value,
         transform: [{ translateX: contentX.value }],
     }));
 
     const animateToStep = (nextStep: number) => {
-        if (animating.current || nextStep === step) return;
+        if (animating.current || loadingRef.current || nextStep === stepRef.current) return;
+        if (nextStep < 0 || nextStep >= TOTAL_STEPS) return;
+        direction.current = nextStep > stepRef.current ? 1 : -1;
         animating.current = true;
         hapticsLight();
         RNAnimated.timing(progressAnim, {
@@ -159,11 +165,37 @@ export default function SetupWizardScreen() {
             useNativeDriver: false,
         }).start();
         contentOpacity.value = withTiming(0, { duration: 140 });
-        contentX.value = withTiming(-24, { duration: 140 }, (finished) => {
+        contentX.value = withTiming(-24 * direction.current, { duration: 140 }, (finished) => {
             if (finished) runOnJS(setStep)(nextStep);
             else runOnJS(setAnimating)(false);
         });
     };
+
+    const goBack = () => {
+        animateToStep(stepRef.current - 1);
+    };
+
+    const goBackRef = useRef(goBack);
+    goBackRef.current = goBack;
+
+    React.useEffect(() => {
+        const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+            const type = e.data.action.type;
+            if (type !== 'GO_BACK' && type !== 'POP') return;
+            if (stepRef.current === 0 || leaving.current) return;
+            e.preventDefault();
+            goBackRef.current();
+        });
+        const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (leaving.current || stepRef.current === 0) return false;
+            goBackRef.current();
+            return true;
+        });
+        return () => {
+            unsubscribe();
+            backSub.remove();
+        };
+    }, [navigation]);
 
     const setAnimating = (value: boolean) => {
         animating.current = value;
@@ -177,11 +209,11 @@ export default function SetupWizardScreen() {
             else if (step === 3) tenantPhoneRef.current?.focus();
             else Keyboard.dismiss();
         };
-        if (step === 0) {
+        if (step === 0 && direction.current === 1 && contentOpacity.value === 1) {
             const timer = setTimeout(focus, 300);
             return () => clearTimeout(timer);
         }
-        contentX.value = 24;
+        contentX.value = 24 * direction.current;
         contentOpacity.value = 0;
         contentX.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.cubic) });
         contentOpacity.value = withTiming(1, { duration: 180 });
@@ -193,6 +225,7 @@ export default function SetupWizardScreen() {
     }, [step, contentOpacity, contentX]);
 
     const finishSetup = (event: string, params?: Record<string, string>) => {
+        leaving.current = true;
         storage.set('@ota_version', OTA_VERSION.toString());
         dispatch(completeSetup());
         trackEvent(event, params);
@@ -207,71 +240,27 @@ export default function SetupWizardScreen() {
     };
 
     const handleSkipTenant = () => {
+        setIncludeTenant(false);
         trackEvent('SETUP_STEP_COMPLETED', { step: '3_tenant_skipped' });
         animateToStep(4);
     };
 
-    const handleStep1 = async () => {
+    const handleStep1 = () => {
         if (!propertyName.trim()) {
             showToast({ type: 'error', title: 'Required', message: 'Please enter property name' });
             return;
         }
-        if (createdPropertyId && createdUnitId) {
-            animateToStep(1);
-            return;
-        }
-        setLoading(true);
-        try {
-            const isMultiUnit = ['building', 'pg'].includes(propertyType);
-            const id = await createProperty({
-                name: propertyName.trim(),
-                // shortcut: address is added later on the property screen
-                address: '',
-                type: propertyType as any,
-                is_multi_unit: isMultiUnit,
-                rent_payment_type: 'current_month',
-            });
-            setCreatedPropertyId(id);
-            markFreshSetupProperty();
-
-            const defaultUnitName = propertyType === 'flat' ? 'Flat 1'
-                : propertyType === 'shop' ? 'Shop 1'
-                    : isMultiUnit ? 'Room 1'
-                        : 'Main Property';
-            const unitId = await createUnit({
-                property_id: id,
-                name: defaultUnitName,
-                rent_amount: 0,
-                rent_cycle: 'first_of_month',
-            });
-            setCreatedUnitId(unitId);
-
-            trackEvent('SETUP_STEP_COMPLETED', { step: '1_property', type: propertyType });
-            animateToStep(1);
-        } catch (error: any) {
-            showToast({ type: 'error', title: 'Error', message: error?.message || 'Failed to create property' });
-        } finally {
-            setLoading(false);
-        }
+        trackEvent('SETUP_STEP_COMPLETED', { step: '1_property', type: propertyType });
+        animateToStep(1);
     };
 
-    const handleStep2 = async () => {
+    const handleStep2 = () => {
         if (!rentAmount || parseFloat(rentAmount) <= 0) {
             showToast({ type: 'error', title: 'Required', message: 'Please enter a valid rent amount' });
             return;
         }
-        if (!createdUnitId) return;
-        setLoading(true);
-        try {
-            const { updateUnit } = await import('../../db');
-            await updateUnit(createdUnitId, { rent_amount: parseFloat(rentAmount) });
-            trackEvent('SETUP_STEP_COMPLETED', { step: '2_rent' });
-            animateToStep(2);
-        } catch (error: any) {
-            showToast({ type: 'error', title: 'Error', message: error?.message || 'Failed to set rent' });
-        } finally {
-            setLoading(false);
-        }
+        trackEvent('SETUP_STEP_COMPLETED', { step: '2_rent' });
+        animateToStep(2);
     };
 
     const handleTenantName = () => {
@@ -283,38 +272,15 @@ export default function SetupWizardScreen() {
         animateToStep(3);
     };
 
-    const handleTenantPhone = async () => {
+    const handleTenantPhone = () => {
         const phone = tenantPhone.replace(/\D/g, '');
         if (phone.length < 10) {
             showToast({ type: 'error', title: 'Required', message: 'Please enter a valid 10-digit phone number' });
             return;
         }
-        if (!createdPropertyId || !createdUnitId) return;
-        if (tenantSaved) {
-            animateToStep(4);
-            return;
-        }
-        setLoading(true);
-        try {
-            await createTenant({
-                property_id: createdPropertyId,
-                unit_id: createdUnitId,
-                name: `Mr. ${tenantName.trim()}`,
-                phone,
-                status: 'active',
-                move_in_date: new Date(),
-                rent_start_date: new Date(),
-                lease_type: 'monthly',
-                security_deposit: 0,
-            });
-            setTenantSaved(true);
-            trackEvent('SETUP_STEP_COMPLETED', { step: '3_tenant' });
-            animateToStep(4);
-        } catch (error: any) {
-            showToast({ type: 'error', title: 'Error', message: error?.message || 'Failed to add tenant' });
-        } finally {
-            setLoading(false);
-        }
+        setIncludeTenant(true);
+        trackEvent('SETUP_STEP_COMPLETED', { step: '3_tenant' });
+        animateToStep(4);
     };
 
     const onContinue = () => {
@@ -325,8 +291,62 @@ export default function SetupWizardScreen() {
         else if (step === 3) handleTenantPhone();
     };
 
-    const handleComplete = () => {
-        finishSetup('SETUP_COMPLETED');
+    const handleComplete = async () => {
+        if (loadingRef.current) return;
+        loadingRef.current = true;
+        setLoading(true);
+        let propertyId: number | null = null;
+        try {
+            const isMultiUnit = ['building', 'pg'].includes(propertyType);
+            propertyId = await createProperty({
+                name: propertyName.trim(),
+                // shortcut: address is added later on the property screen
+                address: '',
+                type: propertyType as any,
+                is_multi_unit: isMultiUnit,
+                rent_payment_type: 'current_month',
+            });
+            const defaultUnitName = propertyType === 'flat' ? 'Flat 1'
+                : propertyType === 'shop' ? 'Shop 1'
+                    : isMultiUnit ? 'Room 1'
+                        : 'Main Property';
+            const unitId = await createUnit({
+                property_id: propertyId,
+                name: defaultUnitName,
+                rent_amount: parseFloat(rentAmount),
+                rent_cycle: 'first_of_month',
+            });
+            if (includeTenant) {
+                await createTenant({
+                    property_id: propertyId,
+                    unit_id: unitId,
+                    name: `Mr. ${tenantName.trim()}`,
+                    phone: tenantPhone.replace(/\D/g, ''),
+                    status: 'active',
+                    move_in_date: new Date(),
+                    rent_start_date: new Date(),
+                    lease_type: 'monthly',
+                    security_deposit: 0,
+                });
+            }
+            markFreshSetupProperty();
+            finishSetup('SETUP_COMPLETED');
+        } catch (error: any) {
+            if (propertyId) {
+                try {
+                    await deleteProperty(propertyId);
+                } catch (cleanupError) {
+                    console.error('Failed to roll back setup property', cleanupError);
+                }
+            }
+            showToast({
+                type: 'error',
+                title: 'Error',
+                message: error?.message || 'Failed to save property',
+            });
+            loadingRef.current = false;
+            setLoading(false);
+        }
     };
 
     const rentTitle = ['building', 'pg'].includes(propertyType) ? 'Room rent' : 'Monthly rent';
@@ -436,7 +456,7 @@ export default function SetupWizardScreen() {
                 <Text style={styles.completionTitle}>You're All Set!</Text>
                 <Text style={styles.completionSubtitle}>
                     {isAuthenticated
-                        ? 'Your property is saved on this phone.'
+                        ? 'Save this property on this phone.'
                         : 'Sign in to save this property and turn on backup.'}
                 </Text>
 
@@ -454,7 +474,7 @@ export default function SetupWizardScreen() {
                             <Text style={styles.summaryValue}>{CURRENCY}{rentAmount}</Text>
                         </View>
                     </FadeRow>
-                    {tenantSaved && (
+                    {includeTenant && (
                         <FadeRow index={2}>
                             <View style={styles.divider} />
                             <View style={styles.summaryRow}>
@@ -468,6 +488,7 @@ export default function SetupWizardScreen() {
                 <Button
                     title={isAuthenticated ? 'Go to dashboard' : 'Sign in to save'}
                     onPress={handleComplete}
+                    loading={loading}
                     style={styles.ctaButton}
                 />
             </View>
@@ -479,12 +500,26 @@ export default function SetupWizardScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
+                <View style={styles.headerSide}>
+                    {step > 0 && (
+                        <Pressable
+                            onPress={goBack}
+                            disabled={loading}
+                            hitSlop={8}
+                            accessibilityLabel="Back"
+                        >
+                            <ArrowLeft size={24} color={theme.colors.textPrimary} />
+                        </Pressable>
+                    )}
+                </View>
                 <Text style={styles.headerTitle}>Quick Setup</Text>
-                {step < 4 && (
-                    <Pressable onPress={handleSkip}>
-                        <Text style={styles.skipText}>Skip</Text>
-                    </Pressable>
-                )}
+                <View style={styles.headerSideEnd}>
+                    {step < 4 && (
+                        <Pressable onPress={handleSkip} disabled={loading}>
+                            <Text style={styles.skipText}>Skip</Text>
+                        </Pressable>
+                    )}
+                </View>
             </View>
 
             {renderStepIndicator()}
@@ -531,12 +566,23 @@ const getStyles = (theme: any, isDark: boolean) => StyleSheet.create({
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: theme.spacing.l,
         paddingVertical: theme.spacing.m,
     },
+    headerSide: {
+        width: 64,
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+    },
+    headerSideEnd: {
+        width: 64,
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+    },
     headerTitle: {
+        flex: 1,
+        textAlign: 'center',
         fontSize: theme.typography.l,
         fontWeight: theme.typography.bold,
         color: theme.colors.textPrimary,

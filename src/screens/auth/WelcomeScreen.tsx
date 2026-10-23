@@ -430,6 +430,12 @@ export default function WelcomeScreen() {
                                     editable={!phoneLoading}
                                 />
                             </View>
+                            {phoneLoading && code.length === 6 && (
+                                <View style={styles.checking}>
+                                    <ActivityIndicator color={theme.colors.accent} />
+                                    <Text style={styles.checkingText}>Checking code</Text>
+                                </View>
+                            )}
                             <Pressable
                                 onPress={() => handleSendCode(true)}
                                 disabled={phoneLoading || resendIn > 0}
@@ -649,6 +655,17 @@ const getStyles = (theme: any) => StyleSheet.create({
     },
     editLink: {
         color: theme.colors.accent,
+        fontWeight: theme.typography.semiBold,
+    },
+    checking: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: theme.spacing.l,
+    },
+    checkingText: {
+        fontSize: 14,
+        color: theme.colors.textSecondary,
         fontWeight: theme.typography.semiBold,
     },
     resend: {

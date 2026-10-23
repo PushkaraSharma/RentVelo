@@ -14,12 +14,12 @@ import {
     Share2,
     Trash2,
     AlertCircle,
-    PlayCircle,
     HelpCircle,
     Info
 } from 'lucide-react-native';
 import Toggle from '../../components/common/Toggle';
 import Header from '../../components/common/Header';
+import YoutubeIcon from '../../components/YoutubeIcon';
 import { CHANGELOG } from '../../utils/Constants';
 import { openHowToVideos } from '../../utils/howToVideos';
 import { signOutGoogle } from '../../services/googleAuthService';
@@ -160,7 +160,7 @@ export default function AccountScreen({ navigation }: any) {
                     <Text style={styles.sectionTitle}>Support & About</Text>
                     <View style={styles.sectionContent}>
                         <SettingItem
-                            icon={PlayCircle}
+                            icon={YoutubeIcon}
                             label="Watch tutorial videos"
                             color="#FF0000"
                             onPress={() => openHowToVideos('settings')}
