@@ -18,6 +18,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { AnalyticsEvents, trackEvent, setAnalyticsUser, setEnrichedUserProperties } from '../../services/analyticsService';
 import { setCrashlyticsUser } from '../../services/crashlyticsService';
 import { storage } from '../../utils/storage';
+import { markPhoneNameConfirmed } from '../../utils/phoneProfile';
 import { useToast } from '../../hooks/useToast';
 import { notifyNewUserSignup } from '../../services/notificationService';
 
@@ -44,12 +45,15 @@ export default function WelcomeScreen() {
     const [googleLoading, setGoogleLoading] = React.useState(false);
     const [appleLoading, setAppleLoading] = React.useState(false);
     const [phoneLoading, setPhoneLoading] = React.useState(false);
-    const [step, setStep] = React.useState<'number' | 'code'>('number');
+    const [step, setStep] = React.useState<'number' | 'code' | 'name'>('number');
     const [phoneDigits, setPhoneDigits] = React.useState('');
     const [code, setCode] = React.useState('');
+    const [ownerName, setOwnerName] = React.useState('');
+    const [verifiedPhone, setVerifiedPhone] = React.useState('');
     const [resendIn, setResendIn] = React.useState(0);
     const phoneInputRef = React.useRef<React.ComponentRef<typeof TextInput>>(null);
     const codeInputRef = React.useRef<React.ComponentRef<typeof TextInput>>(null);
+    const nameInputRef = React.useRef<React.ComponentRef<typeof TextInput>>(null);
     const sendingRef = React.useRef(false);
     const slide = React.useRef(new Animated.Value(0)).current;
     const [formWidth, setFormWidth] = React.useState(Dimensions.get('window').width - 64);
@@ -58,7 +62,8 @@ export default function WelcomeScreen() {
     React.useEffect(() => {
         const timer = setTimeout(() => {
             if (step === 'number') phoneInputRef.current?.focus();
-            else codeInputRef.current?.focus();
+            else if (step === 'code') codeInputRef.current?.focus();
+            else nameInputRef.current?.focus();
         }, 320);
         return () => clearTimeout(timer);
     }, [step]);
@@ -165,20 +170,23 @@ export default function WelcomeScreen() {
         }
     };
 
-    const animateTo = (next: 'number' | 'code') => {
+    const animateTo = (next: 'number' | 'code' | 'name') => {
         setStep(next);
+        const index = next === 'name' ? 2 : next === 'code' ? 1 : 0;
         Animated.timing(slide, {
-            toValue: next === 'code' ? 1 : 0,
+            toValue: index,
             duration: 320,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
         }).start();
     };
 
-    const finishPhoneLogin = async (phone: string) => {
+    const finishPhoneLogin = async (phone: string, name: string) => {
+        const trimmed = name.trim();
+        markPhoneNameConfirmed();
         clearFreshSetupProperty();
         dispatch(login({
-            name: 'Owner',
+            name: trimmed,
             email: '',
             phone,
             isGoogleLinked: false,
@@ -186,14 +194,14 @@ export default function WelcomeScreen() {
         }));
 
         trackEvent(AnalyticsEvents.SIGN_IN, { method: 'phone' });
-        const userData = { phone, name: 'Owner' };
+        const userData = { phone, name: trimmed };
         await setAnalyticsUser(userData);
         await setCrashlyticsUser(userData);
         await setEnrichedUserProperties({ authMethod: 'phone' });
 
         if (!storage.getString('@signup_date')) {
             storage.set('@signup_date', new Date().toISOString());
-            notifyNewUserSignup('Owner', phone, Platform.OS);
+            notifyNewUserSignup(trimmed, phone, Platform.OS);
         }
     };
 
@@ -243,7 +251,8 @@ export default function WelcomeScreen() {
         try {
             setPhoneLoading(true);
             const verified = await confirmPhoneOtp(nextCode);
-            await finishPhoneLogin(verified.phone);
+            setVerifiedPhone(verified.phone);
+            animateTo('name');
         } catch (error) {
             console.error('Failed to confirm phone code:', error);
             setCode('');
@@ -264,6 +273,20 @@ export default function WelcomeScreen() {
         setCode(digits);
         if (digits.length === 6) {
             handleConfirmCode(digits);
+        }
+    };
+
+    const handleSaveName = async () => {
+        const trimmed = ownerName.trim();
+        if (!trimmed || !verifiedPhone || sendingRef.current) return;
+
+        sendingRef.current = true;
+        try {
+            setPhoneLoading(true);
+            await finishPhoneLogin(verifiedPhone, trimmed);
+        } finally {
+            sendingRef.current = false;
+            setPhoneLoading(false);
         }
     };
 
@@ -303,11 +326,11 @@ export default function WelcomeScreen() {
                         style={[
                             styles.pagerTrack,
                             {
-                                width: formWidth * 2,
+                                width: formWidth * 3,
                                 transform: [{
                                     translateX: slide.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [0, -formWidth],
+                                        inputRange: [0, 1, 2],
+                                        outputRange: [0, -formWidth, -formWidth * 2],
                                     }),
                                 }],
                             },
@@ -443,6 +466,43 @@ export default function WelcomeScreen() {
                                 <Text style={[styles.resend, resendIn === 0 && !phoneLoading && styles.resendReady]}>
                                     {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
                                 </Text>
+                            </Pressable>
+                        </View>
+
+                        <View style={[styles.page, { width: formWidth }]}>
+                            <Text style={styles.title}>Your name</Text>
+                            <Text style={styles.description}>
+                                This is how you appear in RentVelo.
+                            </Text>
+                            <View style={styles.phoneRow}>
+                                <TextInput
+                                    ref={nameInputRef}
+                                    style={styles.phoneInput}
+                                    value={ownerName}
+                                    onChangeText={setOwnerName}
+                                    placeholder="Rahul Sharma"
+                                    placeholderTextColor={theme.colors.textTertiary}
+                                    autoCapitalize="words"
+                                    autoComplete="name"
+                                    textContentType="name"
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleSaveName}
+                                    editable={!phoneLoading}
+                                />
+                            </View>
+                            <Pressable
+                                style={[
+                                    styles.primaryButton,
+                                    (!ownerName.trim() || phoneLoading) && styles.primaryButtonDisabled,
+                                ]}
+                                onPress={handleSaveName}
+                                disabled={!ownerName.trim() || phoneLoading}
+                            >
+                                {phoneLoading && step === 'name' ? (
+                                    <ActivityIndicator color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.primaryButtonText}>Continue</Text>
+                                )}
                             </Pressable>
                         </View>
                     </Animated.View>
@@ -605,6 +665,9 @@ const getStyles = (theme: any) => StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: theme.typography.bold,
+    },
+    primaryButtonDisabled: {
+        opacity: 0.45,
     },
     codeWrap: {
         width: '100%',

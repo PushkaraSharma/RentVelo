@@ -7,11 +7,13 @@ import { initCrashlytics } from '../services/crashlyticsService';
 
 export const navigationRef = createNavigationContainerRef<any>();
 import { RootState } from '../redux/store';
+import { needsPhoneName } from '../utils/phoneProfile';
 
 // Auth Screens
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import SetupWizardScreen from '../screens/auth/SetupWizardScreen';
+import PhoneNameScreen from '../screens/auth/PhoneNameScreen';
 
 // Main Screens
 import TabNavigator from './TabNavigator';
@@ -45,7 +47,8 @@ import ExpectedRevenueScreen from '../screens/dashboard/ExpectedRevenueScreen';
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-    const { isAuthenticated, isOnboarded, isSetupComplete } = useSelector((state: RootState) => state.auth);
+    const { isAuthenticated, isOnboarded, isSetupComplete, user, authMethod } = useSelector((state: RootState) => state.auth);
+    const askPhoneName = isAuthenticated && needsPhoneName(authMethod, user?.name);
 
     React.useEffect(() => {
         trackEvent(AnalyticsEvents.APP_OPENED);
@@ -69,6 +72,8 @@ export default function RootNavigator() {
                     <Stack.Screen name="SetupWizard" component={SetupWizardScreen} />
                 ) : !isAuthenticated ? (
                     <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                ) : askPhoneName ? (
+                    <Stack.Screen name="PhoneName" component={PhoneNameScreen} />
                 ) : (
                     <>
                         <Stack.Screen name="Main" component={TabNavigator} />
