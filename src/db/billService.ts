@@ -1304,6 +1304,30 @@ export const applyPenaltiesLazily = async (
     const today = startOfDay(new Date());
     const isOverdue = isAfter(today, penaltyStartDate);
 
+    const expenseRows = await db.select()
+        .from(billExpenses)
+        .where(eq(billExpenses.bill_id, billId));
+
+    const existingRow = expenseRows.find((row) =>
+        row.label === 'Late Payment Penalty' || row.label === 'Late Payment Penalty (Waived)'
+    );
+
+    // If User manually waived the penalty by deleting it, respect that action:
+    if (existingRow && existingRow.label === 'Late Payment Penalty (Waived)') {
+        return;
+    }
+
+    const otherExpenses = expenseRows.reduce((total, row) => {
+        if (row.id === existingRow?.id) return total;
+        return total + (row.amount ?? 0);
+    }, 0);
+    const chargesWithoutPenalty =
+        (bill.rent_amount ?? 0) +
+        (bill.electricity_amount ?? 0) +
+        (bill.water_amount ?? 0) +
+        (bill.previous_balance ?? 0) +
+        otherExpenses;
+
     let totalPenalty = 0;
 
     if (isOverdue) {
@@ -1320,11 +1344,21 @@ export const applyPenaltiesLazily = async (
                 )
             ).limit(1))[0];
 
-            const billIds = nextBill ? [billId, nextBill.id] : [billId];
-            const payResult = await db.select({ total: sum(payments.amount) })
+            const paidOnThisBill = Number((await db.select({ total: sum(payments.amount) })
                 .from(payments)
-                .where(and(inArray(payments.bill_id, billIds), eq(payments.status, 'paid')));
-            if ((Number(payResult[0]?.total || 0)) > 0) {
+                .where(and(eq(payments.bill_id, billId), eq(payments.status, 'paid'))))[0]?.total || 0);
+
+            let paidOnNextBill = 0;
+            if (nextBill) {
+                paidOnNextBill = Number((await db.select({ total: sum(payments.amount) })
+                    .from(payments)
+                    .where(and(eq(payments.bill_id, nextBill.id), eq(payments.status, 'paid'))))[0]?.total || 0);
+            }
+
+            // Next month's payment still counts as "a payment exists". Money paid on
+            // this bill only blocks the waiver when it goes past the non-penalty charges.
+            const paymentExists = paidOnThisBill > 0 || paidOnNextBill > 0;
+            if (paymentExists && paidOnThisBill <= chargesWithoutPenalty) {
                 shouldWaive = true;
             }
         }
@@ -1338,27 +1372,6 @@ export const applyPenaltiesLazily = async (
                 totalPenalty = daysOverdue * property.penalty_amount_per_day;
             }
         }
-    }
-
-    // Check if a penalty expense row exists (including manually waived)
-    const existingPenaltyRows = await db.select()
-        .from(billExpenses)
-        .where(
-            and(
-                eq(billExpenses.bill_id, billId),
-                or(
-                    eq(billExpenses.label, 'Late Payment Penalty'),
-                    eq(billExpenses.label, 'Late Payment Penalty (Waived)')
-                )
-            )
-        )
-        .limit(1);
-
-    const existingRow = existingPenaltyRows[0];
-
-    // If User manually waived the penalty by deleting it, respect that action:
-    if (existingRow && existingRow.label === 'Late Payment Penalty (Waived)') {
-        return;
     }
 
     let requiresRecalculate = false;
